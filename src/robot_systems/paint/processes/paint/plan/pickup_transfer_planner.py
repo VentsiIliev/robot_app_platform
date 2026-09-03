@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 
@@ -27,11 +27,14 @@ class PickupTransferPlan:
     staged_pose: list[float]
     change_plane_pose: list[float]
     paint_pivot_pose: list[float]
+    safe_travel_poses: list[list[float]] = field(default_factory=list)
+    safe_travel_waypoints: list[dict] = field(default_factory=list)
     source_rotation_deg: float = 0.0
     projected_source_path: list[list[float]] | None = None
     projected_pivot_path: list[list[float]] | None = None
     projected_snapshots: list[np.ndarray] | None = None
     projected_diagnostics: list[dict[str, float | int]] | None = None
+    pickup_retract_reference_pose: list[float] | None = None
 
 
 PickupToPivotPlan = PickupTransferPlan
@@ -52,9 +55,15 @@ class PaintPickupTransferPlanner:
         from src.robot_systems.paint.processes.paint.execute.workpiece_path_executor import _camera_to_tcp_delta
 
         owner = self._owner
+        owner._last_pickup_plan_error = ""
         jobs = prepared_workpiece.execution_jobs
+        with timed_block(_logger, "pickup_plan_build", label="refresh_process_config"):
+            owner._refresh_paint_process_config_snapshot()
+            owner._apply_paint_process_contact_config()
+
         with timed_block(_logger, "pickup_plan_build", label="refresh_runtime_config"):
             owner._refresh_runtime_config()
+
         if not jobs:
             return None
 
@@ -66,7 +75,11 @@ class PaintPickupTransferPlanner:
             paint_pivot_pose = owner._resolve_base_position()
         _logger.debug("paint_pivot_pose -> %s", paint_pivot_pose)
 
-        if pickup_pivot_pose is None or len(pickup_pivot_pose) < 3:
+        if pickup_pivot_pose is None or len(pickup_pivot_pose) < 6:
+            owner._last_pickup_plan_error = (
+                "Pickup movement-group pose must contain all six values: X, Y, Z, RX, RY, and RZ"
+            )
+            _logger.error("[PICKUP] %s; pose=%s", owner._last_pickup_plan_error, pickup_pivot_pose)
             return None
         if paint_pivot_pose is None or len(paint_pivot_pose) < 3:
             return None
@@ -88,12 +101,23 @@ class PaintPickupTransferPlanner:
         if paint_pivot_pose is None or len(paint_pivot_pose) < 3:
             return None
 
-        with timed_block(_logger, "pickup_plan_build", label="project_initial_pivot_path"):
+        pickup_rz = float(jobs[0].get("pickup_rz", 0.0))
+        pickup_reference_rz = float(
+            jobs[0].get(
+                "pickup_reference_rz",
+                float(pickup_pivot_pose[5]) if len(pickup_pivot_pose) >= 6 else 0.0,
+            )
+        )
+        align_rz = pickup_reference_rz
+        source_rotation_deg = unwrap_degrees(float(pickup_rz), float(align_rz)) - float(pickup_rz)
+
+        with timed_block(_logger, "pickup_plan_build", label="project_pivot_path"):
             projected_pivot_path, projected_snapshots, projected_diagnostics = project_paint_contact_motion_continuous(
                 source_path,
                 paint_pivot_pose,
                 owner._contact_motion_config,
                 anchor_xy=anchor_xy,
+                source_rotation_deg=source_rotation_deg,
             )
 
         if not projected_pivot_path:
@@ -101,6 +125,15 @@ class PaintPickupTransferPlanner:
 
         first_pivot_pose = list(projected_pivot_path[0])
         _logger.debug("first_pivot_pose -> %s", first_pivot_pose)
+
+        if abs(source_rotation_deg) > 1e-9:
+            _logger.info(
+                "[PICKUP] carried source rotation applied to pivot geometry: pickup_rz=%.3f align_rz=%.3f source_rotation_deg=%.3f first_pivot=%s",
+                float(pickup_rz),
+                float(align_rz),
+                float(source_rotation_deg),
+                [round(float(v), 3) for v in first_pivot_pose[:6]],
+            )
 
         if anchor_xy is not None and len(source_path[0]) >= 2 and len(first_pivot_pose) >= 3:
             self._log_anchor_offset(
@@ -112,8 +145,8 @@ class PaintPickupTransferPlanner:
 
         pickup_target_point_name = str(jobs[0].get("pickup_target_point_name", "") or "").strip().lower()
         workpiece_height_mm = float(jobs[0].get("workpiece_height_mm", 0.0) or 0.0)
-        pickup_rx = float(pickup_pivot_pose[3]) if len(pickup_pivot_pose) >= 4 else 180.0
-        pickup_ry = float(pickup_pivot_pose[4]) if len(pickup_pivot_pose) >= 5 else 0.0
+        pickup_rx = float(pickup_pivot_pose[3])
+        pickup_ry = float(pickup_pivot_pose[4])
         pickup_motion = owner._paint_process_config().pickup_motion
 
         pickup_z = owner._pickup_z_mm
@@ -124,11 +157,11 @@ class PaintPickupTransferPlanner:
                 + pickup_motion.contact_offset_mm
             )
 
-        pickup_rz = float(jobs[0].get("pickup_rz", 0.0))
         should_apply_tcp_offset = (
             bool(owner._contact_motion_config.apply_camera_to_tcp_for_pickup)
             and not pickup_target_point_name
         )
+
         if should_apply_tcp_offset:
             pickup_tcp_dx, pickup_tcp_dy = _camera_to_tcp_delta(
                 owner._contact_motion_config.camera_to_tcp_x_offset,
@@ -160,39 +193,12 @@ class PaintPickupTransferPlanner:
             pickup_motion.initial_lift_clearance_mm,
             pickup_motion.approach_offset_mm,
         )
+
         pickup_x = pickup_centroid_x - pickup_tcp_dx
         pickup_y = pickup_centroid_y - pickup_tcp_dy
         pickup_approach_pose = [pickup_x, pickup_y, pickup_approach_z, pickup_rx, pickup_ry, pickup_rz]
         lift_pose = [pickup_x, pickup_y, pickup_lift_z, pickup_rx, pickup_ry, pickup_rz]
         pickup_pose = [pickup_x, pickup_y, float(pickup_z), pickup_rx, pickup_ry, pickup_rz]
-
-        pickup_reference_rz = float(
-            jobs[0].get(
-                "pickup_reference_rz",
-                float(pickup_pivot_pose[5]) if len(pickup_pivot_pose) >= 6 else 0.0,
-            )
-        )
-        align_rz = pickup_reference_rz
-        source_rotation_deg = unwrap_degrees(float(pickup_rz), float(align_rz)) - float(pickup_rz)
-        if abs(source_rotation_deg) > 1e-9:
-            with timed_block(_logger, "pickup_plan_build", label="project_carried_rotation_path"):
-                projected_pivot_path, projected_snapshots, projected_diagnostics = project_paint_contact_motion_continuous(
-                    source_path,
-                    paint_pivot_pose,
-                    owner._contact_motion_config,
-                    anchor_xy=anchor_xy,
-                    source_rotation_deg=source_rotation_deg,
-                )
-            if not projected_pivot_path:
-                return None
-            first_pivot_pose = list(projected_pivot_path[0])
-            _logger.info(
-                "[PICKUP] carried source rotation applied to pivot geometry: pickup_rz=%.3f align_rz=%.3f source_rotation_deg=%.3f first_pivot=%s",
-                float(pickup_rz),
-                float(align_rz),
-                float(source_rotation_deg),
-                [round(float(v), 3) for v in first_pivot_pose[:6]],
-            )
 
         if owner._contact_motion_config.motion_plane == "xz_y_ry":
             _logger.info(
@@ -221,6 +227,19 @@ class PaintPickupTransferPlanner:
             align_rz=align_rz,
         )
 
+        safe_travel_waypoints = self._resolve_safe_travel_waypoints()
+        safe_travel_poses = [list(item["position"]) for item in safe_travel_waypoints]
+
+        if bool(owner._paint_process_config().safe_travel.enabled) and not safe_travel_waypoints:
+            return None
+
+        if safe_travel_waypoints:
+            _logger.info(
+                "[PICKUP] safe travel waypoints configured: count=%d first=%s",
+                len(safe_travel_waypoints),
+                [round(float(v), 3) for v in safe_travel_waypoints[0]["position"][:6]],
+            )
+
         return PickupTransferPlan(
             pickup_approach_pose=pickup_approach_pose,
             pickup_pose=pickup_pose,
@@ -230,12 +249,37 @@ class PaintPickupTransferPlanner:
             stage_transition_poses=[],
             staged_pose=staged_pose,
             paint_pivot_pose=list(paint_pivot_pose),
+            safe_travel_poses=safe_travel_poses,
+            safe_travel_waypoints=safe_travel_waypoints,
             source_rotation_deg=source_rotation_deg,
             projected_source_path=source_path,
             projected_pivot_path=projected_pivot_path,
             projected_snapshots=projected_snapshots,
             projected_diagnostics=projected_diagnostics,
+            # Servo only needs enough vertical clearance to leave the pickup
+            # surface. The prepared transfer completes the remaining lift,
+            # avoiding a slow Servo retract to the calibration reference Z.
+            pickup_retract_reference_pose=list(lift_pose),
         )
+
+    def _resolve_safe_travel_waypoints(self) -> list[dict]:
+        """Resolve optional carried-workpiece safe travel waypoints with motion tuning."""
+        owner = self._owner
+        owner._last_safe_travel_error = ""
+        config = owner._paint_process_config().safe_travel
+        if not bool(config.enabled):
+            return []
+        motion = owner._paint_process_config().pickup_motion
+        waypoints = owner._read_configured_waypoints(
+            getattr(config, "positions", []),
+            getattr(config, "position", []),
+            float(motion.stage_transition_vel_percent),
+            float(motion.stage_transition_acc_percent),
+        )
+        if not waypoints:
+            owner._last_safe_travel_error = "Safe travel is enabled but no valid 6-axis waypoint is configured"
+            _logger.warning("[PICKUP] %s", owner._last_safe_travel_error)
+        return waypoints
 
     def _log_anchor_offset(
         self,
@@ -290,6 +334,7 @@ class PaintPickupTransferPlanner:
         owner = self._owner
         staged_pose = list(first_pivot_pose)
         _logger.debug("staged_pose = %s", staged_pose)
+
         if owner._contact_motion_config.motion_plane == "xy_z_rz" and len(staged_pose) >= 6:
             raw_staged_rz = float(staged_pose[5])
             staged_pose[5] = float(align_rz)
@@ -299,6 +344,7 @@ class PaintPickupTransferPlanner:
                 float(align_rz),
                 float(staged_pose[5]),
             )
+
         elif owner._contact_motion_config.motion_plane == "xz_y_ry" and len(staged_pose) >= 6:
             raw_staged_ry = float(staged_pose[4])
             staged_pose[5] = float(align_rz)
@@ -316,4 +362,5 @@ class PaintPickupTransferPlanner:
                 [round(float(v), 3) for v in change_plane_pose[:6]],
                 [round(float(v), 3) for v in staged_pose[:6]],
             )
+
         return staged_pose

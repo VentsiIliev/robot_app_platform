@@ -35,6 +35,17 @@ class _IRobotService(Protocol):
         wait_to_reach=False,
     ) -> bool: ...
 
+    def move_linear(
+        self,
+        position,
+        tool,
+        user,
+        velocity,
+        acceleration,
+        blendR=0.0,
+        wait_to_reach=False,
+    ) -> bool: ...
+
     def stop_motion(self) -> bool: ...
 
 
@@ -633,6 +644,28 @@ class CameraTcpOffsetCalibrationService:
         _logger.info("Camera TCP calibration move [%s] result=%s", label, ok)
         return bool(ok)
 
+    def _move_linear(self, pose: list[float], velocity: int, acceleration: int, label: str) -> bool:
+        _logger.info(
+            "Camera TCP calibration linear move [%s]: pose=%s tool=%d user=%d vel=%d acc=%d",
+            label,
+            pose,
+            self._tool,
+            self._user,
+            velocity,
+            acceleration,
+        )
+        ok = self._robot.move_linear(
+            position=pose,
+            tool=self._tool,
+            user=self._user,
+            velocity=velocity,
+            acceleration=acceleration,
+            blendR=0.0,
+            wait_to_reach=True,
+        )
+        _logger.info("Camera TCP calibration linear move [%s] result=%s", label, ok)
+        return bool(ok)
+
     def _recenter_marker_to_center(
         self,
         *,
@@ -770,7 +803,7 @@ class CameraTcpOffsetCalibrationService:
                 target_pose[0],
                 target_pose[1],
             )
-            if not self._move(target_pose, cfg.velocity, cfg.acceleration, f"{label} iter {iteration}"):
+            if not self._move_linear(target_pose, cfg.velocity, cfg.acceleration, f"{label} iter {iteration}"):
                 return None
             if self._interruptible_sleep(cfg.recenter_stability_wait_s):
                 return None

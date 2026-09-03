@@ -43,6 +43,19 @@ class IRobotService(IMotionService, IRobotLifecycle, IHealthCheckable, ABC):
     ):
         return -1
 
+    def prepare_ordered_motion_chain(self, segments, start_position, tool, user, *,
+                                     allow_servo_during_prepare=False):
+        return None
+
+    def execute_prepared_ordered_motion_chain(self, plan_id):
+        return None
+
+    def discard_prepared_ordered_motion_chain(self, plan_id):
+        return None
+
+    def get_prepared_ordered_motion_chain(self, plan_id):
+        return None
+
     def get_execution_status(self):
         return None
 
@@ -83,9 +96,33 @@ class IRobotService(IMotionService, IRobotLifecycle, IHealthCheckable, ABC):
     @abstractmethod
     def set_active_tool(self, tool: int) -> bool: ...
 
+    def get_tool_registry(self):
+        return None
+
+    def set_active_workobject(self, user: int) -> bool:
+        return True
+
+    def get_workobject_registry(self):
+        return None
+
+    def update_workobject_registry(self, user_id, name=None, transform=None, persist=False):
+        return -1
+
     def is_healthy(self) -> bool:
         """Healthy = robot is not in error state."""
-        return self.get_state() not in ("error", "disconnected", "fault")
+        return self.get_connection_state() not in ("disconnected", "starting", "error", "fault")
+
+    def get_connection_state(self) -> str:
+        """Optional lifecycle/availability state for the underlying transport."""
+        return self.get_state()
+
+    def get_connection_details(self) -> dict:
+        """Optional diagnostic details about the underlying transport state."""
+        return {}
+
+    def get_drive_status(self) -> dict:
+        """Optional drive/fieldbus status from the underlying robot transport."""
+        return {}
 
     @abstractmethod
     def set_digital_output(self, port_id: int, value: bool) -> bool: ...

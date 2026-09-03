@@ -1,6 +1,48 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields, is_dataclass, replace
 
 from src.engine.robot.path_preparation import PIXEL_TO_MM_MODE_HOMOGRAPHY_RESIDUAL, PIXEL_TO_MM_MODE_GEOMETRY_PPM_ANCHOR
+
+PICKUP_CONTACT_MODE_PLANNED = "planned"
+PICKUP_CONTACT_MODE_SENSOR_CONTROLLED_FAST_LIN = "sensor_controlled_fast_lin"
+PICKUP_CONTACT_MODE_HEIGHT_MEASURE = "height_measure"
+# Deprecated and intentionally unsupported: the former ``learned_height`` and
+# ``learned_height_lin`` Servo approach strategies must not be wired back into
+# runtime configuration because learned pickup heights are unsafe across batches.
+PICKUP_CONTACT_MODES = (
+    PICKUP_CONTACT_MODE_PLANNED,
+    PICKUP_CONTACT_MODE_SENSOR_CONTROLLED_FAST_LIN,
+    PICKUP_CONTACT_MODE_HEIGHT_MEASURE,
+)
+
+MAGAZINE_PICKUP_MODE_VISION_PLANNED = "vision_planned"
+MAGAZINE_PICKUP_MODE_VISION_SENSOR_CONTROLLED_FAST_LIN = "vision_sensor_controlled_fast_lin"
+MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN = "fixed_group_sensor_controlled_fast_lin"
+MAGAZINE_PICKUP_MODES = (
+    MAGAZINE_PICKUP_MODE_VISION_PLANNED,
+    MAGAZINE_PICKUP_MODE_VISION_SENSOR_CONTROLLED_FAST_LIN,
+    MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN,
+)
+
+_LEGACY_PICKUP_CONTACT_MODE_SERVO_CONTACT = "servo_contact"
+_LEGACY_MAGAZINE_PICKUP_MODE_VISION_SERVO_CONTACT = "vision_servo_contact"
+_LEGACY_MAGAZINE_PICKUP_MODE_FIXED_GROUP_SERVO_CONTACT = "fixed_group_servo_contact"
+
+
+def normalize_pickup_contact_mode(value: object) -> str:
+    mode = str(value or PICKUP_CONTACT_MODE_PLANNED).strip().lower()
+    if mode == _LEGACY_PICKUP_CONTACT_MODE_SERVO_CONTACT:
+        return PICKUP_CONTACT_MODE_SENSOR_CONTROLLED_FAST_LIN
+    return mode
+
+
+def normalize_magazine_pickup_mode(value: object) -> str:
+    mode = str(value or MAGAZINE_PICKUP_MODE_VISION_PLANNED).strip().lower()
+    return {
+        _LEGACY_MAGAZINE_PICKUP_MODE_VISION_SERVO_CONTACT:
+            MAGAZINE_PICKUP_MODE_VISION_SENSOR_CONTROLLED_FAST_LIN,
+        _LEGACY_MAGAZINE_PICKUP_MODE_FIXED_GROUP_SERVO_CONTACT:
+            MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN,
+    }.get(mode, mode)
 
 
 # [LIVE SETTINGS] marks defaults that are already read through the paint-process
@@ -19,34 +61,86 @@ class PickupMotionConfig:
 
     # Heights and clearances.
     approach_offset_mm: float = 100.0  # [LIVE SETTINGS]
-    contact_offset_mm: float = 2.0  # [LIVE SETTINGS]
+    contact_offset_mm: float = 5.0  # [LIVE SETTINGS]
     initial_lift_clearance_mm: float = 20.0  # [LIVE SETTINGS]
 
     # Move from the current robot pose to the pickup approach pose.
     approach_vel_percent: float = 60.0  # [LIVE SETTINGS]
     approach_acc_percent: float = 50.0  # [LIVE SETTINGS]
+    approach_motion_type: str = "ptp"  # [LIVE SETTINGS]
+    approach_blendR: float = 20.0  # [LIVE SETTINGS]
 
     # Controlled final descent from approach height to pickup contact.
     descend_vel_percent: float = 60.0  # [LIVE SETTINGS]
     descend_acc_percent: float = 40.0  # [LIVE SETTINGS]
+    descend_motion_type: str = "linear"  # [LIVE SETTINGS]
+    descend_blendR: float = 0.0  # [LIVE SETTINGS]
 
     # Lift away from pickup contact, then align to the paint start orientation.
     lift_align_vel_percent: float = 80.0  # [LIVE SETTINGS]
     lift_align_acc_percent: float = 40.0  # [LIVE SETTINGS]
+    lift_align_motion_type: str = "ptp"  # [LIVE SETTINGS]
+    lift_align_blendR: float = 20.0  # [LIVE SETTINGS]
 
     # Change from pickup/table plane orientation to paint plane orientation.
     change_plane_vel_percent: float = 80.0  # [LIVE SETTINGS]
     change_plane_acc_percent: float = 40.0  # [LIVE SETTINGS]
+    change_plane_motion_type: str = "ptp"  # [LIVE SETTINGS]
+    change_plane_blendR: float = 20.0  # [LIVE SETTINGS]
     # Combine change-plane orientation with the first pivot-contact translation.
     combine_change_plane_with_first_contact: bool = True
 
     # Optional intermediate staging poses between change-plane and pivot contact.
     stage_transition_vel_percent: float = 50.0  # [LIVE SETTINGS]
     stage_transition_acc_percent: float = 20.0  # [LIVE SETTINGS]
+    stage_transition_motion_type: str = "ptp"  # [LIVE SETTINGS]
+    stage_transition_blendR: float = 20.0  # [LIVE SETTINGS]
 
     # Move into the first pivot contact pose.
     first_contact_vel_percent: float = 80.0  # [LIVE SETTINGS]
     first_contact_acc_percent: float = 30.0  # [LIVE SETTINGS]
+    first_contact_motion_type: str = "ptp"  # [LIVE SETTINGS]
+    first_contact_blendR: float = 0.0  # [LIVE SETTINGS]
+
+    # Pickup contact strategy. Defaults preserve the fully planned
+    # approach/descend/lift sequence. Valid values: planned | servo_contact | height_measure.
+    pickup_contact_mode: str = PICKUP_CONTACT_MODE_PLANNED  # [LIVE SETTINGS]
+    servo_contact_linear_mm_s: float = 10.0  # [LIVE SETTINGS]
+    servo_contact_min_z_mm: float = 0.0  # [LIVE SETTINGS]
+    servo_contact_fast_lin_velocity_percent: float = 10.0  # [LIVE SETTINGS]
+    servo_contact_fast_lin_acceleration_percent: float = 30.0  # [LIVE SETTINGS]
+    servo_contact_timeout_s: float = 5.0  # [LIVE SETTINGS]
+    servo_contact_poll_interval_s: float = 0.02  # [LIVE SETTINGS]
+    servo_contact_controlled_stop_duration_s: float = 0.20  # [LIVE SETTINGS]
+    servo_contact_preflight_read_attempts: int = 2  # [LIVE SETTINGS]
+    servo_contact_read_failure_limit: int = 3  # [LIVE SETTINGS]
+    servo_contact_fallback_to_planned_descend: bool = False  # [LIVE SETTINGS]
+    servo_contact_dummy_sensor_enabled: bool = False  # [LIVE SETTINGS]
+    servo_contact_dummy_detect_after_s: float = 1.0  # [LIVE SETTINGS]
+
+
+@dataclass(frozen=True)
+class PaintContactStagingConfig:
+    """Plane-aware offsets used immediately before and after paint contact."""
+
+    attach_vel_percent: float = 10.0  # [LIVE SETTINGS]
+    attach_acc_percent: float = 5.0  # [LIVE SETTINGS]
+    attach_z_offset_mm: float = 0.0  # [LIVE SETTINGS]
+    attach_paint_axis_offset_mm: float = 0.0  # [LIVE SETTINGS]
+    attach_perpendicular_axis_offset_mm: float = 0.0  # [LIVE SETTINGS]
+    detach_z_offset_mm: float = 0.0  # [LIVE SETTINGS]
+    detach_paint_axis_offset_mm: float = 0.0  # [LIVE SETTINGS]
+    detach_perpendicular_axis_offset_mm: float = 0.0  # [LIVE SETTINGS]
+
+
+@dataclass(frozen=True)
+class UnmatchedSecondPassConfig:
+    """Optional second coat for captured contours that were not library-matched."""
+
+    use_pass_1_settings: bool = True
+    velocity_percent: float = 10.0
+    acceleration_percent: float = 10.0
+    offset_mm: float = 0.0
 
 @dataclass(frozen=True)
 class PaintEdgeCleanupConfig:
@@ -61,10 +155,15 @@ class PaintEdgeCleanupConfig:
     # XY/RZ cleanup motion after XZ/RY paint; separate from paint and unwind speeds.
     vel_percent: float = 80.0  # [LIVE SETTINGS]
     acc_percent: float = 60.0  # [LIVE SETTINGS]
+    motion_type: str = "linear"  # [LIVE SETTINGS]
+    blendR: float = 0.0  # [LIVE SETTINGS]
     # Cleanup uses the prepared contour; approach/retreat transitions use this spacing.
     spacing_mm: float = 3.0  # [LIVE SETTINGS]
     # Cleanup-only Z adjustment in robot coordinates. Negative lowers into the belt.
     z_offset_mm: float = 0.0  # [LIVE SETTINGS]
+    # Approach/retreat displacement along the cleanup plane axis perpendicular
+    # to the configured paint/translation axis.
+    perpendicular_retreat_offset_mm: float = -50.0  # [LIVE SETTINGS]
     # Additional paint-axis/base Z offset for the optional second cleanup pass.
     second_pass_pivot_z_offset_mm: float = -15.0  # [LIVE SETTINGS] 20mm below the belt !
 
@@ -74,9 +173,96 @@ class PaintDropoffConfig:
     """Dropoff/release motion tuning after paint and Joint 6 unwind."""
 
     # Return from pivot completion back to the pickup align pose before release.
-    strategy: str = "pickup_origin"
+    strategy: str = "movement_group"
+    # Dashboard demo mode alternates the effective strategy per production cycle,
+    # starting with movement_group and then plate_layout.
+    alternate_drying_demo: bool = False
+    allow_sub_zero_dropoff: bool = False  # [LIVE SETTINGS]
+    # Safety corridor used only when the configured Dropoff pose is below Z=0.
+    corridor_x_margin_mm: float = 70.0
+    corridor_y_margin_mm: float = 70.0
+    corridor_z_tolerance_mm: float = 1.0
+    corridor_entry_z_max_mm: float = 100.0
+    corridor_maximum_velocity_percent: float = 80.0
+    corridor_maximum_acceleration_percent: float = 60.0
+    sub_zero_approach_z_mm: float = 50.0  # [LIVE SETTINGS]
+    # Blend the corridor retract into the next-cycle start move. The final
+    # start pose remains an exact stop.
+    sub_zero_exit_blendR_mm: float = 10.0  # [LIVE SETTINGS]
     release_align_vel_percent: float = 60.0  # [LIVE SETTINGS]
     release_align_acc_percent: float = 40.0  # [LIVE SETTINGS]
+    release_align_motion_type: str = "ptp"  # [LIVE SETTINGS]
+    release_align_blendR: float = 0.0  # [LIVE SETTINGS]
+    # Plate corners are full robot poses ordered BL, BR, TR, TL.  The plate
+    # strategy is invalid until all four finite, consistently ordered corners
+    # are configured.
+    plate_corners: list[list[float]] = field(default_factory=list)  # [LIVE SETTINGS]
+    plate_release_z_offset_mm: float = 0.0  # [LIVE SETTINGS]
+    plate_approach_clearance_mm: float = 50.0  # [LIVE SETTINGS]
+    plate_margin_left_mm: float = 10.0  # [LIVE SETTINGS]
+    plate_margin_right_mm: float = 10.0  # [LIVE SETTINGS]
+    plate_margin_bottom_mm: float = 10.0  # [LIVE SETTINGS]
+    plate_margin_top_mm: float = 10.0  # [LIVE SETTINGS]
+    plate_spacing_x_mm: float = 10.0  # [LIVE SETTINGS]
+    plate_spacing_y_mm: float = 10.0  # [LIVE SETTINGS]
+    plate_robot_tool: int = -1  # Captured Robot Settings frame metadata.
+    plate_robot_user: int = -1
+    plate_passage_gate_pose: list[float] = field(default_factory=list)  # [LIVE SETTINGS]
+    plate_use_center_waypoint: bool = True  # [LIVE SETTINGS]
+    plate_distribute_unwind: bool = False  # [LIVE SETTINGS]
+    plate_motion_profiles: list[dict] = field(default_factory=lambda: [
+        {"key": "entry_gate", "vel_percent": 70.0, "acc_percent": 50.0, "motion_type": "ptp", "blendR": 20.0},
+        {"key": "entry_center", "vel_percent": 70.0, "acc_percent": 50.0, "motion_type": "ptp", "blendR": 20.0},
+        {"key": "center_to_dropoff", "vel_percent": 70.0, "acc_percent": 50.0, "motion_type": "ptp", "blendR": 0.0},
+        {"key": "exit_center", "vel_percent": 70.0, "acc_percent": 50.0, "motion_type": "ptp", "blendR": 20.0},
+        {"key": "exit_gate", "vel_percent": 70.0, "acc_percent": 50.0, "motion_type": "ptp", "blendR": 20.0},
+        {"key": "gate_to_next_start", "vel_percent": 60.0, "acc_percent": 40.0, "motion_type": "ptp", "blendR": 0.0},
+    ])  # [LIVE SETTINGS]
+
+
+@dataclass(frozen=True)
+class PaintMagazineLoadConfig:
+    """Optional pre-run transfer from magazine capture station to calibration table."""
+
+    enabled: bool = False  # [LIVE SETTINGS]
+    pickup_mode: str = MAGAZINE_PICKUP_MODE_VISION_PLANNED  # [LIVE SETTINGS]
+    fixed_pickup_group_id: str = "Magazine Fixed Pickup"  # [LIVE SETTINGS]
+    fixed_pickup_position_tolerance_mm: float = 2.0  # [LIVE SETTINGS]
+    fixed_pickup_orientation_tolerance_deg: float = 1.0  # [LIVE SETTINGS]
+    full_retract_before_release: bool = True  # [LIVE SETTINGS]
+    short_retract_distance_mm: float = 10.0  # [LIVE SETTINGS]
+    magazine_group_id: str = "Magazine"
+    calibration_group_id: str = "CALIBRATION"
+    move_to_magazine_vel_percent: float = 30.0  # [LIVE SETTINGS]
+    move_to_magazine_acc_percent: float = 30.0  # [LIVE SETTINGS]
+    move_to_magazine_motion_type: str = "ptp"  # [LIVE SETTINGS]
+    move_to_magazine_blendR: float = 0.0  # [LIVE SETTINGS]
+    transfer_to_calibration_vel_percent: float = 30.0  # [LIVE SETTINGS]
+    transfer_to_calibration_acc_percent: float = 30.0  # [LIVE SETTINGS]
+    transfer_to_calibration_motion_type: str = "ptp"  # [LIVE SETTINGS]
+    transfer_to_calibration_blendR: float = 0.0  # [LIVE SETTINGS]
+    release_z_mm: float = 50.0  # [LIVE SETTINGS]
+    camera_settle_s: float = 0.5
+    release_settle_s: float = 0.5
+
+
+@dataclass(frozen=True)
+class PaintSafeTravelConfig:
+    """Optional safe waypoints used while carrying the workpiece from calibration to paint."""
+
+    enabled: bool = False  # [LIVE SETTINGS]
+    position: list[float] = field(default_factory=list)
+    positions: list[object] = field(default_factory=list)
+    movement_group_id: str = ""
+
+
+@dataclass(frozen=True)
+class PaintToDropoffSafeTravelConfig:
+    """Optional safe waypoints used while carrying the workpiece from paint to dropoff."""
+
+    enabled: bool = False  # [LIVE SETTINGS]
+    position: list[float] = field(default_factory=list)
+    positions: list[object] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -89,9 +275,11 @@ class PaintNavigationReturnConfig:
     unwind_acc_percent: float = 60.0  # [LIVE SETTINGS]
     # Queue the unwind request if ROS2 is still finishing the previous motion.
     unwind_queue_if_busy: bool = True
-    # Move from the post-unwind pose back to the calibration movement group pose.
+    # Explicit navigation move to the calibration movement group pose.
     calibration_move_vel_percent: float = 30.0  # [LIVE SETTINGS]
     calibration_move_acc_percent: float = 40.0  # [LIVE SETTINGS]
+    calibration_move_motion_type: str = "ptp"  # [LIVE SETTINGS]
+    calibration_move_blendR: float = 0.0  # [LIVE SETTINGS]
 
 
 @dataclass(frozen=True)
@@ -205,20 +393,86 @@ class PaintProcessConfig:
     pickup_axis_alignment_sign_value: float = 1.0
     # Turns the vacuum pump on/off around pickup and release.
     enable_vacuum_pump: bool = True
+    # Repeat production cycles until the active source no longer yields a workpiece.
+    run_while_workpiece_found: bool = True  # [LIVE SETTINGS]
+    # Match the captured contour against the saved workpiece library. When disabled,
+    # execute the captured contour directly with the default process settings.
+    enable_workpiece_matching: bool = True  # [LIVE SETTINGS]
+    default_paint_velocity_percent: float = 10.0  # [LIVE SETTINGS]
+    default_paint_acceleration_percent: float = 10.0  # [LIVE SETTINGS]
+    # Cycle-wide multiplier applied to acceleration commands. 100 means unchanged.
+    paint_process_acceleration_scale_percent: float = 100.0  # [LIVE SETTINGS]
+    # Pivot/contact offset used only for captured contours executed without matching.
+    # Matched workpieces keep the offset stored in their segment settings.
+    default_paint_offset_mm: float = 0.0  # [LIVE SETTINGS]
+    # Unmatched painting is deliberately capped at two passes for the initial rollout.
+    unmatched_paint_pass_count: int = 1  # [LIVE SETTINGS]
+    unmatched_second_pass: UnmatchedSecondPassConfig = field(
+        default_factory=UnmatchedSecondPassConfig
+    )
+    # Continue past the seam along the beginning of a closed paint contour.
+    closed_contour_overlap_mm: float = 0.0  # [LIVE SETTINGS]
+    # Log one end-of-cycle timing table for every paint execution state.
+    enable_execution_state_timing: bool = True  # [LIVE SETTINGS]
+    # Freeze the paint dashboard preview on the calibration-area capture while the paint cycle runs.
+    pause_dashboard_live_view_after_capture: bool = True  # [LIVE SETTINGS]
     # Applies the configured camera-to-TCP pickup offset only for legacy camera-target pickup plans.
     apply_camera_to_tcp_for_pickup: bool = True
     # Pickup motion heights, speed, acceleration, and tool/user numbers.
     pickup_motion: PickupMotionConfig = field(default_factory=PickupMotionConfig)
+    # Plane-aware approach and retreat offsets around paint contact.
+    contact_staging: PaintContactStagingConfig = field(default_factory=PaintContactStagingConfig)
     # Optional XY/RZ cleanup pass tuning.
     edge_cleanup: PaintEdgeCleanupConfig = field(default_factory=PaintEdgeCleanupConfig)
     # Dropoff/release motion tuning.
     dropoff: PaintDropoffConfig = field(default_factory=PaintDropoffConfig)
+    # Optional magazine pickup before the normal paint run.
+    magazine_load: PaintMagazineLoadConfig = field(default_factory=PaintMagazineLoadConfig)
+    # Optional carried-workpiece waypoint before entering the paint contact area.
+    safe_travel: PaintSafeTravelConfig = field(default_factory=PaintSafeTravelConfig)
+    # Optional carried-workpiece waypoint before entering the dropoff area.
+    dropoff_safe_travel: PaintToDropoffSafeTravelConfig = field(default_factory=PaintToDropoffSafeTravelConfig)
     # Cleanup return motion used before moving back to calibration.
     navigation_return: PaintNavigationReturnConfig = field(default_factory=PaintNavigationReturnConfig)
     # Interpolation and heading reconstruction tuning.
     interpolation: PaintInterpolationConfig = field(default_factory=PaintInterpolationConfig)
     # Enables the matplotlib debug plot generated after pivot path computation.
     enable_pivot_debug_plot: bool = False  # [LIVE SETTINGS]
+    # Enables path-preparation diagnostic plots such as contour canonicalization and trajectory comparison.
+    enable_path_debug_plots: bool = False  # [LIVE SETTINGS]
+
+
+def scale_paint_process_accelerations(config: PaintProcessConfig) -> PaintProcessConfig:
+    """Return a cycle-local config with every configured acceleration scaled."""
+    scale = max(
+        0.0,
+        min(100.0, float(config.paint_process_acceleration_scale_percent)),
+    ) / 100.0
+    if scale == 1.0:
+        return config
+
+    def scaled_dataclass(value):
+        updates = {}
+        for item in fields(value):
+            current = getattr(value, item.name)
+            if item.name == "unmatched_second_pass":
+                # Contact-job accelerations are scaled at command construction.
+                continue
+            if is_dataclass(current):
+                updates[item.name] = scaled_dataclass(current)
+            elif (
+                isinstance(current, (int, float))
+                and item.name != "paint_process_acceleration_scale_percent"
+                and (
+                    "acceleration" in item.name
+                    or item.name.startswith("acc_")
+                    or "_acc_" in item.name
+                )
+            ):
+                updates[item.name] = float(current) * scale
+        return replace(value, **updates) if updates else value
+
+    return scaled_dataclass(config)
 
 
 
@@ -235,6 +489,7 @@ class PaintSimulationConfig:
     camera_to_tcp_x_offset: float = 0.0
     camera_to_tcp_y_offset: float = 0.0
     rotation_direction_sign: float = 1.0
+    closed_contour_overlap_mm: float = 0.0
 
     rules: PaintProjectionRules = field(init=False, repr=False)
     plane_spec: PaintMotionPlaneSpec = field(init=False, repr=False)

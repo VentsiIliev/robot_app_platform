@@ -1,0 +1,89 @@
+{
+  "vacuum_pump": {
+    "enabled": false,
+    "slave_id": 1,
+    "inputs": {},
+    "outputs": {
+      "pump": "Y2",
+      "blow_off": "Y4"
+    },
+    "commands": {
+      "on": 1,
+      "off": 0
+    },
+    "statuses": {}
+  },
+  "vacuum_sensor": {
+    "enabled": true,
+    "slave_id": 1,
+    "inputs": {
+      "sensor": "X3"
+    },
+    "outputs": {},
+    "commands": {},
+    "statuses": {}
+  },
+  "fan": {
+    "enabled": true,
+    "slave_id": 1,
+    "inputs": {},
+    "outputs": {
+      "fan": "Y3"
+    },
+    "commands": {
+      "on": 1,
+      "off": 0
+    },
+    "statuses": {}
+  },
+  "physical_control_buttons": {
+    "enabled": true,
+    "slave_id": 1,
+    "inputs": {
+      "start": "X1",
+      "pause": "X0"
+    },
+    "outputs": {
+      "start": "Y0",
+      "pause": "Y1"
+    },
+    "commands": {
+      "start_on": 1,
+      "start_off": 0,
+      "pause_on": 1,
+      "pause_off": 0
+    },
+    "statuses": {}
+  },
+  "dryer": {
+    "enabled": false,
+    "slave_id": 10,
+    "inputs": {
+      "status": "0"
+    },
+    "outputs": {
+      "command": "1",
+      "pwm_open_vrytka": "2",
+      "pwm_close_vrytka": "3",
+      "pwm_open_izbutvatel": "4",
+      "pwm_close_izbutvatel": "5",
+      "time_delay_move_servo_up": "6",
+      "time_delay_move_servo_down": "7",
+      "time_delay_move_servo_in": "8",
+      "time_delay_move_servo_out": "9",
+      "time_delay_move_plate_in": "10",
+      "time_delay_move_plate_out": "11",
+      "time_delay_start_servo_move": "12",
+      "rev_minute": "13",
+      "acceleration": "14",
+      "target_position_backword": "15",
+      "target_position_forword": "16"
+    },
+    "commands": {
+      "next_position": 1,
+      "eject": 2,
+      "close_plate": 4
+    },
+    "statuses": {}
+  }
+}

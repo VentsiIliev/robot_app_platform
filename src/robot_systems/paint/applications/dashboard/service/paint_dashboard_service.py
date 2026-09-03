@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -14,9 +15,10 @@ from src.engine.robot.path_preparation.pixel_to_mm import (
     PixelToMmContext,
 )
 from src.shared_contracts.events.process_events import ProcessState
-from src.robot_systems.paint.applications.dashboard.dashboard_state import DashboardState
+from src.robot_systems.paint.applications.dashboard.dashboard_state import DashboardCardState, DashboardState
 from src.robot_systems.paint.applications.dashboard.service.i_paint_dashboard_service import (
     ContourTransformDebugResult,
+    DashboardCommandResult,
     IPaintDashboardService,
 )
 
@@ -30,6 +32,14 @@ class PaintDashboardService(IPaintDashboardService):
         capture_snapshot_service=None,
         path_preparation_service=None,
         resolver_getter=None,
+        robot_service=None,
+        vision_service=None,
+        vacuum_pump=None,
+        fan_control=None,
+        dryer_service=None,
+        persist_dryer_enabled=None,
+        development_mode: bool = False,
+        paint_process_config_service=None,
         target_point_name: str = "camera",
         frame_name: str = "calibration",
     ) -> None:
@@ -37,6 +47,16 @@ class PaintDashboardService(IPaintDashboardService):
         self._capture_snapshot_service = capture_snapshot_service
         self._path_preparation_service = path_preparation_service
         self._resolver_getter = resolver_getter
+        self._robot_service = robot_service
+        self._vision_service = vision_service
+        self._paint_process_config_service = paint_process_config_service
+        self._dryer_service = dryer_service
+        self._persist_dryer_enabled = persist_dryer_enabled
+        self._development_mode = bool(development_mode)
+        self._auxiliary_devices = {
+            "pump": vacuum_pump,
+            "fan": fan_control,
+        }
         self._target_point_name = str(target_point_name or "camera").strip().lower()
         self._frame_name = str(frame_name or "calibration").strip().lower()
         self._geometry_scale_cache = GeometryScaleCache()
@@ -45,7 +65,7 @@ class PaintDashboardService(IPaintDashboardService):
         self._logger = logging.getLogger(__name__)
 
     def get_process_id(self) -> str:
-        return str(self._process.process_id)
+        return str(getattr(self._process.process_id, "value", self._process.process_id))
 
     def load_state(self) -> DashboardState:
         process_state = self._process.state.value
@@ -55,6 +75,11 @@ class PaintDashboardService(IPaintDashboardService):
             mode_label="Paint Mode",
             active_job_label=self._active_job_label(process_state),
             status_lines=self._status_lines(process_state),
+            card_states={
+                1: self._robot_status_card(),
+                2: self._vision_status_card(),
+                3: self._process_status_card(process_state),
+            },
             can_start=process_state in (ProcessState.IDLE.value, ProcessState.STOPPED.value),
             can_stop=process_state in (ProcessState.RUNNING.value, ProcessState.PAUSED.value),
             can_pause=process_state in (ProcessState.RUNNING.value, ProcessState.PAUSED.value),
@@ -73,8 +98,449 @@ class PaintDashboardService(IPaintDashboardService):
     def resume(self) -> None:
         self._process.resume()
 
+    def resume_vision_for_dashboard_exit(self) -> None:
+        """Safety release until all vision consumers own acquisition leases."""
+        resume = getattr(self._vision_service, "resume_processing", None)
+        if callable(resume):
+            resume()
+
     def reset_errors(self) -> None:
-        self._process.reset_errors()
+        if self._process.state == ProcessState.ERROR:
+            self._process.reset_errors()
+            return
+        self._logger.debug(
+            "Ignoring Reset Errors while paint process state is %s",
+            getattr(self._process.state, "value", self._process.state),
+        )
+
+    def get_unmatched_paint_settings(self) -> dict[str, float | bool]:
+        service = self._paint_process_config_service
+        if service is None:
+            return {}
+        config = service.get_snapshot()
+        return {
+            "velocity_percent": float(config.default_paint_velocity_percent),
+            "acceleration_percent": float(config.default_paint_acceleration_percent),
+            "offset_mm": float(config.default_paint_offset_mm),
+            "matching_enabled": bool(config.enable_workpiece_matching),
+            "pass_count": max(1, min(2, int(config.unmatched_paint_pass_count))),
+            "pass_2": {
+                "use_pass_1_settings": bool(config.unmatched_second_pass.use_pass_1_settings),
+                "velocity_percent": float(config.unmatched_second_pass.velocity_percent),
+                "acceleration_percent": float(config.unmatched_second_pass.acceleration_percent),
+                "offset_mm": float(config.unmatched_second_pass.offset_mm),
+            },
+        }
+
+    def save_unmatched_paint_settings(
+        self,
+        settings: dict | float,
+        acceleration_percent: float | None = None,
+        offset_mm: float | None = None,
+    ) -> DashboardCommandResult:
+        service = self._paint_process_config_service
+        if service is None:
+            return DashboardCommandResult(False, "Paint process settings are not available.")
+        process_state = str(getattr(getattr(self._process, "state", None), "value", ""))
+        if process_state in {ProcessState.RUNNING.value, ProcessState.PAUSED.value}:
+            return DashboardCommandResult(
+                False,
+                "Stop the paint process before changing unmatched paint settings.",
+            )
+        if not isinstance(settings, dict):
+            settings = {
+                "pass_count": 1,
+                "pass_1": {
+                    "velocity_percent": settings,
+                    "acceleration_percent": acceleration_percent,
+                    "offset_mm": offset_mm,
+                },
+                "pass_2": {"use_pass_1_settings": True},
+            }
+        pass_1 = dict(settings.get("pass_1") or {})
+        pass_2 = dict(settings.get("pass_2") or {})
+        try:
+            current = service.get_snapshot()
+            pass_count = int(settings.get("pass_count", 1))
+            velocity = float(pass_1.get("velocity_percent", 0.0))
+            acceleration = float(pass_1.get("acceleration_percent", 0.0))
+            offset = float(pass_1.get("offset_mm", 0.0))
+            pass_2_velocity = float(pass_2.get("velocity_percent", velocity))
+            pass_2_acceleration = float(pass_2.get("acceleration_percent", acceleration))
+            pass_2_offset = float(pass_2.get("offset_mm", offset))
+        except (TypeError, ValueError):
+            return DashboardCommandResult(False, "Invalid unmatched paint settings.")
+        if pass_count not in (1, 2):
+            return DashboardCommandResult(False, "Paint pass count must be 1 or 2.")
+        values = ((velocity, acceleration), (pass_2_velocity, pass_2_acceleration))
+        if any(not 0.0 < vel <= 100.0 or not 0.0 < acc <= 100.0 for vel, acc in values):
+            return DashboardCommandResult(
+                False,
+                "Velocity and acceleration must be greater than 0 and at most 100 percent.",
+            )
+        try:
+            updated = replace(
+                current,
+                default_paint_velocity_percent=velocity,
+                default_paint_acceleration_percent=acceleration,
+                default_paint_offset_mm=offset,
+                unmatched_paint_pass_count=pass_count,
+                unmatched_second_pass=replace(
+                    current.unmatched_second_pass,
+                    use_pass_1_settings=bool(pass_2.get("use_pass_1_settings", True)),
+                    velocity_percent=pass_2_velocity,
+                    acceleration_percent=pass_2_acceleration,
+                    offset_mm=pass_2_offset,
+                ),
+            )
+            service.save(updated)
+        except Exception as exc:
+            self._logger.exception("Could not save unmatched paint settings")
+            return DashboardCommandResult(False, f"Could not save unmatched paint settings: {exc}")
+        return DashboardCommandResult(True, "Unmatched paint settings saved.")
+
+    def get_acceleration_scale(self) -> float:
+        if self._paint_process_config_service is None:
+            return 100.0
+        return float(
+            self._paint_process_config_service.get_snapshot()
+            .paint_process_acceleration_scale_percent
+        )
+
+    def save_acceleration_scale(self, scale_percent: float) -> DashboardCommandResult:
+        service = self._paint_process_config_service
+        if service is None:
+            return DashboardCommandResult(False, "Paint process settings are not available.")
+        process_state = str(getattr(getattr(self._process, "state", None), "value", ""))
+        if process_state in {ProcessState.RUNNING.value, ProcessState.PAUSED.value}:
+            return DashboardCommandResult(
+                False, "Stop the paint process before changing process scaling."
+            )
+        try:
+            scale = float(scale_percent)
+        except (TypeError, ValueError):
+            return DashboardCommandResult(False, "Invalid process acceleration scale.")
+        if not 0.0 <= scale <= 100.0:
+            return DashboardCommandResult(
+                False, "Process acceleration scale must be between 0 and 100 percent."
+            )
+        try:
+            service.save(
+                replace(
+                    service.get_snapshot(),
+                    paint_process_acceleration_scale_percent=scale,
+                )
+            )
+        except Exception as exc:
+            self._logger.exception("Could not save process acceleration scale")
+            return DashboardCommandResult(False, f"Could not save process acceleration scale: {exc}")
+        return DashboardCommandResult(True, "Process acceleration scale saved.")
+
+    def relieve_cable(self) -> DashboardCommandResult:
+        if self._robot_service is None:
+            return DashboardCommandResult(False, "Robot service is not available.")
+        config_service = self._paint_process_config_service
+        if config_service is None:
+            return DashboardCommandResult(False, "Paint process settings are not available.")
+        try:
+            navigation = config_service.get_snapshot().navigation_return
+            success = bool(
+                self._robot_service.unwind_joint6(
+                    blocking=True,
+                    queue_if_busy=bool(navigation.unwind_queue_if_busy),
+                    vel=float(navigation.unwind_vel_percent),
+                    acc=float(navigation.unwind_acc_percent),
+                )
+            )
+        except Exception as exc:
+            self._logger.exception("Dashboard cable relief failed")
+            return DashboardCommandResult(False, f"Cable relief failed: {exc}")
+        return DashboardCommandResult(
+            success,
+            "Cable relief completed." if success else "Cable relief command was rejected.",
+        )
+
+    def get_auxiliary_states(self) -> dict[str, bool]:
+        states = {}
+        for device_id, device in self._auxiliary_devices.items():
+            if device is None:
+                continue
+            try:
+                # The dashboard state controls button availability, not whether
+                # the output is currently ON.  Raw fan/pump read_state() values
+                # are active-state booleans, so using them here disabled the OFF
+                # button whenever the device was correctly switched off.
+                health_getter = getattr(device, "is_healthy", None)
+                states[device_id] = bool(health_getter()) if callable(health_getter) else True
+            except Exception:
+                self._logger.exception("Could not read %s state", device_id)
+        return states
+
+    def set_auxiliary_enabled(self, device_id: str, enabled: bool) -> DashboardCommandResult:
+        device = self._auxiliary_devices.get(device_id)
+        if device is None:
+            self._logger.error(
+                "[DASHBOARD_AUX] %s command=%s rejected: device unavailable",
+                device_id,
+                "ON" if enabled else "OFF",
+            )
+            return DashboardCommandResult(False, f"{device_id.title()} is not available.", device_id)
+        try:
+            self._logger.info(
+                "[DASHBOARD_AUX] Sending %s command to %s (%s)",
+                "ON" if enabled else "OFF",
+                device_id,
+                type(device).__name__,
+            )
+            result = device.turn_on() if enabled else device.turn_off()
+            success = result is not False
+            self._logger.info(
+                "[DASHBOARD_AUX] %s command=%s returned=%r success=%s",
+                device_id,
+                "ON" if enabled else "OFF",
+                result,
+                success,
+            )
+        except Exception as exc:
+            self._logger.exception("[DASHBOARD_AUX] Could not switch %s", device_id)
+            return DashboardCommandResult(False, f"Could not switch {device_id}: {exc}", device_id)
+        state = "ON" if enabled else "OFF"
+        return DashboardCommandResult(success, f"{device_id.title()} switched {state}.", device_id, enabled)
+
+    def get_drying_mode(self) -> str:
+        service = self._paint_process_config_service
+        if service is None:
+            return "auto"
+        dropoff = service.get_snapshot().dropoff
+        if bool(getattr(dropoff, "alternate_drying_demo", False)):
+            return "demo"
+        strategy = str(dropoff.strategy or "movement_group").strip().lower()
+        return "manual" if strategy == "plate_layout" else "auto"
+
+    def set_drying_mode(self, mode: str) -> DashboardCommandResult:
+        service = self._paint_process_config_service
+        if service is None:
+            return DashboardCommandResult(False, "Paint process settings are not available.")
+        process_state = str(getattr(getattr(self._process, "state", None), "value", ""))
+        if process_state in {ProcessState.RUNNING.value, ProcessState.PAUSED.value}:
+            return DashboardCommandResult(False, "Stop the paint process before changing drying mode.")
+        normalized = str(mode or "").strip().lower()
+        strategies = {"auto": "movement_group", "manual": "plate_layout", "demo": "movement_group"}
+        strategy = strategies.get(normalized)
+        if strategy is None:
+            return DashboardCommandResult(False, "Invalid drying mode.")
+        try:
+            current = service.get_snapshot()
+            service.save(replace(
+                current,
+                dropoff=replace(
+                    current.dropoff,
+                    strategy=strategy,
+                    alternate_drying_demo=normalized == "demo",
+                ),
+            ))
+        except Exception as exc:
+            self._logger.exception("Could not save drying mode")
+            return DashboardCommandResult(False, f"Could not save drying mode: {exc}")
+        return DashboardCommandResult(True, f"Drying mode changed to {normalized}.")
+
+    def get_dryer_state(self) -> dict[str, object]:
+        dryer = self._dryer_service
+        if dryer is None:
+            return {
+                "available": False,
+                "enabled": False,
+                "healthy": False,
+                "message": "Dryer service is not available.",
+                "development_bypass_allowed": self._development_mode,
+            }
+        try:
+            enabled = bool(dryer.is_enabled())
+            healthy = bool(dryer.is_healthy())
+            message = str(getattr(dryer, "last_error", None) or "")
+        except Exception as exc:
+            self._logger.exception("Could not read dryer state")
+            return {
+                "available": True,
+                "enabled": False,
+                "healthy": False,
+                "message": f"Could not read dryer state: {exc}",
+                "development_bypass_allowed": self._development_mode,
+            }
+        return {
+            "available": True,
+            "enabled": enabled,
+            "healthy": healthy,
+            "message": message,
+            "development_bypass_allowed": self._development_mode,
+        }
+
+    def enable_dryer_and_set_auto_mode(self, mode: str = "auto") -> DashboardCommandResult:
+        dryer = self._dryer_service
+        if dryer is None:
+            return DashboardCommandResult(False, "Dryer service is not available.")
+        process_state = str(getattr(getattr(self._process, "state", None), "value", ""))
+        if process_state in {ProcessState.RUNNING.value, ProcessState.PAUSED.value}:
+            return DashboardCommandResult(
+                False, "Stop the paint process before changing drying mode."
+            )
+        try:
+            if not bool(dryer.is_healthy()) and not bool(dryer.enable()):
+                if callable(self._persist_dryer_enabled):
+                    self._persist_dryer_enabled(False)
+                return DashboardCommandResult(
+                    False,
+                    str(getattr(dryer, "last_error", None) or "Dryer initialization failed."),
+                )
+            if callable(self._persist_dryer_enabled):
+                self._persist_dryer_enabled(True)
+        except Exception as exc:
+            self._logger.exception("Could not enable dryer")
+            return DashboardCommandResult(False, f"Could not enable dryer: {exc}")
+        return self.set_drying_mode(mode)
+
+    def _robot_status_card(self) -> DashboardCardState:
+        robot = self._robot_service
+        if robot is None:
+            return DashboardCardState("Robot Status", "UNAVAILABLE", "Robot service is not registered")
+        try:
+            details_getter = getattr(robot, "get_connection_details", None)
+            details = details_getter() if callable(details_getter) else {}
+            details = details if isinstance(details, dict) else {}
+            connection_state_getter = getattr(robot, "get_connection_state", None)
+            connection_state = str(details.get("state") or "").lower()
+            if callable(connection_state_getter):
+                live_connection_state = connection_state_getter()
+                if isinstance(live_connection_state, str) and live_connection_state.strip():
+                    connection_state = live_connection_state.strip().lower()
+            if connection_state == "disconnected":
+                note = self._robot_connection_note(details.get("last_error"))
+                return DashboardCardState("Robot Status", "DISCONNECTED", note)
+            if connection_state == "starting":
+                startup = details.get("startup")
+                note = self._robot_startup_note(startup if isinstance(startup, dict) else {})
+                return DashboardCardState("Robot Status", "STARTING", note)
+            if connection_state in {"error", "fault"}:
+                note = self._robot_connection_note(details.get("last_error"))
+                return DashboardCardState("Robot Status", "ERROR", note)
+
+            drive_status_getter = getattr(robot, "get_drive_status", None)
+            drive_status = drive_status_getter() if callable(drive_status_getter) else {}
+            drive_status = drive_status if isinstance(drive_status, dict) else {}
+            drive_warning = self._robot_drive_warning(drive_status)
+            if drive_warning:
+                return DashboardCardState("Robot Status", "DRIVE NOT READY", drive_warning)
+
+            state_getter = getattr(robot, "get_state", None)
+            state = str(connection_state or (state_getter() if callable(state_getter) else "unknown"))
+            healthy_getter = getattr(robot, "is_healthy", None)
+            healthy = bool(healthy_getter()) if callable(healthy_getter) else state not in {
+                "disconnected",
+                "error",
+                "fault",
+            }
+        except Exception as exc:
+            return DashboardCardState("Robot Status", "ERROR", self._robot_connection_note(exc))
+        value = state.upper() if state else "UNKNOWN"
+        note = "Robot service healthy" if healthy else "Robot needs attention"
+        return DashboardCardState("Robot Status", value, note)
+
+    @staticmethod
+    def _robot_connection_note(last_error: object) -> str:
+        message = str(last_error or "").strip()
+        if not message:
+            return "Robot bridge is disconnected"
+        lowered = message.lower()
+        if "connection refused" in lowered or "failed to establish a new connection" in lowered:
+            return "ROS2 bridge is not reachable"
+        if "timed out" in lowered or "timeout" in lowered:
+            return "ROS2 bridge health check timed out"
+        if "max retries exceeded" in lowered:
+            return "ROS2 bridge is not responding"
+        return "Robot bridge is disconnected"
+
+    @staticmethod
+    def _robot_startup_note(startup: dict) -> str:
+        message = str(startup.get("message") or "").strip()
+        if message:
+            return message
+        phase = str(startup.get("phase") or "").strip()
+        if phase:
+            return f"Runtime startup phase: {phase}"
+        return "Robot runtime is starting"
+
+    @staticmethod
+    def _robot_drive_warning(drive_status: dict) -> str:
+        if not drive_status:
+            return ""
+        if drive_status.get("success") is False:
+            return PaintDashboardService._robot_drive_error_note(drive_status.get("error"))
+
+        motion_allowed = drive_status.get("motion_allowed_by_drive_enable")
+        actual_enabled = drive_status.get("actual_enabled")
+        requested_enabled = drive_status.get("requested_enabled")
+        if motion_allowed is False:
+            if requested_enabled is False:
+                return "Robot drives are disabled"
+            if actual_enabled is False:
+                return PaintDashboardService._robot_drive_status_note(drive_status)
+            return "Robot drives are not motion-ready"
+        return ""
+
+    @staticmethod
+    def _robot_drive_status_note(drive_status: dict) -> str:
+        status_state = drive_status.get("status_state")
+        if isinstance(status_state, (list, tuple)) and status_state:
+            states = sorted({str(state) for state in status_state if str(state)})
+            if states:
+                return "Drive state: " + ", ".join(states[:3])
+        state = str(drive_status.get("state") or "").strip()
+        if state:
+            return f"Drive state: {state}"
+        return "EtherCAT/drives are not operation enabled"
+
+    @staticmethod
+    def _robot_drive_error_note(error: object) -> str:
+        message = str(error or "").strip()
+        lowered = message.lower()
+        if "sdo" in lowered or "ethercat" in lowered:
+            return "EtherCAT communication error"
+        if "timed out" in lowered or "timeout" in lowered:
+            return "Drive status request timed out"
+        if "connection refused" in lowered or "failed to establish a new connection" in lowered:
+            return "ROS2 bridge is not reachable"
+        return "Drive status is unavailable"
+
+    def _vision_status_card(self) -> DashboardCardState:
+        vision = self._vision_service
+        if vision is None:
+            return DashboardCardState("Vision Status", "UNAVAILABLE", "Vision service is not registered")
+        try:
+            healthy_getter = getattr(vision, "is_healthy", None)
+            details_getter = getattr(vision, "get_health_details", None)
+            details = details_getter() if callable(details_getter) else {}
+            details = details if isinstance(details, dict) else {}
+            health_ok = bool(healthy_getter()) if callable(healthy_getter) else True
+            healthy = bool(details.get("healthy", health_ok))
+            paused = bool(details.get("processing_paused", False))
+            value = "PAUSED" if healthy and paused else ("ONLINE" if healthy else "OFFLINE")
+            note = str(
+                details.get("message")
+                or (
+                    "Vision processing paused by paint process"
+                    if healthy and paused
+                    else ("Vision service healthy" if healthy else "Vision service is stopped or unhealthy")
+                )
+            )
+        except Exception as exc:
+            return DashboardCardState("Vision Status", "ERROR", f"Could not read vision state: {exc}")
+        return DashboardCardState("Vision Status", value, note)
+
+    @staticmethod
+    def _process_status_card(process_state: str) -> DashboardCardState:
+        value = str(process_state or "idle").upper()
+        note = PaintDashboardService._status_lines(process_state)[0]
+        return DashboardCardState("Process Status", value, note)
 
     def capture_latest_contour_transform_debug(self) -> ContourTransformDebugResult:
         if self._capture_snapshot_service is None:

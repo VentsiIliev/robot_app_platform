@@ -98,7 +98,7 @@ class LoginController:
     ) -> None:
         ok, msg = self._model.create_first_admin(user_id, first_name, last_name, password)
         if not ok:
-            self._view.show_error(msg)
+            self._view.show_error(self._t(msg))
             return
         user = self._model.authenticate(user_id, password)
         if user is None:

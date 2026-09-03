@@ -16,6 +16,7 @@ class ModbusSettingsController(IApplicationController, BackgroundWorker):
 
         self._view.save_requested.connect(self._on_save)
         self._view.detect_ports_requested.connect(self._on_detect_ports)
+        self._view.grant_permission_requested.connect(self._on_grant_permission)
         self._view.test_connection_requested.connect(self._on_test_connection)
         self._view.destroyed.connect(self.stop)
 
@@ -30,10 +31,21 @@ class ModbusSettingsController(IApplicationController, BackgroundWorker):
 
     def _on_save(self, _values: dict) -> None:
         try:
-            self._model.save(self._view.get_values())
+            if isinstance(self._view, ModbusSettingsView):
+                profiles = self._view.get_profile_values()
+                slaves = self._view.get_slave_values()
+                self._model.save_all(profiles, slaves)
+                self._view.set_save_result(
+                    True,
+                    f"Saved {len(profiles)} profile(s), {len(slaves)} slave(s)",
+                )
+            else:
+                self._model.save(self._view.get_values())
             self._logger.info("Modbus config saved")
         except Exception:
             self._logger.exception("Failed to save modbus config")
+            if isinstance(self._view, ModbusSettingsView):
+                self._view.set_save_result(False, "Modbus configuration was not saved")
 
     # ── Detect ports ──────────────────────────────────────────────────────
 
@@ -52,6 +64,24 @@ class ModbusSettingsController(IApplicationController, BackgroundWorker):
     def _on_detect_failed(self, msg: str) -> None:
         self._logger.error("Port detection failed: %s", msg)
         self._view.set_detected_ports([])
+
+    # ── Grant permissions ────────────────────────────────────────────────
+
+    def _on_grant_permission(self) -> None:
+        self._view.set_busy(True)
+        self._run_in_thread(
+            fn=self._model.grant_serial_port_permissions,
+            on_done=self._on_permission_granted,
+            on_error=self._on_permission_failed,
+        )
+
+    def _on_permission_granted(self, ports: list) -> None:
+        self._logger.info("Permission updated for ports: %s", ports)
+        self._view.set_permission_result(bool(ports), ports)
+
+    def _on_permission_failed(self, msg: str) -> None:
+        self._logger.error("Permission update failed: %s", msg)
+        self._view.set_permission_result(False, [])
 
     # ── Test connection ───────────────────────────────────────────────────
 

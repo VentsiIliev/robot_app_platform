@@ -147,6 +147,13 @@ def _combo_set(w: QComboBox, v: Any) -> None:
         w.setCurrentIndex(idx)
 
 
+def _toggle_set(w: QToggle, value: Any) -> None:
+    checked = bool(value)
+    # This also cancels a still-running user-click animation which could
+    # otherwise overwrite a backend-forced rollback after initialization fails.
+    w.sync_visual_state(checked)
+
+
 # ── registry ──────────────────────────────────────────────────────────────────
 
 _SPINBOX_HANDLER = WidgetHandler(
@@ -183,7 +190,7 @@ _REGISTRY: dict[str, WidgetHandler] = {
     "toggle": WidgetHandler(
         create=_make_toggle,
         get_value=lambda w: w.isChecked(),
-        set_value=lambda w, v: w.setChecked(bool(v)),
+        set_value=_toggle_set,
     ),
 }
 

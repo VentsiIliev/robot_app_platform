@@ -1,9 +1,9 @@
 import logging
-from typing import Dict, List
+from typing import Dict, List, Mapping
 
 from src.applications.base.i_application_model import IApplicationModel
 from src.applications.device_control.service.i_device_control_service import (
-    IDeviceControlService, MotorEntry,
+    IDeviceControlDevice, IDeviceControlService, MotorEntry,
 )
 
 
@@ -20,6 +20,21 @@ class DeviceControlModel(IApplicationModel):
         pass
 
     # ── Queries ───────────────────────────────────────────────────────
+
+    def get_devices(self) -> List[IDeviceControlDevice]:
+        return self._service.get_devices()
+
+    def execute_device_action(self, device_key: str, action: str) -> bool:
+        return self._service.execute_device_action(device_key, action)
+
+    def read_device_state(self, device_key: str) -> Mapping[str, object]:
+        return self._service.read_device_state(device_key)
+
+    def set_device_enabled(self, device_key: str, enabled: bool) -> bool:
+        return self._service.set_device_enabled(device_key, enabled)
+
+    def is_device_enabled(self, device_key: str) -> bool:
+        return self._service.is_device_enabled(device_key)
 
     def get_motors(self) -> List[MotorEntry]:
         return self._service.get_motors()

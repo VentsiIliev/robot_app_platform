@@ -113,6 +113,24 @@ def _copy_path_collection(paths: list[list[list[float]]]) -> list[list[list[floa
     return [[list(point) for point in path] for path in paths]
 
 
+def _pose_path_from_xy(xy_points: np.ndarray, reference_path: list[list[float]]) -> list[list[float]]:
+    points = np.asarray(xy_points, dtype=float).reshape(-1, 2)
+    reference = list(reference_path[0]) if reference_path else [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    while len(reference) < 6:
+        reference.append(0.0)
+    return [
+        [
+            float(point[0]),
+            float(point[1]),
+            float(reference[2]),
+            float(reference[3]),
+            float(reference[4]),
+            float(reference[5]),
+        ]
+        for point in points
+    ]
+
+
 
 @dataclass(frozen=True)
 class WorkpieceExecutionPlan:
@@ -208,6 +226,7 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
             target_point_name: str = "",
             pickup_target_point_name: str = "",
             calibration_frame_name: str = "",
+            calibration_frame_name_getter: Optional[Callable[[], str]] = None,
             pixel_height_compensation_fn: Optional[Callable[[float], tuple[float, float]]] = None,
             base_position_provider: Optional[Callable[[], Optional[list[float]]]] = None,
             pickup_axis_alignment_sign: float = 1.0,
@@ -236,6 +255,7 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
         self._target_point_name = str(target_point_name or "").strip().lower()
         self._pickup_target_point_name = str(pickup_target_point_name or self._target_point_name or "").strip().lower()
         self._calibration_frame_name = str(calibration_frame_name or "").strip().lower()
+        self._calibration_frame_name_getter = calibration_frame_name_getter
         self._pixel_height_compensation_fn = pixel_height_compensation_fn
         self._base_position_provider = base_position_provider
         self._debug_plot_dir = str(debug_plot_dir) if debug_plot_dir else ""
@@ -280,6 +300,17 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
             except Exception:
                 self._logger.debug("Path preparation resolver lookup failed", exc_info=True)
         return self._resolver
+
+    def _current_calibration_frame_name(self) -> str:
+        """Return the active target frame name, resolving lazily if a getter is set."""
+        if self._calibration_frame_name_getter is not None:
+            try:
+                frame_name = str(self._calibration_frame_name_getter() or "").strip().lower()
+                if frame_name:
+                    return frame_name
+            except Exception:
+                self._logger.debug("Path preparation target-frame lookup failed", exc_info=True)
+        return self._calibration_frame_name
 
     def _save_contour_pipeline_debug_plot(
             self,
@@ -411,11 +442,12 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
         spray_pattern = merged.get("sprayPattern", {})
         workpiece_height_mm = _safe_float(merged.get("height_mm"), config._DEFAULT_WORKPIECE_HEIGHT_MM)
         default_pivot_offset_mm = _safe_float(merged.get("offset"), 0.0)
+        calibration_frame_name = self._current_calibration_frame_name()
         execution_target_name, execution_target_offset_x, execution_target_offset_y, execution_reference_rz = (
-            self._resolve_target_point_metadata(self._target_point_name, self._calibration_frame_name)
+            self._resolve_target_point_metadata(self._target_point_name, calibration_frame_name)
         )
         pickup_target_name, pickup_target_offset_x, pickup_target_offset_y, pickup_reference_rz = (
-            self._resolve_target_point_metadata(self._pickup_target_point_name, self._calibration_frame_name)
+            self._resolve_target_point_metadata(self._pickup_target_point_name, calibration_frame_name)
         )
         use_workpiece_layer = False
         self._logger.debug(f"SPRAY PATTERN: {spray_pattern}")
@@ -464,9 +496,11 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
                     if config._CANONICALIZE_WORKPIECE_LAYER_CONTOUR
                     else raw_pts_px
                 )
+                source_settings = dict(settings)
+                source_settings["_skip_debug_plot"] = bool(skip_debug_plot)
                 pts_px = self._process_source_contour(
                     source_before_bezier_px,
-                    settings,
+                    source_settings,
                     label="workpiece_layer",
                 )
                 if config._CANONICALIZE_WORKPIECE_LAYER_CONTOUR and len(raw_pts_px) >= 3 and len(pts_px) >= 3:
@@ -498,9 +532,11 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
                     if contour_arr.size == 0:
                         continue
                     source_before_bezier_px = np.asarray(contour_arr.reshape(-1, 2), dtype=np.float64)
+                    source_settings = dict(settings)
+                    source_settings["_skip_debug_plot"] = bool(skip_debug_plot)
                     pts_px = self._process_source_contour(
                         source_before_bezier_px,
-                        settings,
+                        source_settings,
                         label=f"sprayPattern.{pattern_type}[{i}]",
                     )
                     self._logger.info("[EXECUTE] source=sprayPattern.%s[%d] pixel_points=%d settings=%s", pattern_type,
@@ -521,9 +557,9 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
         curve_paths: list[list[list[float]]] = []
         execution_jobs: list[dict] = []
         debug_heading_marker_threshold_deg = PATH_TANGENT_HEADING_DEADBAND_DEG
-        preview_base_position = self._resolve_base_position()
-        preview_transformer = self._current_transformer()
-        preview_resolver = self._current_resolver()
+        preview_base_position = self._resolve_base_position() if not skip_debug_plot else None
+        preview_transformer = self._current_transformer() if not skip_debug_plot else None
+        preview_resolver = self._current_resolver() if not skip_debug_plot else None
 
         for path_pts, settings, pattern_type, pts_px, source_before_bezier_px in robot_paths:
             if not skip_debug_plot:
@@ -540,19 +576,22 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
                 [float(point[0]), float(point[1])]
                 for point in np.asarray(pts_px, dtype=float).reshape(-1, 2)
             ])
-            raw_homography_paths.append(
-                self._homography_preview_strategy.convert(
-                    pts_px,
-                    settings,
-                    segment_config=self._segment_config,
-                    z_min=self._z_min,
-                    base_position=preview_base_position,
-                    transformer=preview_transformer,
-                    resolver=preview_resolver,
-                    pixel_height_compensation_fn=self._pixel_height_compensation_fn,
-                    logger=self._logger,
+            if skip_debug_plot:
+                raw_homography_paths.append([])
+            else:
+                raw_homography_paths.append(
+                    self._homography_preview_strategy.convert(
+                        pts_px,
+                        settings,
+                        segment_config=self._segment_config,
+                        z_min=self._z_min,
+                        base_position=preview_base_position,
+                        transformer=preview_transformer,
+                        resolver=preview_resolver,
+                        pixel_height_compensation_fn=self._pixel_height_compensation_fn,
+                        logger=self._logger,
+                    )
                 )
-            )
             vel = _safe_float(settings.get("velocity"), 60.0)
             acc = _safe_float(settings.get("acceleration"), 30.0)
             tangent_lookahead_distance_mm, tangent_heading_deadband_deg = _resolve_segment_tangent_settings(settings)
@@ -596,17 +635,21 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
                 len(prepared_xy),
             )
 
-            prepared_path = rebuild_pose_path_from_xy(
-                prepared_xy, path_pts, self._rz_mode,
-                tangent_lookahead_distance_mm=tangent_lookahead_distance_mm,
-                tangent_heading_deadband_deg=tangent_heading_deadband_deg,
-            )
+            if skip_debug_plot:
+                prepared_path = _pose_path_from_xy(prepared_xy, path_pts)
+                curve_path = _pose_path_from_xy(curve_xy, path_pts)
+            else:
+                prepared_path = rebuild_pose_path_from_xy(
+                    prepared_xy, path_pts, self._rz_mode,
+                    tangent_lookahead_distance_mm=tangent_lookahead_distance_mm,
+                    tangent_heading_deadband_deg=tangent_heading_deadband_deg,
+                )
 
-            curve_path = rebuild_pose_path_from_xy(
-                curve_xy, path_pts, self._rz_mode,
-                tangent_lookahead_distance_mm=tangent_lookahead_distance_mm,
-                tangent_heading_deadband_deg=tangent_heading_deadband_deg,
-            )
+                curve_path = rebuild_pose_path_from_xy(
+                    curve_xy, path_pts, self._rz_mode,
+                    tangent_lookahead_distance_mm=tangent_lookahead_distance_mm,
+                    tangent_heading_deadband_deg=tangent_heading_deadband_deg,
+                )
 
             sampled_path = rebuild_pose_path_from_xy(
                 sampled_xy, path_pts, self._rz_mode,
@@ -627,7 +670,7 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
                     float(pickup_px[0]), float(pickup_px[1]),
                     {"height_mm": workpiece_height_mm, **merged},
                     target_point_name=self._target_point_name,
-                    frame_name=self._calibration_frame_name,
+                    frame_name=calibration_frame_name,
                 )
 
                 if use_workpiece_layer and len(prepared_xy) >= 3:
@@ -680,7 +723,7 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
                     float(pickup_px[0]), float(pickup_px[1]),
                     {"height_mm": workpiece_height_mm, **merged},
                     target_point_name=self._pickup_target_point_name,
-                    frame_name=self._calibration_frame_name,
+                    frame_name=calibration_frame_name,
                     rz_override=pickup_rz,
                 )
 
@@ -829,6 +872,7 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
 
         resolver = self._current_resolver()
         transformer = self._current_transformer()
+        calibration_frame_name = self._current_calibration_frame_name()
 
         if resolver is not None:
             context = PixelToMmContext(
@@ -837,7 +881,7 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
                 rx=rx,
                 ry=ry,
                 target_point_name=self._target_point_name,
-                calibration_frame_name=self._calibration_frame_name,
+                calibration_frame_name=calibration_frame_name,
                 mode_name=self._pixel_to_mm_mode,
                 logger=self._logger,
                 geometry_scale_cache=self._geometry_scale_cache,

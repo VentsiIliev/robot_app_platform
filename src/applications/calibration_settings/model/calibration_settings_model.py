@@ -19,6 +19,15 @@ class CalibrationSettingsModel(IApplicationModel):
         self._service.save_settings(settings)
         self._settings = settings
 
+    def capture_workobject_point(self, point_name: str) -> tuple[bool, str, dict]:
+        return self._service.capture_workobject_point(point_name)
+
+    def solve_workobject(self, user_id: int, name: str = "") -> tuple[bool, str, dict]:
+        return self._service.solve_workobject(user_id, name)
+
+    def save_workobject(self, user_id: int, name: str = "", persist: bool = True) -> tuple[bool, str, dict]:
+        return self._service.save_workobject(user_id, name=name, persist=persist)
+
     @property
     def current_settings(self) -> CalibrationSettingsData:
         assert self._settings is not None

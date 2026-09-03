@@ -1,0 +1,9 @@
+{
+  "__meta__": {
+    "display_name": "English"
+  },
+  "Calibration": {
+    "Calibration Running": "Calibration Running",
+    "Calibration is currently running.\nPlease stop it before leaving.": "Calibration is currently running.\nPlease stop it before leaving."
+  }
+}

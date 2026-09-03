@@ -8,7 +8,7 @@ from datetime import datetime
 import numpy as np
 import cv2
 
-from PyQt6.QtCore import QObject, pyqtSignal
+from PyQt6.QtCore import QCoreApplication, QObject, pyqtSignal
 from PyQt6.QtGui import QPixmap
 from PyQt6.QtWidgets import QDialog, QLabel, QScrollArea, QVBoxLayout, QPushButton, QHBoxLayout, QTabWidget
 
@@ -97,12 +97,20 @@ class WorkpieceEditorController(IApplicationController):
     def _on_capture(self) -> list:
         """Called by the editor's capture button. Picks the largest contour,
         stops the live feed and loads the contour into the Workpiece layer."""
-        contours = self._model.get_contours()
+        try:
+            contours = self._model.get_contours()
+        except RuntimeError as exc:
+            show_warning(self._view, self._t("Capture"), str(exc))
+            return []
         self._logger.debug("Capture: got %d contours from vision", len(contours))
         largest = self._pick_largest(contours)
         if largest is None:
             self._logger.warning("Capture: no usable contour found")
-            show_warning(self._view, "Capture", "No contour detected.\nMake sure the vision vision_service is running.")
+            show_warning(
+                self._view,
+                self._t("Capture"),
+                self._t("No contour detected.\nMake sure the vision service is running."),
+            )
             return []
 
         self._logger.debug("Capture: largest contour has %d points", len(largest))
@@ -194,7 +202,7 @@ class WorkpieceEditorController(IApplicationController):
         ok, msg = self._model.save_workpiece(data)
         self._logger.info("Save workpiece: %s — %s", ok, msg)
         if not ok:
-            show_warning(self._view, "Cannot Save", msg)
+            show_warning(self._view, self._t("Cannot Save"), msg)
             return False, msg
         # Resume live feed after successful save
         self._camera_active = True
@@ -203,6 +211,89 @@ class WorkpieceEditorController(IApplicationController):
     def _connect_signals(self) -> None:
         self._view.save_requested.connect(self._on_save)
         self._view.execute_requested.connect(self._on_execute)
+        self._view.process_contour_requested.connect(self._on_process_contour)
+
+    def _on_process_contour(self) -> None:
+        """Preview the production-processed pixel contour without changing editor data."""
+        try:
+            editor_frame = self._view._editor
+            inner = editor_frame.contourEditor.editor_with_rulers.editor
+            editor_data = inner.workpiece_manager.export_editor_data()
+            form = getattr(editor_frame, "additional_data_form", None)
+            form_data = form.get_data() if form is not None and hasattr(form, "get_data") else {}
+            form_data = self._augment_form_data_with_editor_context(form_data)
+        except Exception as exc:
+            self._logger.exception("Process contour: failed to read editor data")
+            show_warning(self._view, self._t("Process Contour"), str(exc))
+            return
+
+        ok, msg = self._model.execute_workpiece(
+            {"form_data": form_data, "editor_data": editor_data},
+            skip_debug_plot=True,
+        )
+        if not ok:
+            self._logger.warning("Process contour failed: %s", msg)
+            show_warning(self._view, self._t("Process Contour"), msg)
+            return
+
+        # Plot pivot_source_path directly in robot millimetres. No camera inverse
+        # conversion or preview approximation is involved.
+        processed_paths = self._model.get_last_projection_source_paths()
+        if not any(len(path) >= 2 for path in processed_paths):
+            show_warning(
+                self._view,
+                self._t("Process Contour"),
+                self._t("No paint-projection source contour is available to preview."),
+            )
+            return
+        self._show_projection_source_plot(processed_paths)
+        self._logger.info(
+            "Paint projection source preview: paths=%d points=%d (raw editor contour unchanged)",
+            len(processed_paths),
+            sum(len(path) for path in processed_paths),
+        )
+
+    def _show_projection_source_plot(self, paths: list[list[list[float]]]) -> None:
+        from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
+        from matplotlib.figure import Figure
+
+        dialog = QDialog(self._view)
+        dialog.setWindowTitle("Exact Paint Projection Source Contour")
+        dialog.resize(1000, 800)
+        layout = QVBoxLayout(dialog)
+
+        figure = Figure(figsize=(9, 7), tight_layout=True)
+        canvas = FigureCanvasQTAgg(figure)
+        axis = figure.add_subplot(111)
+        total_points = 0
+        for index, path in enumerate(paths, start=1):
+            points = np.asarray(path, dtype=float)
+            if points.ndim != 2 or len(points) < 2 or points.shape[1] < 2:
+                continue
+            total_points += len(points)
+            label = f"Projection source {index} ({len(points)} points)"
+            axis.plot(points[:, 0], points[:, 1], "-", linewidth=1.0, label=label)
+            axis.scatter(points[:, 0], points[:, 1], s=10, zorder=3)
+            axis.scatter(points[0, 0], points[0, 1], s=70, color="green", zorder=4, label=f"Start {index}")
+            axis.scatter(points[-1, 0], points[-1, 1], s=70, color="red", zorder=4, label=f"End {index}")
+
+        axis.set_title(f"Exact pivot_source_path passed to paint projection — {total_points} points")
+        axis.set_xlabel("Robot X (mm)")
+        axis.set_ylabel("Robot Y (mm)")
+        axis.set_aspect("equal", adjustable="datalim")
+        axis.grid(True, alpha=0.3)
+        axis.legend(loc="best")
+        layout.addWidget(canvas)
+
+        button_row = QHBoxLayout()
+        button_row.addStretch(1)
+        close_button = QPushButton("Close")
+        close_button.clicked.connect(dialog.accept)
+        button_row.addWidget(close_button)
+        layout.addLayout(button_row)
+        self._preview_dialog = dialog
+        dialog.finished.connect(lambda _result: setattr(self, "_preview_dialog", None))
+        dialog.show()
 
     def _set_verification_overlay_from_raw(self, raw: dict) -> None:
         try:
@@ -292,17 +383,21 @@ class WorkpieceEditorController(IApplicationController):
         contours = self._model.get_contours()
         largest = self._pick_largest(contours)
         if largest is None:
-            show_warning(self._view, "Match Workpiece", "No contour detected.")
+            show_warning(self._view, self._t("Match Workpiece"), self._t("No contour detected."))
             return
 
         if not self._model.can_match_saved_workpieces():
-            show_warning(self._view, "Match Workpiece", "Matching is not available in this editor.")
+            show_warning(
+                self._view,
+                self._t("Match Workpiece"),
+                self._t("Matching is not available in this editor."),
+            )
             return
 
         try:
             ok, payload, msg = self._model.match_saved_workpieces(largest)
             if not ok or not payload:
-                show_info(self._view, "Match Workpiece", msg)
+                show_info(self._view, self._t("Match Workpiece"), msg)
                 return
 
             self._camera_active = False
@@ -310,30 +405,34 @@ class WorkpieceEditorController(IApplicationController):
             self._on_load_workpiece_raw({"raw": payload["raw"], "storage_id": payload.get("storage_id")})
             show_info(
                 self._view,
-                "Matched Workpiece",
-                f"Matched: {payload.get('workpieceId') or '(no id)'}"
-                + (f"\nName: {payload.get('name')}" if payload.get("name") else "")
+                self._t("Matched Workpiece"),
+                self._t("Matched: {workpiece_id}").format(
+                    workpiece_id=payload.get("workpieceId") or self._t("(no id)")
+                )
                 + (
-                    f"\nConfidence: {float(payload.get('confidence')):.2f}"
+                    "\n" + self._t("Name: {name}").format(name=payload.get("name"))
+                    if payload.get("name")
+                    else ""
+                )
+                + (
+                    "\n" + self._t("Confidence: {confidence:.2f}").format(
+                        confidence=float(payload.get("confidence"))
+                    )
                     if payload.get("confidence") is not None
                     else ""
                 )
-                + f"\nSaved workpieces checked: {payload.get('candidate_count', 0)}"
-                + f"\nUnmatched contours: {payload.get('no_match_count', 0)}",
+                + "\n"
+                + self._t("Saved workpieces checked: {count}").format(
+                    count=payload.get("candidate_count", 0)
+                )
+                + "\n"
+                + self._t("Unmatched contours: {count}").format(
+                    count=payload.get("no_match_count", 0)
+                ),
             )
         except Exception as exc:
             self._logger.exception("Failed to match saved workpieces: %s", exc)
-            show_warning(self._view, "Match Workpiece Failed", str(exc))
-
-    def _align_raw_workpiece_to_contour(
-        self,
-        raw: dict,
-        captured_contour,
-        **kwargs,
-    ) -> dict:
-        from src.robot_systems.paint.processes.paint.align import align_raw_workpiece_to_contour
-
-        return align_raw_workpiece_to_contour(raw, captured_contour, **kwargs)
+            show_warning(self._view, self._t("Match Workpiece Failed"), str(exc))
 
     def _get_current_editor_workpiece_contour(self) -> np.ndarray:
         try:
@@ -607,7 +706,7 @@ class WorkpieceEditorController(IApplicationController):
         ok, msg = self._model.save_workpiece(data)
         self._logger.info("Save workpiece (fallback): %s — %s", ok, msg)
         if not ok:
-            show_warning(self._view, "Cannot Save", msg)
+            show_warning(self._view, self._t("Cannot Save"), msg)
 
     def _on_execute(self, data: dict) -> None:
         self._restore_live_feed()
@@ -665,7 +764,11 @@ class WorkpieceEditorController(IApplicationController):
     def _continue_with_process_action_after_prepare(self) -> None:
         actions = tuple(self._model.get_process_actions())
         if not actions:
-            show_warning(self._view, "No Process Action", "Prepared process has no executable action.")
+            show_warning(
+                self._view,
+                self._t("No Process Action"),
+                self._t("Prepared process has no executable action."),
+            )
             return
         if len(actions) > 1:
             self._logger.info(
@@ -729,7 +832,11 @@ class WorkpieceEditorController(IApplicationController):
 
         actions = tuple(self._model.get_process_actions())
         if not actions:
-            show_warning(self._view, "No Process Action", "Prepared process has no executable action.")
+            show_warning(
+                self._view,
+                self._t("No Process Action"),
+                self._t("Prepared process has no executable action."),
+            )
             return
         action = actions[0]
         if len(actions) > 1:
@@ -782,9 +889,9 @@ class WorkpieceEditorController(IApplicationController):
         self._logger.info("[TIMING] controller execute_process_action elapsed_s=%.3f", perf_counter() - _t1)
         self._logger.info("Execute process action (%s): %s — %s", action.action_id, ok, msg)
         if ok:
-            show_info(self._preview_dialog or self._view, "Process Started", msg)
+            show_info(self._preview_dialog or self._view, self._t("Process Started"), msg)
         else:
-            show_critical(self._preview_dialog or self._view, "Process Failed", msg)
+            show_critical(self._preview_dialog or self._view, self._t("Process Failed"), msg)
 
     def _show_pivot_path_plot(
             self,
@@ -850,7 +957,7 @@ class WorkpieceEditorController(IApplicationController):
             self._load_raw_into_editor(raw, storage_id=storage_id)
         except Exception as exc:
             self._logger.exception("Failed to load workpiece: %s", exc)
-            show_warning(self._view, "Load Failed", str(exc))
+            show_warning(self._view, self._t("Load Failed"), str(exc))
 
     def _augment_form_data_with_editor_context(self, form_data: dict) -> dict:
         enriched = dict(form_data or {})
@@ -879,12 +986,14 @@ class WorkpieceEditorController(IApplicationController):
     def _load_raw_into_editor(self, raw: dict, storage_id=None) -> None:
         raw = self._normalize_workpiece_raw(raw)
         self._loaded_raw_workpiece = copy.deepcopy(raw)
+        self._camera_active = False
         editor_data = self._model.get_workpiece_data_adapter().from_raw(raw)
         self._logger.debug(f"Editor data keys: {editor_data.get_statistics()}")
         inner = self._view._editor.contourEditor.editor_with_rulers.editor
         inner.workpiece_manager.clear_workpiece()
         inner.workpiece_manager.load_editor_data(editor_data, close_contour=False)
         self._view._editor.contourEditor.data = raw
+        self._prefill_form_from_raw(raw)
         self._model.set_editing(storage_id)
         if raw.get("pickupPoint"):
             self._captured_pickup_point = self._parse_pickup_point(raw.get("pickupPoint"))
@@ -897,6 +1006,20 @@ class WorkpieceEditorController(IApplicationController):
         except Exception:
             self._logger.debug("Failed to refresh editor after loading workpiece", exc_info=True)
         self._set_pickup_point_overlay()
+
+    def _prefill_form_from_raw(self, raw: dict) -> None:
+        form = getattr(self._view._editor, "additional_data_form", None)
+        if form is None:
+            return
+        try:
+            if hasattr(form, "prefill_form"):
+                form.prefill_form(raw)
+                return
+            if hasattr(form, "set_field_value"):
+                for key, value in (raw or {}).items():
+                    form.set_field_value(key, value)
+        except Exception:
+            self._logger.debug("Failed to prefill workpiece form from raw payload", exc_info=True)
 
     @staticmethod
     def _compute_contour_centroid(contour) -> tuple[float, float] | None:
@@ -976,13 +1099,12 @@ class WorkpieceEditorController(IApplicationController):
             matched_raw = copy.deepcopy(payload.get("raw") or {})
             if not matched_raw.get("contour"):
                 return None
-            aligned = self._align_raw_workpiece_to_contour(matched_raw, captured_contour)
-            self._save_workpiece_alignment_debug_plot(matched_raw, aligned)
+            self._save_workpiece_alignment_debug_plot(matched_raw, matched_raw)
             self._logger.info(
                 "Capture: recognized known workpiece %s and loaded aligned saved contour",
                 payload.get("workpieceId") or "(no id)",
             )
-            return aligned
+            return matched_raw
         except Exception:
             self._logger.exception("Capture: known-workpiece detection failed")
             return None
@@ -1004,3 +1126,8 @@ class WorkpieceEditorController(IApplicationController):
                 inner.workpiece_manager.apply_defaults_to_segments_without_settings()
         except Exception:
             self._logger.debug("_on_segment_added: could not apply defaults", exc_info=True)
+
+    @staticmethod
+    def _t(text: str) -> str:
+        translated = QCoreApplication.translate("WorkpieceEditor", text)
+        return translated or text

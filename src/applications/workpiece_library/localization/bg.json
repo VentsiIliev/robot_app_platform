@@ -1,0 +1,13 @@
+{
+  "__meta__": {
+    "display_name": "Български"
+  },
+  "WorkpieceLibrary": {
+    "Delete Workpiece": "Изтриване на детайл",
+    "Delete workpiece '{workpiece_id}'?": "Да се изтрие ли детайлът '{workpiece_id}'?",
+    "Delete Failed": "Изтриването е неуспешно",
+    "Save Failed": "Запазването е неуспешно",
+    "Open Failed": "Отварянето е неуспешно",
+    "Could not load workpiece '{storage_id}'": "Детайлът '{storage_id}' не може да бъде зареден"
+  }
+}

@@ -107,11 +107,19 @@ class GeometricMatchingStrategy:
 
     def _hausdorff_similarity(self, c1: np.ndarray, c2: np.ndarray) -> float:
         """Hausdorff similarity between contours"""
+        from scipy.spatial import cKDTree
+
         a = c1.reshape(-1, 2)
         b = c2.reshape(-1, 2)
 
-        d1 = max(min(np.linalg.norm(p - q) for q in b) for p in a)
-        d2 = max(min(np.linalg.norm(p - q) for q in a) for p in b)
+        if len(a) == 0 or len(b) == 0:
+            return 0.0
+
+        tree_a = cKDTree(a)
+        tree_b = cKDTree(b)
+
+        d1 = float(tree_b.query(a, k=1)[0].max())  # max dist from each point in a to nearest in b
+        d2 = float(tree_a.query(b, k=1)[0].max())  # max dist from each point in b to nearest in a
 
         hd = max(d1, d2)
 

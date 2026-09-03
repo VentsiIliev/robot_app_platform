@@ -42,6 +42,97 @@ def _shift_path_rotation(path: list[list[float]], rotation_index: int, shift_deg
     return shifted
 
 
+def _remove_projected_local_reversals(
+    path: list[list[float]],
+    *,
+    max_leg_mm: float = 3.0,
+    minimum_turn_deg: float = 170.0,
+) -> list[list[float]]:
+    """Remove short folds introduced when tangent rotation is projected about a pivot.
+
+    Source-contour sanitization cannot see these folds because rotating an offset
+    workpiece about the fixed paint pivot changes TCP XY.  Only local, near-U-turn
+    triples are removed here; approach/retreat transitions have a long leg and are
+    deliberately left untouched.
+    """
+    cleaned = [list(pose) for pose in path]
+    removed = 0
+    cosine_limit = float(np.cos(np.radians(float(minimum_turn_deg))))
+
+    while len(cleaned) >= 3:
+        xyz = np.asarray([pose[:3] for pose in cleaned], dtype=float)
+        incoming = xyz[1:-1] - xyz[:-2]
+        outgoing = xyz[2:] - xyz[1:-1]
+        incoming_len = np.linalg.norm(incoming, axis=1)
+        outgoing_len = np.linalg.norm(outgoing, axis=1)
+        denominator = incoming_len * outgoing_len
+        cosine = np.ones(len(incoming), dtype=float)
+        valid = denominator > 1e-9
+        cosine[valid] = np.einsum("ij,ij->i", incoming, outgoing)[valid] / denominator[valid]
+        candidates = np.flatnonzero(
+            valid
+            & (incoming_len <= float(max_leg_mm))
+            & (outgoing_len <= float(max_leg_mm))
+            & (cosine <= cosine_limit)
+        )
+        if len(candidates) == 0:
+            break
+
+        # Removing non-adjacent middles in one pass avoids index coupling. Repeat
+        # until no new fold is exposed by the bridge segments.
+        selected: list[int] = []
+        for candidate in candidates.tolist():
+            middle = int(candidate) + 1
+            if not selected or middle - selected[-1] > 1:
+                selected.append(middle)
+        for middle in reversed(selected):
+            del cleaned[middle]
+        removed += len(selected)
+
+    if removed:
+        _logger.warning(
+            "[PAINT_CONTACT] Removed %d projected local reversal waypoint(s) before command execution",
+            removed,
+        )
+    return cleaned
+
+
+def _workpiece_min_rect_size_mm(execution_plan: WorkpieceExecutionPlan) -> tuple[float, float]:
+    """Return the prepared geometry's minimum-area-rectangle sides in millimetres."""
+    points: list[list[float]] = []
+    execution_paths = getattr(execution_plan, "execution_paths", None)
+    paths = (
+        execution_paths()
+        if callable(execution_paths)
+        else [
+            list(job.get("execution_path") or job.get("path") or [])
+            for job in getattr(execution_plan, "execution_jobs", [])
+        ]
+    )
+    for path in paths:
+        points.extend(pose for pose in path if len(pose) >= 2)
+    if not points:
+        return 0.0, 0.0
+
+    xy = np.asarray([pose[:2] for pose in points], dtype=float)
+    if xy.ndim != 2 or xy.shape[0] == 0 or xy.shape[1] < 2 or not np.all(np.isfinite(xy)):
+        return 0.0, 0.0
+    if xy.shape[0] < 3:
+        return 0.0, 0.0
+
+    import cv2
+
+    contour = np.ascontiguousarray(xy[:, :2].reshape(-1, 1, 2), dtype=np.float32)
+    _, size, _ = cv2.minAreaRect(contour)
+    width_mm, height_mm = float(size[0]), float(size[1])
+    return max(0.0, width_mm), max(0.0, height_mm)
+
+
+def _workpiece_largest_side_mm(execution_plan: WorkpieceExecutionPlan) -> float:
+    """Return the long side of the prepared geometry's minimum-area rectangle."""
+    return max(_workpiece_min_rect_size_mm(execution_plan))
+
+
 def _tcp_to_tool_local_xy(job: dict, paint_config: PaintSimulationConfig) -> tuple[float, float] | None:
     """Return the local vector from configured robot TCP to selected tool point."""
     target_name = str(job.get("execution_target_point_name", "") or "").strip().lower()
@@ -83,6 +174,8 @@ class PaintContactExecutor:
         execute_robot: bool = True,
         collected_command_paths: list[list[list[float]]] | None = None,
         collected_command_jobs: list[dict] | None = None,
+        control=None,
+        pivot_offset_override_mm: float | None = None,
     ) -> tuple[bool, str, int]:
         """Execute all projected paint-contact paths in the prepared execution plan."""
         owner = self._owner
@@ -92,15 +185,32 @@ class PaintContactExecutor:
             owner._refresh_runtime_config()
         owner._last_process_start_rz = None
         owner._last_process_end_pose = None
+        workpiece_width_mm, workpiece_height_mm = _workpiece_min_rect_size_mm(execution_plan)
+        detach_clearance_mm = max(workpiece_width_mm, workpiece_height_mm)
+        _logger.info(
+            "[PAINT_CONTACT] Detach clearance from workpiece min rect: width_mm=%.3f height_mm=%.3f "
+            "largest_side_mm=%.3f",
+            workpiece_width_mm,
+            workpiece_height_mm,
+            detach_clearance_mm,
+        )
         total_jobs = len(execution_plan.execution_jobs)
         for job_index, job in enumerate(execution_plan.execution_jobs, start=1):
             job_label = f"job_{job_index}"
             job_started = perf_counter()
             spline = pivot_source_path(job, owner._contact_motion_config)
             vel = float(vel_override) if vel_override is not None else float(job.get("vel", 10.0))
-            acc = float(acc_override) if acc_override is not None else float(job.get("acc", 30.0))
+            acc = (
+                float(acc_override)
+                if acc_override is not None
+                else owner._scale_process_acceleration(float(job.get("acc", 30.0)))
+            )
             pattern_type = str(job.get("pattern_type", "Path"))
-            pivot_offset_mm = owner._resolve_pivot_offset_mm(job, execution_plan)
+            pivot_offset_mm = (
+                float(pivot_offset_override_mm)
+                if pivot_offset_override_mm is not None
+                else owner._resolve_pivot_offset_mm(job, execution_plan)
+            )
             if not spline:
                 continue
 
@@ -115,6 +225,7 @@ class PaintContactExecutor:
                     job_index == 1
                     and owner._last_pickup_plan is not None
                     and owner._contact_motion_config.motion_plane == owner._configured_contact_motion_plane
+                    and pivot_offset_override_mm is None
                     and owner._last_pickup_plan.projected_source_path is spline
                     and owner._last_pickup_plan.projected_pivot_path
                 ):
@@ -210,10 +321,14 @@ class PaintContactExecutor:
 
             with timed_block(_logger, "paint_contact_job_prepare", label=f"{job_label}:build_command_path"):
                 command_pivot_path = owner._paint_contact_command_path(pivot_path)
+                command_pivot_path = _remove_projected_local_reversals(command_pivot_path)
                 if retreat_fn is not None:
                     command_pivot_path = retreat_fn(command_pivot_path)
                 elif append_retreat:
-                    command_pivot_path = owner._append_contact_retreat_waypoint(command_pivot_path)
+                    command_pivot_path = self._append_retreat_opposite_to_staging(
+                        command_pivot_path,
+                        additional_paint_axis_offset_mm=detach_clearance_mm,
+                    )
             if owner._last_process_start_rz is None and command_pivot_path:
                 owner._last_process_start_rz = float(command_pivot_path[0][5]) if len(command_pivot_path[0]) >= 6 else 0.0
 
@@ -288,19 +403,36 @@ class PaintContactExecutor:
 
             execute_started = perf_counter()
             with timed_block(_logger, "paint_contact_job_robot_execute", label=f"{job_label}:{pattern_type}"):
-                result = execute_paint_trajectory_with_optional_trace(
-                    robot_service=owner._robot_service,
-                    debug_dump_dir=owner._debug_dump_dir,
-                    pivot_config=paint_pivot_config,
-                    command_pivot_path=command_pivot_path,
-                    vel=vel,
-                    acc=acc,
-                    pivot_pose=pivot_pose,
-                    pattern_type=pattern_type,
-                    stage="execute",
-                    tcp_to_tool_local_xy=tcp_to_tool_local_xy,
-                    paint_process_config=owner._paint_process_config(),
-                )
+                protected_phase = getattr(control, "protected_phase", None)
+                if callable(protected_phase):
+                    with protected_phase():
+                        result = execute_paint_trajectory_with_optional_trace(
+                            robot_service=owner._robot_service,
+                            debug_dump_dir=owner._debug_dump_dir,
+                            pivot_config=paint_pivot_config,
+                            command_pivot_path=command_pivot_path,
+                            vel=vel,
+                            acc=acc,
+                            pivot_pose=pivot_pose,
+                            pattern_type=pattern_type,
+                            stage="execute",
+                            tcp_to_tool_local_xy=tcp_to_tool_local_xy,
+                            paint_process_config=owner._paint_process_config(),
+                        )
+                else:
+                    result = execute_paint_trajectory_with_optional_trace(
+                        robot_service=owner._robot_service,
+                        debug_dump_dir=owner._debug_dump_dir,
+                        pivot_config=paint_pivot_config,
+                        command_pivot_path=command_pivot_path,
+                        vel=vel,
+                        acc=acc,
+                        pivot_pose=pivot_pose,
+                        pattern_type=pattern_type,
+                        stage="execute",
+                        tcp_to_tool_local_xy=tcp_to_tool_local_xy,
+                        paint_process_config=owner._paint_process_config(),
+                    )
             if result not in (0, True, None):
                 _logger.info(
                     "[TIMING] paint_contact_job index=%d pattern=%s success=false input_pts=%d output_pts=%d execute_elapsed_s=%.3f total_elapsed_s=%.3f",
@@ -323,6 +455,9 @@ class PaintContactExecutor:
                 elapsed_s(execute_started),
                 elapsed_s(job_started),
             )
+            wait_if_paused = getattr(control, "wait_if_paused", None)
+            if callable(wait_if_paused) and not wait_if_paused():
+                return False, "Paint process stopped", total_waypoints
         _logger.info(
             "[TIMING] paint_contact_paths success=true jobs=%d total_waypoints=%d elapsed_s=%.3f",
             len(execution_plan.execution_jobs),
@@ -330,3 +465,80 @@ class PaintContactExecutor:
             elapsed_s(started),
         )
         return True, "", total_waypoints
+
+    def _append_retreat_opposite_to_staging(
+        self,
+        command_path: list[list[float]],
+        *,
+        additional_paint_axis_offset_mm: float = 0.0,
+    ) -> list[list[float]]:
+        """Append the configured retreat offset on the side opposite the paint-entry staging offset."""
+        if not command_path:
+            return []
+
+        owner = self._owner
+        path_with_retreat = self._append_contact_retreat_waypoint(
+            command_path,
+            additional_paint_axis_offset_mm=additional_paint_axis_offset_mm,
+        )
+        if len(path_with_retreat) <= len(command_path):
+            return path_with_retreat
+
+        final_contact_pose = list(command_path[-1])
+        retreat_pose = list(path_with_retreat[-1])
+
+        try:
+            config = owner._contact_motion_config
+            axis_position = config.planar_axes.index(config.translation_axis)
+            axis_index = config.planar_coordinate_indices[axis_position]
+        except (AttributeError, ValueError, IndexError):
+            _logger.warning(
+                "[PIVOT_PATH] Could not resolve paint axis for opposite retreat; keeping existing retreat"
+            )
+            return path_with_retreat
+
+        if len(final_contact_pose) <= axis_index or len(retreat_pose) <= axis_index:
+            return path_with_retreat
+
+        original_retreat_value = float(retreat_pose[axis_index])
+        contact_value = float(final_contact_pose[axis_index])
+        retreat_pose[axis_index] = 2.0 * contact_value - original_retreat_value
+        path_with_retreat[-1] = retreat_pose
+
+        _logger.info(
+            "[PIVOT_PATH] flipped retreat opposite to staging side: axis=%s contact=%.3f old_retreat=%.3f new_retreat=%.3f",
+            config.translation_axis,
+            contact_value,
+            original_retreat_value,
+            float(retreat_pose[axis_index]),
+        )
+        return path_with_retreat
+
+    def _append_contact_retreat_waypoint(
+        self,
+        command_path: list[list[float]],
+        *,
+        additional_paint_axis_offset_mm: float = 0.0,
+    ) -> list[list[float]]:
+        """Append an off-contact retreat waypoint to the paint trajectory command."""
+        if not command_path:
+            return []
+        path_with_retreat = [list(pose) for pose in command_path]
+        final_contact_pose = list(path_with_retreat[-1])
+        retreat_pose = self._owner._paint_detach_staging_offset_pose(
+            final_contact_pose,
+            additional_paint_axis_offset_mm=additional_paint_axis_offset_mm,
+        )
+        if np.allclose(
+            np.asarray(final_contact_pose[:3], dtype=float),
+            np.asarray(retreat_pose[:3], dtype=float),
+            atol=1e-6,
+        ):
+            return path_with_retreat
+        path_with_retreat.append(retreat_pose)
+        _logger.info(
+            "[PIVOT_PATH] appended off-pivot retreat waypoint: contact_pose=%s retreat_pose=%s",
+            [round(float(v), 3) for v in final_contact_pose[:6]],
+            [round(float(v), 3) for v in retreat_pose[:6]],
+        )
+        return path_with_retreat

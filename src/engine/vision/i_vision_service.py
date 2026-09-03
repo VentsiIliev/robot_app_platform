@@ -4,6 +4,10 @@ from typing import List, Optional, Tuple
 import numpy as np
 
 
+class VisionFrameUnavailableError(RuntimeError):
+    """Raised when a fresh camera frame is required but unavailable."""
+
+
 class IVisionService(ABC):
 
     @abstractmethod
@@ -11,6 +15,14 @@ class IVisionService(ABC):
 
     @abstractmethod
     def stop(self) -> None: ...
+
+    def pause_processing(self) -> None:
+        """Suspend acquisition/processing without closing the camera."""
+        raise NotImplementedError
+
+    def resume_processing(self) -> None:
+        """Resume acquisition/processing and require fresh frames."""
+        raise NotImplementedError
 
     @abstractmethod
     def set_raw_mode(self, enabled: bool) -> None: ...

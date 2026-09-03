@@ -21,6 +21,7 @@ class PaintRobotSystemCalibrationProvider(RobotSystemCalibrationProvider):
         return CalibrationNavigationService(
             self._robot_system.get_service(CommonServiceID.NAVIGATION),
             before_move=(lambda: work_area_service.set_active_area_id(area_id)),
+            after_move=(lambda: work_area_service.mark_active_area_verified(area_id)),
         )
 
     def _require_valid_area_id(self, area_id: str) -> str:

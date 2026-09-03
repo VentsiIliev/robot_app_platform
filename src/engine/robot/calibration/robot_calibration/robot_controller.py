@@ -43,7 +43,7 @@ class CalibrationRobotController:
         )
 
     def move_to_iterative_position(self, position, blocking=False, velocity=None, acceleration=None):
-        return self.robot_service.move_ptp(
+        return self.robot_service.move_linear(
             position=position,
             tool=self._tool,
             user=self._user,

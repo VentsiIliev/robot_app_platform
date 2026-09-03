@@ -178,6 +178,15 @@ class RobotCalibrationService(IRobotCalibrationService):
         if vision_calibration_key is not None:
             live_vision_calibration = settings.get(vision_calibration_key)
             if live_vision_calibration is not None:
+                self._config.chessboard_width = getattr(
+                    live_vision_calibration, "chessboard_width", None
+                )
+                self._config.chessboard_height = getattr(
+                    live_vision_calibration, "chessboard_height", None
+                )
+                self._config.chessboard_square_size_mm = getattr(
+                    live_vision_calibration, "square_size_mm", None
+                )
                 self._config.reference_board_mode = str(
                     getattr(live_vision_calibration, "reference_board_mode", "auto") or "auto"
                 )

@@ -12,6 +12,51 @@ from src.robot_systems.paint.processes.paint.plan.paint_contact_motion import (
 
 
 class TestPaintPivotProjection(unittest.TestCase):
+    def test_closed_contour_overlap_adds_exact_arc_length(self) -> None:
+        config = PaintSimulationConfig(
+            motion_plane="xy_z_rz",
+            translation_axis="x",
+            paint_side="negative",
+            translation_direction="forward",
+            closed_contour_overlap_mm=10.0,
+        )
+        path = [
+            [0.0, 0.0, 5.0, 0.0, 0.0, 0.0],
+            [20.0, 0.0, 5.0, 0.0, 0.0, 0.0],
+            [20.0, 20.0, 5.0, 0.0, 0.0, 0.0],
+            [0.0, 20.0, 5.0, 0.0, 0.0, 0.0],
+            [0.0, 0.0, 5.0, 0.0, 0.0, 0.0],
+        ]
+
+        projected, _, diagnostics = project_paint_motion_geometry_continuous(
+            path,
+            [100.0, 200.0, 300.0, 0.0, 0.0, 0.0],
+            config,
+            anchor_xy=(10.0, 10.0),
+        )
+
+        travelled_mm = sum(float(entry["segment_length"]) for entry in diagnostics)
+        self.assertAlmostEqual(travelled_mm, 90.0, places=6)
+        self.assertGreater(len(projected), len(path))
+        self.assertTrue(all(float(entry["contact_error_mm"]) <= 1e-6 for entry in diagnostics))
+
+    def test_closed_contour_overlap_rejects_a_second_full_lap(self) -> None:
+        config = PaintSimulationConfig(closed_contour_overlap_mm=40.0)
+        path = [
+            [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            [10.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            [10.0, 10.0, 0.0, 0.0, 0.0, 0.0],
+            [0.0, 10.0, 0.0, 0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+        ]
+
+        with self.assertRaisesRegex(ValueError, "must be smaller than"):
+            project_paint_motion_geometry_continuous(
+                path,
+                [100.0, 200.0, 300.0, 0.0, 0.0, 0.0],
+                config,
+            )
+
     def test_continuous_projection_keeps_each_arc_sample_on_pivot(self) -> None:
         config = PaintSimulationConfig(
             motion_plane="xy_z_rz",

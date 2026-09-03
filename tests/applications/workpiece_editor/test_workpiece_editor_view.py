@@ -52,6 +52,12 @@ class TestWorkpieceEditorViewSignals(unittest.TestCase):
         self._view._on_execute_cb({"op": "run"})
         self.assertEqual(received, [{"op": "run"}])
 
+    def test_process_contour_signal_can_be_emitted(self):
+        received = []
+        self._view.process_contour_requested.connect(lambda: received.append(True))
+        self._view.process_contour_requested.emit()
+        self.assertEqual(received, [True])
+
     def test_on_camera_feed_cb_returns_none(self):
         self.assertIsNone(self._view._on_camera_feed_cb())
 

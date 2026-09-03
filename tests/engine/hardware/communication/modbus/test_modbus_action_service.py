@@ -22,6 +22,9 @@ class TestModbusActionServiceInterface(unittest.TestCase):
     def test_has_test_connection_method(self):
         self.assertTrue(hasattr(ModbusActionService(), "test_connection"))
 
+    def test_has_grant_serial_port_permissions_method(self):
+        self.assertTrue(hasattr(ModbusActionService(), "grant_serial_port_permissions"))
+
     def test_instantiation_requires_no_settings_dependency(self):
         service = ModbusActionService()
 
@@ -93,6 +96,27 @@ class TestModbusActionServiceDetectPortsSuccess(unittest.TestCase):
             ModbusActionService().detect_ports()
         mock_serial.tools.list_ports.comports.assert_called_once()
 
+    def test_logs_open_failure_reason_and_continues(self):
+        mock_serial = MagicMock()
+        mock_serial.tools.list_ports.comports.return_value = [
+            MagicMock(device="/dev/ttyUSB0", vid=1234),
+        ]
+        mock_serial.Serial.side_effect = PermissionError("permission denied")
+        with patch.dict(sys.modules, {
+            "serial": mock_serial,
+            "serial.tools": mock_serial.tools,
+            "serial.tools.list_ports": mock_serial.tools.list_ports,
+        }):
+            with self.assertLogs("ModbusActionService", level="DEBUG") as logs:
+                result = ModbusActionService().detect_ports()
+
+        self.assertEqual(result, [])
+        self.assertIn(
+            "Port /dev/ttyUSB0 skipped",
+            "\n".join(logs.output),
+        )
+        self.assertIn("permission denied", "\n".join(logs.output))
+
 
 # ---------------------------------------------------------------------------
 # detect_ports() — serial unavailable / exception
@@ -138,6 +162,104 @@ class TestModbusActionServiceDetectPortsFailure(unittest.TestCase):
             "serial.tools.list_ports": mock_serial.tools.list_ports,
         }):
             result = ModbusActionService().detect_ports()
+        self.assertEqual(result, [])
+
+
+# ---------------------------------------------------------------------------
+# grant_serial_port_permissions()
+# ---------------------------------------------------------------------------
+
+class TestModbusActionServiceGrantPermissions(unittest.TestCase):
+
+    def test_grants_permissions_for_usb_serial_ports_with_vid(self):
+        mock_serial = MagicMock()
+        mock_serial.tools.list_ports.comports.return_value = [
+            MagicMock(device="/dev/ttyUSB0", vid=1234),
+            MagicMock(device="/dev/ttyS0", vid=None),
+            MagicMock(device="/dev/ttyACM0", vid=5678),
+        ]
+        with (
+            patch.dict(sys.modules, {
+                "serial": mock_serial,
+                "serial.tools": mock_serial.tools,
+                "serial.tools.list_ports": mock_serial.tools.list_ports,
+            }),
+            patch("src.engine.hardware.communication.modbus.modbus_action_service.os.name", "posix"),
+            patch("src.engine.hardware.communication.modbus.modbus_action_service.os.geteuid", return_value=0),
+            patch("src.engine.hardware.communication.modbus.modbus_action_service.subprocess.run") as run,
+        ):
+            result = ModbusActionService().grant_serial_port_permissions()
+
+        self.assertEqual(result, ["/dev/ttyACM0", "/dev/ttyUSB0"])
+        run.assert_called_once_with(
+            ["chmod", "a+rw", "/dev/ttyACM0", "/dev/ttyUSB0"],
+            check=True,
+            timeout=60,
+        )
+
+    def test_uses_pkexec_when_not_root(self):
+        mock_serial = MagicMock()
+        mock_serial.tools.list_ports.comports.return_value = [
+            MagicMock(device="/dev/ttyUSB0", vid=1234),
+        ]
+        with (
+            patch.dict(sys.modules, {
+                "serial": mock_serial,
+                "serial.tools": mock_serial.tools,
+                "serial.tools.list_ports": mock_serial.tools.list_ports,
+            }),
+            patch("src.engine.hardware.communication.modbus.modbus_action_service.os.name", "posix"),
+            patch("src.engine.hardware.communication.modbus.modbus_action_service.os.geteuid", return_value=1000),
+            patch("src.engine.hardware.communication.modbus.modbus_action_service.subprocess.run") as run,
+        ):
+            result = ModbusActionService().grant_serial_port_permissions()
+
+        self.assertEqual(result, ["/dev/ttyUSB0"])
+        run.assert_called_once_with(
+            ["pkexec", "chmod", "a+rw", "/dev/ttyUSB0"],
+            check=True,
+            timeout=60,
+        )
+
+    def test_returns_empty_when_no_permission_targets(self):
+        mock_serial = MagicMock()
+        mock_serial.tools.list_ports.comports.return_value = [
+            MagicMock(device="/dev/ttyS0", vid=None),
+        ]
+        with (
+            patch.dict(sys.modules, {
+                "serial": mock_serial,
+                "serial.tools": mock_serial.tools,
+                "serial.tools.list_ports": mock_serial.tools.list_ports,
+            }),
+            patch("src.engine.hardware.communication.modbus.modbus_action_service.os.name", "posix"),
+            patch("src.engine.hardware.communication.modbus.modbus_action_service.subprocess.run") as run,
+        ):
+            result = ModbusActionService().grant_serial_port_permissions()
+
+        self.assertEqual(result, [])
+        run.assert_not_called()
+
+    def test_returns_empty_when_permission_command_fails(self):
+        mock_serial = MagicMock()
+        mock_serial.tools.list_ports.comports.return_value = [
+            MagicMock(device="/dev/ttyUSB0", vid=1234),
+        ]
+        with (
+            patch.dict(sys.modules, {
+                "serial": mock_serial,
+                "serial.tools": mock_serial.tools,
+                "serial.tools.list_ports": mock_serial.tools.list_ports,
+            }),
+            patch("src.engine.hardware.communication.modbus.modbus_action_service.os.name", "posix"),
+            patch("src.engine.hardware.communication.modbus.modbus_action_service.os.geteuid", return_value=1000),
+            patch(
+                "src.engine.hardware.communication.modbus.modbus_action_service.subprocess.run",
+                side_effect=OSError("pkexec missing"),
+            ),
+        ):
+            result = ModbusActionService().grant_serial_port_permissions()
+
         self.assertEqual(result, [])
 
 

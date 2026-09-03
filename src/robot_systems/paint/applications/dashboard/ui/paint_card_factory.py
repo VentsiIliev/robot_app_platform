@@ -7,10 +7,10 @@ from src.robot_systems.paint.applications.dashboard.ui.paint_info_card import (
 )
 
 
-_MOCK_CARD_DATA = {
-    1: ("Mock", "Mock Status", "Mock Text"),
-    2: ("Mock", "Mock Status", "Mock Text"),
-    3: ("Mock", "Mock Status", "Mock Text"),
+_DEFAULT_CARD_DATA = {
+    1: ("Robot Status", "UNKNOWN", "Waiting for robot state"),
+    2: ("Vision Status", "UNKNOWN", "Waiting for vision state"),
+    3: ("Process Status", "READY", "Waiting for start"),
 }
 
 
@@ -28,7 +28,7 @@ class PaintCardFactory:
 
     @staticmethod
     def _build_card(cfg: CardConfig) -> PaintInfoCard:
-        title, value, note = _MOCK_CARD_DATA.get(
+        title, value, note = _DEFAULT_CARD_DATA.get(
             cfg.card_id,
             (cfg.label, "Ready", "Status available"),
         )

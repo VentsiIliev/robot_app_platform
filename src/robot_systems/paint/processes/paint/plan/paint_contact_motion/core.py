@@ -210,6 +210,10 @@ def project_paint_contact_motion_continuous(
             contact_segment_heading=contact_segment_heading,
             side_sign=config.side_sign,
         )
+        points = _extend_closed_path_by_overlap(
+            points,
+            float(config.closed_contour_overlap_mm),
+        )
 
     command_rotation_sign = -1.0 if float(getattr(config, "rotation_direction_sign", 1.0)) < 0.0 else 1.0
     save_snapshots = _save_projection_snapshots(config)
@@ -417,6 +421,57 @@ def project_paint_contact_motion_continuous(
             )
 
     return result, snapshots, diagnostics
+
+
+def _extend_closed_path_by_overlap(points: np.ndarray, overlap_mm: float) -> np.ndarray:
+    """Append an exact arc-length prefix after a closed contour's seam."""
+    contour = np.asarray(points, dtype=float)
+    overlap = float(overlap_mm)
+    if overlap <= 1e-9:
+        return contour
+    if len(contour) < 3 or float(np.linalg.norm(contour[0] - contour[-1])) > 1e-6:
+        return contour
+
+    segment_lengths = np.linalg.norm(np.diff(contour, axis=0), axis=1)
+    perimeter = float(np.sum(segment_lengths))
+    if not np.isfinite(overlap):
+        raise ValueError("Paint overlap must be a finite distance")
+    if perimeter <= 1e-9:
+        raise ValueError("Cannot apply paint overlap to a zero-length contour")
+    if overlap >= perimeter - 1e-9:
+        raise ValueError(
+            f"Paint overlap {overlap:.3f} mm must be smaller than "
+            f"closed contour perimeter {perimeter:.3f} mm"
+        )
+
+    remaining = overlap
+    extension: list[np.ndarray] = []
+    for index, segment_length_raw in enumerate(segment_lengths):
+        segment_length = float(segment_length_raw)
+        if segment_length <= 1e-9:
+            continue
+        start = contour[index]
+        end = contour[index + 1]
+        if remaining >= segment_length - 1e-9:
+            extension.append(end.copy())
+            remaining -= segment_length
+            if remaining <= 1e-9:
+                break
+            continue
+        extension.append(start + ((remaining / segment_length) * (end - start)))
+        remaining = 0.0
+        break
+
+    if not extension:
+        return contour
+    extended = np.vstack([contour, np.asarray(extension, dtype=float)])
+    _logger.info(
+        "[PAINT_OVERLAP] applied_mm=%.3f perimeter_mm=%.3f added_points=%d",
+        overlap,
+        perimeter,
+        len(extension),
+    )
+    return extended
 
 
 def _compose_pose(

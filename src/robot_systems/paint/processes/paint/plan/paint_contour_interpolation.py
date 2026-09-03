@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
+from time import perf_counter
 
 import cv2
 import numpy as np
@@ -77,7 +78,8 @@ class PaintContourInterpolation:
     def __init__(self, config: PaintContourInterpolationConfig | None = None) -> None:
         self._config = config or PaintContourInterpolationConfig()
 
-    def build(self, robot_path: list[list[float]]) -> PaintContourInterpolationResult:
+    def build(self, robot_path: list[list[float]], *, include_debug_paths: bool = True) -> PaintContourInterpolationResult:
+        total_start = perf_counter()
         raw_path = [list(point) for point in robot_path]
         if len(raw_path) < 2:
             return PaintContourInterpolationResult(
@@ -89,7 +91,9 @@ class PaintContourInterpolation:
                 anchor_xy=[list(point[:2]) for point in raw_path],
             )
 
+        stage_start = perf_counter()
         raw_xy = _clean_xy(np.asarray(raw_path, dtype=float)[:, :2])
+        _log_interpolation_timing("clean_xy", stage_start, input_points=len(raw_path), output_points=len(raw_xy))
         if len(raw_xy) < 2:
             return PaintContourInterpolationResult(
                 units=self._config.units,
@@ -100,34 +104,112 @@ class PaintContourInterpolation:
                 anchor_xy=[list(point[:2]) for point in raw_path[:1]],
             )
 
+        stage_start = perf_counter()
         dense_xy = _resample_closed_xy(raw_xy, self._config.fit_sample_spacing)
-        prepared_xy, corner_indices = _smooth_closed_xy_with_beziers(dense_xy, self._config)
-        cleaned_anchor_xy = dense_xy
+        _log_interpolation_timing(
+            "fit_resample_closed_xy",
+            stage_start,
+            input_points=len(raw_xy),
+            output_points=len(dense_xy),
+        )
+
+        stage_start = perf_counter()
+        smooth_stats: dict[str, float | int] = {}
+        prepared_xy, corner_indices = _smooth_closed_xy_with_beziers(dense_xy, self._config, stats=smooth_stats)
+        _log_interpolation_timing(
+            "smooth_closed_xy_with_beziers",
+            stage_start,
+            input_points=len(dense_xy),
+            output_points=len(prepared_xy),
+            corners=len(corner_indices),
+            bezier_fits=smooth_stats.get("fit_count", 0),
+            least_squares_s=f"{float(smooth_stats.get('least_squares_s', 0.0)):.3f}",
+            max_fit_error=f"{float(smooth_stats.get('max_error', 0.0)):.4f}",
+        )
+        cleaned_anchor_xy = dense_xy if include_debug_paths else np.empty((0, 2), dtype=float)
+
+        stage_start = perf_counter()
         sharp_boundary_xy = _sharp_tangent_boundary_xy(
             prepared_xy,
             threshold_deg=self._config.sharp_boundary_deg,
         )
+        _log_interpolation_timing(
+            "sharp_tangent_boundary_xy",
+            stage_start,
+            input_points=len(prepared_xy),
+            output_points=len(sharp_boundary_xy),
+        )
         corner_xy = prepared_xy[np.asarray(corner_indices, dtype=int)] if corner_indices else np.empty((0, 2))
         preserve_xy = _merge_unique_xy_points(corner_xy, sharp_boundary_xy)
 
-        prepared_path = rebuild_pose_path_from_xy(
-            prepared_xy,
-            raw_path,
-            self._config.rz_mode,
-            tangent_lookahead_distance_mm=self._config.tangent_lookahead_distance_mm,
-            tangent_heading_deadband_deg=self._config.tangent_heading_deadband_deg,
-            tangent_boundary_xy=sharp_boundary_xy,
+        stage_start = perf_counter()
+        if include_debug_paths:
+            prepared_path = rebuild_pose_path_from_xy(
+                prepared_xy,
+                raw_path,
+                self._config.rz_mode,
+                tangent_lookahead_distance_mm=self._config.tangent_lookahead_distance_mm,
+                tangent_heading_deadband_deg=self._config.tangent_heading_deadband_deg,
+                tangent_boundary_xy=sharp_boundary_xy,
+            )
+        else:
+            prepared_path = _pose_path_from_xy(prepared_xy, raw_path)
+        _log_interpolation_timing(
+            "rebuild_prepared_pose_path",
+            stage_start,
+            input_points=len(prepared_xy),
+            output_points=len(prepared_path),
+            debug_paths=include_debug_paths,
         )
+
+        stage_start = perf_counter()
         execution_xy = resample_contour_xy(
             prepared_xy,
             spacing=self._config.output_spacing,
             closed=True,
         )
+        _log_interpolation_timing(
+            "execution_resample_contour_xy",
+            stage_start,
+            input_points=len(prepared_xy),
+            output_points=len(execution_xy),
+        )
+
+        stage_start = perf_counter()
+        fair_stats: dict[str, float | int] = {}
         execution_xy = _fair_resampled_contour_xy(
             execution_xy,
             spacing=self._config.output_spacing,
             closed=True,
+            stats=fair_stats,
         )
+        _log_interpolation_timing(
+            "fair_resampled_contour_xy",
+            stage_start,
+            output_points=len(execution_xy),
+            passes=fair_stats.get("passes", 0),
+            candidates=fair_stats.get("candidates", 0),
+            removed=fair_stats.get("removed", 0),
+            vector_eval_s=f"{float(fair_stats.get('vector_eval_s', 0.0)):.3f}",
+        )
+
+        stage_start = perf_counter()
+        hairpin_stats: dict[str, int] = {}
+        execution_xy = remove_local_hairpin_reversals_xy(
+            execution_xy,
+            spacing=self._config.output_spacing,
+            closed=True,
+            stats=hairpin_stats,
+        )
+        _log_interpolation_timing(
+            "remove_local_hairpin_reversals_xy",
+            stage_start,
+            output_points=len(execution_xy),
+            passes=hairpin_stats.get("passes", 0),
+            removed=hairpin_stats.get("removed", 0),
+        )
+
+        stage_start = perf_counter()
         execution_path = rebuild_pose_path_from_xy(
             execution_xy,
             raw_path,
@@ -136,17 +218,36 @@ class PaintContourInterpolation:
             tangent_heading_deadband_deg=self._config.tangent_heading_deadband_deg,
             tangent_boundary_xy=sharp_boundary_xy,
         )
+        _log_interpolation_timing(
+            "rebuild_execution_pose_path",
+            stage_start,
+            input_points=len(execution_xy),
+            output_points=len(execution_path),
+        )
+        _log_interpolation_timing(
+            "paint_contour_interpolation_total",
+            total_start,
+            input_points=len(raw_path),
+            output_points=len(execution_path),
+        )
 
         return PaintContourInterpolationResult(
             units=self._config.units,
             raw_path=raw_path,
             prepared_path=prepared_path,
-            heading_path=prepared_path,
+            heading_path=prepared_path if include_debug_paths else [],
             execution_path=execution_path,
             anchor_xy=preserve_xy.tolist(),
             cleaned_anchor_xy=cleaned_anchor_xy.tolist(),
-            sharp_boundary_xy=sharp_boundary_xy.tolist(),
+            sharp_boundary_xy=sharp_boundary_xy.tolist() if include_debug_paths else [],
         )
+
+
+def _log_interpolation_timing(label: str, started_at: float, **fields: object) -> None:
+    suffix = " ".join(f"{key}={value}" for key, value in fields.items())
+    if suffix:
+        suffix = " " + suffix
+    _logger.info("[PATH_PREP_TIMING] stage=%s elapsed_s=%.3f%s", label, perf_counter() - started_at, suffix)
 
 
 def resample_contour_xy(
@@ -272,9 +373,29 @@ def _max_segment_length(xy_points: np.ndarray) -> float:
     return float(np.max(np.linalg.norm(np.diff(points, axis=0), axis=1)))
 
 
+def _pose_path_from_xy(xy_points: np.ndarray, reference_path: list[list[float]]) -> list[list[float]]:
+    points = np.asarray(xy_points, dtype=float).reshape(-1, 2)
+    reference = list(reference_path[0]) if reference_path else [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    while len(reference) < 6:
+        reference.append(0.0)
+    return [
+        [
+            float(point[0]),
+            float(point[1]),
+            float(reference[2]),
+            float(reference[3]),
+            float(reference[4]),
+            float(reference[5]),
+        ]
+        for point in points
+    ]
+
+
 def _smooth_closed_xy_with_beziers(
     dense_xy: np.ndarray,
     config: PaintContourInterpolationConfig,
+    *,
+    stats: dict[str, float | int] | None = None,
 ) -> tuple[np.ndarray, list[int]]:
     dense = _clean_xy(dense_xy)
     if len(dense) < 3:
@@ -287,7 +408,7 @@ def _smooth_closed_xy_with_beziers(
     segments = _split_closed_points(dense, corner_indices)
     all_points: list[np.ndarray] = []
     for segment in segments:
-        beziers = _adaptive_bezier_fit(segment, config, depth=0)
+        beziers = _adaptive_bezier_fit(segment, config, depth=0, stats=stats)
         for control_points in beziers:
             sampled = _sample_bezier_segment(control_points, config.output_spacing)
             if len(sampled):
@@ -362,7 +483,11 @@ def _bezier(t: np.ndarray, p0: np.ndarray, p1: np.ndarray, p2: np.ndarray, p3: n
     )
 
 
-def _fit_cubic_bezier(points: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, float]:
+def _fit_cubic_bezier(
+    points: np.ndarray,
+    *,
+    stats: dict[str, float | int] | None = None,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, float]:
     samples = np.asarray(points, dtype=np.float64).reshape(-1, 2)
     p0 = samples[0]
     p3 = samples[-1]
@@ -383,15 +508,21 @@ def _fit_cubic_bezier(points: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.nd
         p2 = values[2:]
         return (_bezier(parameters, p0, p1, p2, p3) - samples).ravel()
 
+    started_at = perf_counter()
     result = least_squares(
         residual,
         np.hstack([p1_initial, p2_initial]),
         max_nfev=80,
     )
+    if stats is not None:
+        stats["fit_count"] = int(stats.get("fit_count", 0)) + 1
+        stats["least_squares_s"] = float(stats.get("least_squares_s", 0.0)) + (perf_counter() - started_at)
     p1 = result.x[:2]
     p2 = result.x[2:]
     fitted = _bezier(parameters, p0, p1, p2, p3)
     error = float(np.max(np.linalg.norm(fitted - samples, axis=1)))
+    if stats is not None:
+        stats["max_error"] = max(float(stats.get("max_error", 0.0)), error)
     return p0, p1, p2, p3, error
 
 
@@ -400,21 +531,22 @@ def _adaptive_bezier_fit(
     config: PaintContourInterpolationConfig,
     *,
     depth: int,
+    stats: dict[str, float | int] | None = None,
 ) -> list[tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]]:
     min_points = max(4, int(config.bezier_min_points))
     max_depth = max(1, int(config.bezier_max_depth))
     if len(points) < min_points or depth >= max_depth:
-        p0, p1, p2, p3, _ = _fit_cubic_bezier(points)
+        p0, p1, p2, p3, _ = _fit_cubic_bezier(points, stats=stats)
         return [(p0, p1, p2, p3)]
 
-    p0, p1, p2, p3, error = _fit_cubic_bezier(points)
+    p0, p1, p2, p3, error = _fit_cubic_bezier(points, stats=stats)
     if error <= max(0.01, float(config.bezier_max_error)):
         return [(p0, p1, p2, p3)]
 
     midpoint = len(points) // 2
     return (
-        _adaptive_bezier_fit(points[: midpoint + 1], config, depth=depth + 1)
-        + _adaptive_bezier_fit(points[midpoint:], config, depth=depth + 1)
+        _adaptive_bezier_fit(points[: midpoint + 1], config, depth=depth + 1, stats=stats)
+        + _adaptive_bezier_fit(points[midpoint:], config, depth=depth + 1, stats=stats)
     )
 
 
@@ -529,10 +661,12 @@ def _remove_short_chord_kinks(
                 float(np.linalg.norm(points[0] - points[-1])),
             )
 
-        candidate_indices = range(len(segment_lengths)) if closed else range(len(segment_lengths))
-        for segment_index in candidate_indices:
-            if segment_lengths[segment_index] >= min_chord:
-                continue
+        short_segments = np.flatnonzero(segment_lengths < min_chord)
+        if len(short_segments) == 0:
+            break
+
+        remove_candidates: list[int] = []
+        for segment_index in short_segments:
             left_index = segment_index
             right_index = (segment_index + 1) % len(points)
             if not closed and (left_index == 0 or right_index == len(points) - 1):
@@ -543,9 +677,19 @@ def _remove_short_chord_kinks(
             remove_index = left_index if remove_left_score <= remove_right_score else right_index
             if not closed and (remove_index <= 0 or remove_index >= len(points) - 1):
                 continue
-            points = np.delete(points, remove_index, axis=0)
-            changed = True
-            break
+            remove_candidates.append(int(remove_index))
+
+        if remove_candidates:
+            selected_indices = _non_adjacent_indices(
+                np.asarray(sorted(set(remove_candidates)), dtype=int),
+                len(points),
+                closed=closed,
+            )
+            if selected_indices:
+                remove_mask = np.zeros(len(points), dtype=bool)
+                remove_mask[np.asarray(selected_indices, dtype=int)] = True
+                points = points[~remove_mask]
+                changed = True
 
     return _close_if_needed(points, closed)
 
@@ -555,6 +699,7 @@ def _fair_resampled_contour_xy(
     *,
     spacing: float,
     closed: bool,
+    stats: dict[str, float | int] | None = None,
 ) -> np.ndarray:
     """Remove tiny local resampling wiggles before pivot projection.
 
@@ -575,48 +720,39 @@ def _fair_resampled_contour_xy(
     spacing = max(0.05, float(spacing))
     tolerance = max(0.03, min(0.10, spacing * 0.10))
     max_local_segment = spacing * 2.5
+    max_bridge_segment = spacing * 3.0
     min_improvement_ratio = 0.35
 
     removed = 0
     max_bridge_error = 0.0
-    changed = True
-    while changed and len(points) >= 5:
-        changed = False
-        candidate_range = range(len(points)) if closed else range(1, len(points) - 1)
-        for index in candidate_range:
-            prev_index = (index - 1) % len(points)
-            next_index = (index + 1) % len(points)
-            if not closed and (prev_index < 0 or next_index >= len(points)):
-                continue
-
-            prev_point = points[prev_index]
-            point = points[index]
-            next_point = points[next_index]
-            incoming_len = float(np.linalg.norm(point - prev_point))
-            outgoing_len = float(np.linalg.norm(next_point - point))
-            if incoming_len <= 1e-9 or outgoing_len <= 1e-9:
-                continue
-            if incoming_len > max_local_segment or outgoing_len > max_local_segment:
-                continue
-
-            bridge_error = _point_to_segment_distance(point, prev_point, next_point)
-            if bridge_error > tolerance:
-                continue
-
-            local_curvature = float(np.linalg.norm(next_point - 2.0 * point + prev_point))
-            bridge_len = float(np.linalg.norm(next_point - prev_point))
-            path_len = incoming_len + outgoing_len
-            if path_len <= 1e-9:
-                continue
-            bridge_curvature = abs(path_len - bridge_len)
-            if bridge_curvature > local_curvature * (1.0 - min_improvement_ratio):
-                continue
-
-            points = np.delete(points, index, axis=0)
-            removed += 1
-            max_bridge_error = max(max_bridge_error, bridge_error)
-            changed = True
+    passes = 0
+    candidates_seen = 0
+    vector_eval_s = 0.0
+    while len(points) >= 5:
+        passes += 1
+        eval_started_at = perf_counter()
+        removable, bridge_errors = _fairing_removable_mask(
+            points,
+            closed=closed,
+            max_local_segment=max_local_segment,
+            max_bridge_segment=max_bridge_segment,
+            tolerance=tolerance,
+            min_improvement_ratio=min_improvement_ratio,
+        )
+        vector_eval_s += perf_counter() - eval_started_at
+        candidate_indices = np.flatnonzero(removable)
+        candidates_seen += int(len(candidate_indices))
+        if len(candidate_indices) == 0:
             break
+
+        selected_indices = _non_adjacent_indices(candidate_indices, len(points), closed=closed)
+        if not selected_indices:
+            break
+        remove_mask = np.zeros(len(points), dtype=bool)
+        remove_mask[np.asarray(selected_indices, dtype=int)] = True
+        max_bridge_error = max(max_bridge_error, float(np.max(bridge_errors[remove_mask])))
+        points = points[~remove_mask]
+        removed += int(np.count_nonzero(remove_mask))
 
     if removed:
         _logger.info(
@@ -624,7 +760,192 @@ def _fair_resampled_contour_xy(
             f"{removed} resampling wiggle sample(s); "
             f"max_bridge_error={max_bridge_error:.4f}mm tolerance={tolerance:.4f}mm"
         )
+    if stats is not None:
+        stats["passes"] = passes
+        stats["candidates"] = candidates_seen
+        stats["removed"] = removed
+        stats["vector_eval_s"] = vector_eval_s
     return _close_if_needed(points, closed)
+
+
+def remove_local_hairpin_reversals_xy(
+    xy_points: np.ndarray,
+    *,
+    spacing: float,
+    closed: bool,
+    stats: dict[str, int] | None = None,
+) -> np.ndarray:
+    """Remove short A->B->nearly-A spikes that trajectory timing cannot handle.
+
+    Unlike general curve fairing, this targets only a near-retrace: both legs
+    must be local, their turn must be at least 170 degrees, and the two outer
+    points must be much closer to each other than either leg. Legitimate sharp
+    corners whose path continues away from the corner are therefore preserved.
+    """
+    points = _clean_xy(xy_points)
+    if closed and len(points) > 1 and float(np.linalg.norm(points[0] - points[-1])) <= 1e-6:
+        points = points[:-1]
+
+    spacing = max(0.05, float(spacing))
+    max_leg = spacing * 2.5
+    max_outer_gap = max(0.05, spacing * 0.40)
+    reversal_cosine = float(np.cos(np.radians(170.0)))
+    removed = 0
+    passes = 0
+
+    while len(points) >= (4 if closed else 3):
+        passes += 1
+        count = len(points)
+        if closed:
+            previous = np.roll(points, 1, axis=0)
+            following = np.roll(points, -1, axis=0)
+            candidate_mask = np.ones(count, dtype=bool)
+            # The closed-path seam can encode a deliberately preserved source
+            # boundary between the last sample and the first. Do not erase
+            # that boundary without access to its protected-corner metadata.
+            candidate_mask[:2] = False
+            candidate_mask[-2:] = False
+        else:
+            previous = points.copy()
+            following = points.copy()
+            previous[1:-1] = points[:-2]
+            following[1:-1] = points[2:]
+            candidate_mask = np.zeros(count, dtype=bool)
+            candidate_mask[1:-1] = True
+
+        incoming = points - previous
+        outgoing = following - points
+        incoming_len = np.linalg.norm(incoming, axis=1)
+        outgoing_len = np.linalg.norm(outgoing, axis=1)
+        outer_gap = np.linalg.norm(following - previous, axis=1)
+        denominator = incoming_len * outgoing_len
+        cosine = np.ones(count, dtype=float)
+        valid_length = denominator > 1e-12
+        cosine[valid_length] = (
+            np.einsum("ij,ij->i", incoming, outgoing)[valid_length]
+            / denominator[valid_length]
+        )
+
+        removable = (
+            candidate_mask
+            & valid_length
+            & (incoming_len <= max_leg)
+            & (outgoing_len <= max_leg)
+            & (cosine <= reversal_cosine)
+            & (outer_gap <= max_outer_gap)
+            & (outer_gap <= 0.35 * np.minimum(incoming_len, outgoing_len))
+        )
+        candidate_indices = np.flatnonzero(removable)
+        if len(candidate_indices) == 0:
+            break
+
+        selected = _non_adjacent_indices(candidate_indices, count, closed=closed)
+        if not selected:
+            break
+        remove_mask = np.zeros(count, dtype=bool)
+        remove_mask[np.asarray(selected, dtype=int)] = True
+        points = points[~remove_mask]
+        removed += int(np.count_nonzero(remove_mask))
+
+    if removed:
+        _logger.warning(
+            "[PAINT] Removed %d local hairpin reversal point(s) before trajectory projection",
+            removed,
+        )
+    if stats is not None:
+        stats["passes"] = passes
+        stats["removed"] = removed
+    return _close_if_needed(points, closed)
+
+
+def _fairing_removable_mask(
+    points: np.ndarray,
+    *,
+    closed: bool,
+    max_local_segment: float,
+    max_bridge_segment: float,
+    tolerance: float,
+    min_improvement_ratio: float,
+) -> tuple[np.ndarray, np.ndarray]:
+    count = len(points)
+    removable = np.zeros(count, dtype=bool)
+    bridge_errors = np.zeros(count, dtype=float)
+    if count < 5:
+        return removable, bridge_errors
+
+    if closed:
+        prev_points = np.roll(points, 1, axis=0)
+        next_points = np.roll(points, -1, axis=0)
+        candidate_mask = np.ones(count, dtype=bool)
+    else:
+        prev_points = points.copy()
+        next_points = points.copy()
+        prev_points[1:-1] = points[:-2]
+        next_points[1:-1] = points[2:]
+        candidate_mask = np.zeros(count, dtype=bool)
+        candidate_mask[1:-1] = True
+
+    incoming = points - prev_points
+    outgoing = next_points - points
+    bridge = next_points - prev_points
+    incoming_len = np.linalg.norm(incoming, axis=1)
+    outgoing_len = np.linalg.norm(outgoing, axis=1)
+    bridge_len = np.linalg.norm(bridge, axis=1)
+    path_len = incoming_len + outgoing_len
+
+    valid = (
+        candidate_mask
+        & (incoming_len > 1e-9)
+        & (outgoing_len > 1e-9)
+        & (path_len > 1e-9)
+        & (incoming_len <= max_local_segment)
+        & (outgoing_len <= max_local_segment)
+        & (bridge_len > 1e-12)
+        & (bridge_len <= max_bridge_segment)
+    )
+    if not np.any(valid):
+        return removable, bridge_errors
+
+    point_from_prev = points - prev_points
+    t = np.zeros(count, dtype=float)
+    bridge_len_sq = np.einsum("ij,ij->i", bridge, bridge)
+    t[valid] = np.einsum("ij,ij->i", point_from_prev, bridge)[valid] / bridge_len_sq[valid]
+    t = np.clip(t, 0.0, 1.0)
+    projection = prev_points + t[:, None] * bridge
+    bridge_errors = np.linalg.norm(points - projection, axis=1)
+
+    local_curvature = np.linalg.norm(next_points - 2.0 * points + prev_points, axis=1)
+    bridge_curvature = np.abs(path_len - bridge_len)
+    removable = (
+        valid
+        & (bridge_errors <= tolerance)
+        & (bridge_curvature <= local_curvature * (1.0 - min_improvement_ratio))
+    )
+    return removable, bridge_errors
+
+
+def _non_adjacent_indices(candidate_indices: np.ndarray, count: int, *, closed: bool) -> list[int]:
+    selected: list[int] = []
+    blocked = np.zeros(count, dtype=bool)
+    for raw_index in candidate_indices:
+        index = int(raw_index)
+        if blocked[index]:
+            continue
+        selected.append(index)
+        blocked[index] = True
+        if index > 0:
+            blocked[index - 1] = True
+        elif closed:
+            blocked[count - 1] = True
+        if index + 1 < count:
+            blocked[index + 1] = True
+        elif closed:
+            blocked[0] = True
+    if not closed:
+        return selected
+    if len(selected) > 1 and 0 in selected and count - 1 in selected:
+        selected.pop()
+    return selected
 
 
 def _removal_turn_score(points: np.ndarray, remove_index: int, *, closed: bool) -> float:

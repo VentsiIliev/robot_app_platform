@@ -68,7 +68,7 @@ Robot-system responsibilities do **not** include:
 - hardcoding storage paths in application wiring
 - duplicating target/jog math already available in `src/engine/robot/targeting/`
 - reimplementing shared default builders for robot, navigation, tool, or vision unless behavior really differs
-- putting robot-system-specific login, permissions, or driver selection directly in `src/bootstrap/main.py`
+- putting robot-system-specific login, permissions, or driver selection directly in `../../bootstrap/run_main.py`
 
 ---
 
@@ -174,10 +174,10 @@ The blueprint includes a concrete example of that split:
 - `domain/users/user_schema.py` builds the editable user schema from `role_policy.role_values`
 - `bootstrap_provider.py` wires shared `AuthenticationService`, `AuthorizationService`, `AuthUserRepositoryAdapter`, and `JsonPermissionsRepository`
 
-Keep this logic out of `src/bootstrap/main.py`. The platform bootstrap should stay generic and ask the robot system how to compose these startup-only pieces.
+Keep this logic out of `../../bootstrap/run_main.py`. The platform bootstrap should stay generic and ask the robot system how to compose these startup-only pieces.
 
 Goal:
-- `main.py` can boot your system without importing your auth stack, user schema, or concrete robot driver directly
+- `run_main.py` can boot your system without importing your auth stack, user schema, or concrete robot driver directly
 
 ### 2. Define IDs
 Files:
@@ -434,7 +434,7 @@ Use the bootstrap provider boundary for anything that is startup-specific but no
 - authentication repositories and schemas
 - authorization and permissions filtering
 
-Do not move that logic into `BaseRobotSystem`, and do not hardcode it into `src/bootstrap/main.py`.
+Do not move that logic into `BaseRobotSystem`, and do not hardcode it into `../../bootstrap/run_main.py`.
 
 ### 5. Implement `on_start()` / `on_stop()`
 File: `my_robot_system.py`

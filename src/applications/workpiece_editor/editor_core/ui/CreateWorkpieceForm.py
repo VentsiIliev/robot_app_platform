@@ -69,6 +69,7 @@ from PyQt6.QtWidgets import QFrame, QSizePolicy, QSpacerItem, QVBoxLayout, QHBox
 from .CreateWorkpieceStyles import getStyles
 from .CreateWorkpieceStyles import get_input_field_styles
 from .CreateWorkpieceStyles import get_popup_view_styles
+from pl_gui.settings.settings_view.styles import TEXT_COLOR
 
 try:
     from .Drawer import Drawer
@@ -362,15 +363,29 @@ class CreateWorkpieceForm(Drawer, QFrame):
         self.setWindowTitle(form_config.form_title)
         self.setContentsMargins(0, 0, 0, 0)
 
-        self.settingsLayout = QVBoxLayout()
+        root_layout = QVBoxLayout()
+        root_layout.setContentsMargins(0, 0, 0, 0)
+        root_layout.setSpacing(0)
+        self.setLayout(root_layout)
+
+        self._scroll_area = QScrollArea(self)
+        self._scroll_area.setWidgetResizable(True)
+        self._scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+        self._scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        root_layout.addWidget(self._scroll_area)
+
+        self._scroll_content = QWidget(self._scroll_area)
+        self._scroll_content.setObjectName("form_scroll_content")
+        self.settingsLayout = QVBoxLayout(self._scroll_content)
         self.settingsLayout.setAlignment(Qt.AlignmentFlag.AlignTop)
-        self.setLayout(self.settingsLayout)
+        self.settingsLayout.setContentsMargins(18, 18, 18, 18)
+        self.settingsLayout.setSpacing(10)
+        self._scroll_area.setWidget(self._scroll_content)
 
         self.buttons = []
         self.icon_widgets = []
 
-        self.setStyleSheet("background: white;")
-
+        self._add_title()
         self.add_config_button()
         self.build_form()
 
@@ -382,6 +397,7 @@ class CreateWorkpieceForm(Drawer, QFrame):
 
     def prefill_form(self, data):
         is_dict = isinstance(data, dict)
+        self._set_field_editable("workpieceId", True)
         for field_name, widget in self.field_widgets.items():
             if is_dict:
                 if field_name not in data:
@@ -406,10 +422,17 @@ class CreateWorkpieceForm(Drawer, QFrame):
                         widget.setCurrentText(str(value))
                 else:
                     widget.setCurrentText(str(value))
+        if is_dict and data.get("workpieceId"):
+            self._set_field_editable("workpieceId", False)
 
     def apply_stylesheet(self):
         styles = getStyles()
         self.setStyleSheet(styles)
+
+    def _add_title(self):
+        title = QLabel(self.form_config.form_title)
+        title.setObjectName("form_title")
+        self.settingsLayout.addWidget(title)
 
     def add_config_button(self):
         """Add configuration button to the form"""
@@ -455,24 +478,33 @@ class CreateWorkpieceForm(Drawer, QFrame):
         container = QFrame()
         container.setObjectName("field_container")
         row_layout = QHBoxLayout(container)
-        row_layout.setContentsMargins(8, 6, 8, 6)
-        row_layout.setSpacing(12)
+        row_layout.setContentsMargins(0, 4, 0, 4)
+        row_layout.setSpacing(10)
 
-        icon_label = self.create_icon_label(field_config.icon)
+        icon_label = self.create_icon_label(field_config.icon, size=28)
         row_layout.addWidget(icon_label)
 
-        input_field = WidgetProvider.get().create_lineedit(parent=self._parent)
+        field_layout = QVBoxLayout()
+        field_layout.setContentsMargins(0, 0, 0, 0)
+        field_layout.setSpacing(6)
+
+        label = QLabel(self._field_label_text(field_config))
+        label.setObjectName("field_label")
+        field_layout.addWidget(label)
+
+        input_field = WidgetProvider.get().create_lineedit(parent=container)
         input_field.setStyleSheet(get_input_field_styles())
         input_field.setAttribute(Qt.WidgetAttribute.WA_MacShowFocusRect, False)
 
         input_field.setPlaceholderText(field_config.placeholder)
-        input_field.setMinimumHeight(40)
+        input_field.setMinimumHeight(44)
         input_field.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
         if field_config.default_value:
             input_field.setText(str(field_config.default_value))
 
-        row_layout.addWidget(input_field)
+        field_layout.addWidget(input_field)
+        row_layout.addLayout(field_layout)
         self.settingsLayout.addWidget(container)
 
         self.field_widgets[field_config.field_id] = input_field
@@ -482,22 +514,30 @@ class CreateWorkpieceForm(Drawer, QFrame):
         container = QFrame()
         container.setObjectName("field_container")
         row_layout = QHBoxLayout(container)
-        row_layout.setContentsMargins(8, 6, 8, 6)
-        row_layout.setSpacing(12)
+        row_layout.setContentsMargins(0, 4, 0, 4)
+        row_layout.setSpacing(10)
 
-        icon_label = self.create_icon_label(field_config.icon)
+        icon_label = self.create_icon_label(field_config.icon, size=28)
         row_layout.addWidget(icon_label)
 
+        field_layout = QVBoxLayout()
+        field_layout.setContentsMargins(0, 0, 0, 0)
+        field_layout.setSpacing(6)
+
+        label = QLabel(self._field_label_text(field_config))
+        label.setObjectName("field_label")
+        field_layout.addWidget(label)
+
         dropdown = QComboBox()
-        dropdown.setMinimumHeight(40)
+        dropdown.setMinimumHeight(44)
         dropdown.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
         try:
             dropdown.setView(QListView())
             popup_view = dropdown.view()
             pal = popup_view.palette()
-            pal.setColor(QPalette.ColorRole.Base, QColor("#ffffff"))
-            pal.setColor(QPalette.ColorRole.Text, QColor("#000000"))
+            pal.setColor(QPalette.ColorRole.Base, QColor(Qt.GlobalColor.white))
+            pal.setColor(QPalette.ColorRole.Text, QColor(TEXT_COLOR))
             popup_view.setPalette(pal)
             popup_view.setStyleSheet(get_popup_view_styles())
             popup_view.setAutoFillBackground(True)
@@ -521,7 +561,8 @@ class CreateWorkpieceForm(Drawer, QFrame):
         if field_config.default_value:
             dropdown.setCurrentText(str(field_config.default_value))
 
-        row_layout.addWidget(dropdown)
+        field_layout.addWidget(dropdown)
+        row_layout.addLayout(field_layout)
         self.settingsLayout.addWidget(container)
 
         self.field_widgets[field_config.field_id] = dropdown
@@ -533,6 +574,7 @@ class CreateWorkpieceForm(Drawer, QFrame):
         button = QPushButton("")
         button.setIcon(QIcon(icon_path))
         button.setMinimumHeight(50)
+        button.setCursor(Qt.CursorShape.PointingHandCursor)
 
         if button_type == "Accept":
             self.submit_button = button
@@ -634,7 +676,11 @@ class CreateWorkpieceForm(Drawer, QFrame):
     def onCancel(self):
         self.close()
 
-    def create_icon_label(self, icon, size=50):
+    @staticmethod
+    def _field_label_text(field_config: FormFieldConfig) -> str:
+        return f"{field_config.label} *" if field_config.mandatory else field_config.label
+
+    def create_icon_label(self, icon, size=28):
         import logging
         from src.applications.workpiece_editor.editor_core.config.workpiece_form_schema import FieldIcon
         _log = logging.getLogger(__name__)
@@ -662,6 +708,7 @@ class CreateWorkpieceForm(Drawer, QFrame):
                 _log.warning("FieldIcon path string not found: %r", icon)
 
         label = QLabel()
+        label.setObjectName("field_icon")
         label.setFixedSize(size, size)
         if not pixmap.isNull():
             label.setPixmap(pixmap.scaled(size, size,
@@ -674,7 +721,7 @@ class CreateWorkpieceForm(Drawer, QFrame):
         if self._parent is None:
             return
         newWidth = self._parent.width()
-        icon_size = max(1, int(newWidth * 0.02))
+        icon_size = 28
 
         for label, original_pixmap in self.icon_widgets:
             if not original_pixmap.isNull():
@@ -695,8 +742,19 @@ class CreateWorkpieceForm(Drawer, QFrame):
             elif hasattr(widget, 'setCurrentText'):
                 widget.setCurrentText(str(value))
 
+    def _set_field_editable(self, field_id: str, editable: bool) -> None:
+        widget = self.field_widgets.get(field_id)
+        if widget is None:
+            return
+        if hasattr(widget, "setReadOnly"):
+            widget.setReadOnly(not editable)
+            widget.setFocusPolicy(Qt.FocusPolicy.StrongFocus if editable else Qt.FocusPolicy.NoFocus)
+        else:
+            widget.setEnabled(editable)
+
     def clear_form(self):
         for field_name, widget in self.field_widgets.items():
+            self._set_field_editable(field_name, True)
             if hasattr(widget, 'setText'):
                 widget.setText("")
             elif hasattr(widget, 'setCurrentIndex'):

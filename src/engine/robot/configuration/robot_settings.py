@@ -71,6 +71,7 @@ class OffsetDirectionMap:
 class MovementGroup:
     velocity: int = 0
     acceleration: int = 0
+    motion_type: str = "ptp"
     position: Optional[str] = None
     points: List[str] = field(default_factory=list)
     iterations: int = 1
@@ -82,6 +83,7 @@ class MovementGroup:
         return cls(
             velocity=data.get("velocity", 0),
             acceleration=data.get("acceleration", 0),
+            motion_type=cls._normalize_motion_type(data.get("motion_type", data.get("type", "ptp"))),
             position=data.get("position"),
             points=data.get("points", []),
             iterations=data.get("iterations", 1),
@@ -103,6 +105,7 @@ class MovementGroup:
         result = {
             "velocity": self.velocity,
             "acceleration": self.acceleration,
+            "motion_type": self._normalize_motion_type(self.motion_type),
             "iterations": self.iterations,
             "has_iterations": self.has_iterations,
             "has_trajectory_execution": self.has_trajectory_execution,
@@ -113,6 +116,11 @@ class MovementGroup:
             result["points"] = self.points
         return result
 
+    @staticmethod
+    def _normalize_motion_type(value: object) -> str:
+        motion_type = str(value or "ptp").strip().lower()
+        return motion_type if motion_type in {"ptp", "linear", "fast_lin"} else "ptp"
+
 
 
 @dataclass
@@ -121,6 +129,8 @@ class GlobalMotionSettings:
     global_acceleration: int = 100
     emergency_decel: int = 500
     max_jog_step: int = 50
+    recovery_servo_linear_mm_s: float = 25.0
+    recovery_servo_angular_deg_s: float = 5.0
 
     @classmethod
     def from_dict(cls, data: Dict) -> 'GlobalMotionSettings':
@@ -129,6 +139,8 @@ class GlobalMotionSettings:
             global_acceleration=data.get("global_acceleration", 100),
             emergency_decel=data.get("emergency_decel", 500),
             max_jog_step=data.get("max_jog_step", 50),
+            recovery_servo_linear_mm_s=data.get("recovery_servo_linear_mm_s", 25.0),
+            recovery_servo_angular_deg_s=data.get("recovery_servo_angular_deg_s", 5.0),
         )
 
     def to_dict(self) -> Dict:
@@ -137,6 +149,8 @@ class GlobalMotionSettings:
             "global_acceleration": self.global_acceleration,
             "emergency_decel": self.emergency_decel,
             "max_jog_step": self.max_jog_step,
+            "recovery_servo_linear_mm_s": self.recovery_servo_linear_mm_s,
+            "recovery_servo_angular_deg_s": self.recovery_servo_angular_deg_s,
         }
 
 

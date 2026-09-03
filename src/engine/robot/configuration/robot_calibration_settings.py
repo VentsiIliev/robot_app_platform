@@ -185,6 +185,7 @@ class RobotCalibrationSettings:
     iterative_velocity: int = 30
     iterative_acceleration: int = 10
     initial_ppm: float | None = None
+    workobject_calibrations: Dict[str, Dict[str, Any]] = field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Dict) -> 'RobotCalibrationSettings':
@@ -221,6 +222,11 @@ class RobotCalibrationSettings:
             iterative_velocity=int(data.get("iterative_velocity", velocity)),
             iterative_acceleration=int(data.get("iterative_acceleration", acceleration)),
             initial_ppm=data.get("initial_ppm"),
+            workobject_calibrations={
+                str(user_id): dict(record)
+                for user_id, record in (data.get("workobject_calibrations", {}) or {}).items()
+                if isinstance(record, dict)
+            },
         )
 
     def to_dict(self) -> Dict:
@@ -248,6 +254,7 @@ class RobotCalibrationSettings:
             "iterative_velocity": self.iterative_velocity,
             "iterative_acceleration": self.iterative_acceleration,
             "initial_ppm": self.initial_ppm,
+            "workobject_calibrations": self.workobject_calibrations,
         }
 
 

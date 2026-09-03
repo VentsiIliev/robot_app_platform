@@ -7,8 +7,10 @@ from typing import Protocol
 
 from src.engine.geometry.planar import unwrap_degrees
 from src.engine.robot.path_preparation import WorkpieceExecutionPlan
-from src.robot_systems.paint.processes.paint.config import PAINT_PROCESS_CONFIG
 from src.robot_systems.paint.processes.paint.execute.diagnostics import elapsed_s
+from src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handlers import (
+    _resolve_dropoff_align_pose,
+)
 from src.robot_systems.paint.timing import timed_step
 
 _logger = logging.getLogger(__name__)
@@ -31,7 +33,10 @@ class DropoffWaypoint:
     pose: list[float] | None
     vel_percent: float
     acc_percent: float
+    motion_type: str = "ptp"
+    blendR: float = 0.0
     release_here: bool = False
+    corridor_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -51,49 +56,73 @@ class PaintDropoffStrategy(Protocol):
         """Return the ordered dropoff actions for the active workpiece."""
 
 
-class PickupOriginDropoffStrategy:
-    """Default strategy: return to the pickup align pose and release there."""
+class MovementGroupDropoffStrategy:
+    """Release the held workpiece at the configured dropoff movement group."""
 
-    name = "pickup_origin"
+    name = "movement_group"
 
     def build_plan(self, owner, execution_plan: WorkpieceExecutionPlan) -> DropoffPlan:
         dropoff = owner._paint_process_config().dropoff
-        if getattr(owner, "_should_release_at_current_dropoff_pose", lambda: False)():
+        group_id = "Dropoff"
+        pose = _resolve_dropoff_align_pose(owner)
+        if pose is None:
+            _logger.info("[DROPOFF] movement_group has no configured pose for group '%s'", group_id)
+            return DropoffPlan(strategy_name=self.name, waypoints=())
+        if float(pose[2]) < 0.0:
+            if not bool(getattr(dropoff, "allow_sub_zero_dropoff", False)):
+                _logger.error("[DROPOFF] Negative target rejected: Allow Sub-Zero Dropoff is disabled")
+                return DropoffPlan(strategy_name=self.name, waypoints=())
+            approach_pose = list(pose)
+            approach_pose[2] = float(dropoff.sub_zero_approach_z_mm)
+            corridor_id = getattr(owner, "_dropoff_motion_corridor_id", None)
             return DropoffPlan(
                 strategy_name=self.name,
                 waypoints=(
                     DropoffWaypoint(
-                        label="Release at current dropoff pose",
-                        pose=None,
+                        label=f"Moving above dropoff group '{group_id}'",
+                        pose=approach_pose,
                         vel_percent=dropoff.release_align_vel_percent,
                         acc_percent=dropoff.release_align_acc_percent,
+                        motion_type="ptp",
+                        blendR=0.0,
+                        release_here=False,
+                    ),
+                    DropoffWaypoint(
+                        label=f"Descending through dropoff group '{group_id}' passage",
+                        pose=pose,
+                        vel_percent=dropoff.release_align_vel_percent,
+                        acc_percent=dropoff.release_align_acc_percent,
+                        motion_type="linear",
+                        blendR=0.0,
                         release_here=True,
+                        corridor_id=corridor_id,
+                    ),
+                    DropoffWaypoint(
+                        label=f"Retracting through dropoff group '{group_id}' passage",
+                        pose=approach_pose,
+                        vel_percent=dropoff.release_align_vel_percent,
+                        acc_percent=dropoff.release_align_acc_percent,
+                        motion_type="linear",
+                        blendR=0.0,
+                        release_here=False,
+                        corridor_id=corridor_id,
                     ),
                 ),
             )
-        plan = owner._last_pickup_plan
-        if plan is None:
-            _logger.info("[DROPOFF] pickup_origin has no pickup plan; releasing at current pose")
-            waypoints = (
+        return DropoffPlan(
+            strategy_name=self.name,
+            waypoints=(
                 DropoffWaypoint(
-                    label="Release at current pose",
-                    pose=None,
+                    label=f"Moving to dropoff group '{group_id}' for release",
+                    pose=pose,
                     vel_percent=dropoff.release_align_vel_percent,
                     acc_percent=dropoff.release_align_acc_percent,
+                    motion_type=dropoff.release_align_motion_type,
+                    blendR=dropoff.release_align_blendR,
                     release_here=True,
                 ),
-            )
-        else:
-            waypoints = (
-                DropoffWaypoint(
-                    label="Returning to align pose for release",
-                    pose=list(plan.align_pose),
-                    vel_percent=dropoff.release_align_vel_percent,
-                    acc_percent=dropoff.release_align_acc_percent,
-                    release_here=True,
-                ),
-            )
-        return DropoffPlan(strategy_name=self.name, waypoints=waypoints)
+            ),
+        )
 
 
 class PaintDropoffExecutor:
@@ -103,13 +132,13 @@ class PaintDropoffExecutor:
         self._owner = owner
         self._strategy_override = strategy
         self._strategies: dict[str, PaintDropoffStrategy] = {
-            PickupOriginDropoffStrategy.name: PickupOriginDropoffStrategy(),
+            MovementGroupDropoffStrategy.name: MovementGroupDropoffStrategy(),
         }
 
     def _resolve_strategy(self) -> PaintDropoffStrategy | None:
         if self._strategy_override is not None:
             return self._strategy_override
-        strategy_name = str(PAINT_PROCESS_CONFIG.dropoff.strategy or "pickup_origin").strip().lower()
+        strategy_name = str(self._owner._paint_process_config().dropoff.strategy or "movement_group").strip().lower()
         return self._strategies.get(strategy_name)
 
     @timed_step(_logger, "pre_release_dropoff")
@@ -118,11 +147,13 @@ class PaintDropoffExecutor:
         started = perf_counter()
         strategy = self._resolve_strategy()
         if strategy is None:
-            strategy_name = str(PAINT_PROCESS_CONFIG.dropoff.strategy or "").strip()
+            strategy_name = str(self._owner._paint_process_config().dropoff.strategy or "").strip()
             return False, f"Unknown paint dropoff strategy '{strategy_name}'"
         plan = strategy.build_plan(self._owner, execution_plan)
         release_count = sum(1 for waypoint in plan.waypoints if waypoint.release_here)
         if release_count != 1:
+            if plan.strategy_name == MovementGroupDropoffStrategy.name:
+                return False, "Dropoff movement group 'Dropoff' is not configured"
             return False, f"Dropoff strategy '{plan.strategy_name}' must define exactly one release waypoint"
 
         _logger.info(
@@ -143,11 +174,14 @@ class PaintDropoffExecutor:
                         "[DROPOFF] waypoint '%s' already completed by ordered cleanup chain; releasing in place",
                         waypoint.label,
                     )
-                elif not self._owner._move_pickup_phase(
+                elif not self._owner._motion.move_pickup_phase(
                     waypoint.label,
                     list(waypoint.pose),
                     velocity=waypoint.vel_percent,
                     acceleration=waypoint.acc_percent,
+                    motion_type="linear" if waypoint.corridor_id else waypoint.motion_type,
+                    blendR=waypoint.blendR,
+                    corridor_id=waypoint.corridor_id,
                 ):
                     _logger.info(
                         "[TIMING] pre_release_dropoff success=false strategy=%s waypoint=%d label=%s elapsed_s=%.3f total_elapsed_s=%.3f",
@@ -160,7 +194,7 @@ class PaintDropoffExecutor:
                     return False, f"Pivot paint finished, but dropoff waypoint '{waypoint.label}' failed before release"
 
             if waypoint.release_here:
-                ok, msg = self._owner._turn_vacuum_off()
+                ok, msg = self._owner._motion.turn_vacuum_off()
                 if not ok:
                     _logger.info(
                         "[TIMING] pre_release_dropoff success=false strategy=%s waypoint=%d stage=release elapsed_s=%.3f total_elapsed_s=%.3f",

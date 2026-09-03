@@ -165,11 +165,23 @@ class RefactoredRobotCalibrationPipeline:
 
         # Camera configuration
         context.vision_service.set_draw_contours(False)
+        chessboard_width = getattr(config, "chessboard_width", None)
+        chessboard_height = getattr(config, "chessboard_height", None)
+        chessboard_square_size_mm = getattr(config, "chessboard_square_size_mm", None)
         context.chessboard_size = (
-            context.vision_service.get_chessboard_width(),
-            context.vision_service.get_chessboard_height()
+            int(chessboard_width)
+            if chessboard_width is not None
+            else context.vision_service.get_chessboard_width(),
+            int(chessboard_height)
+            if chessboard_height is not None
+            else context.vision_service.get_chessboard_height(),
         )
-        context.square_size_mm = context.vision_service.get_square_size_mm()
+        resolved_chessboard_square_size_mm = (
+            float(chessboard_square_size_mm)
+            if chessboard_square_size_mm is not None
+            else context.vision_service.get_square_size_mm()
+        )
+        context.square_size_mm = resolved_chessboard_square_size_mm
         charuco_w = getattr(config, "charuco_board_width", None)
         charuco_h = getattr(config, "charuco_board_height", None)
         charuco_sq = getattr(config, "charuco_square_size_mm", None)
@@ -184,7 +196,7 @@ class RefactoredRobotCalibrationPipeline:
             "Robot calibration board config loaded: reference_board_mode=%s chessboard_size=%s chessboard_square_mm=%.3f charuco_board_size=%s charuco_square_mm=%s charuco_marker_mm=%s",
             context.reference_board_mode,
             context.chessboard_size,
-            float(context.vision_service.get_square_size_mm()),
+            float(resolved_chessboard_square_size_mm),
             context.charuco_board_size,
             (
                 f"{float(getattr(config, 'charuco_square_size_mm', 0.0)):.3f}"

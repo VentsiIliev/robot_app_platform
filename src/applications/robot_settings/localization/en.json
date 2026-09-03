@@ -1,0 +1,33 @@
+{
+  "__meta__": {
+    "display_name": "English"
+  },
+  "RobotSettings": {
+    "Set Current Position": "Set Current Position",
+    "Could not read robot position.\nMake sure the robot is connected.": "Could not read robot position.\nMake sure the robot is connected.",
+    "Remove Group": "Remove Group",
+    "Remove movement group '{name}'?\n\nThis cannot be undone until you save.": "Remove movement group '{name}'?\n\nThis cannot be undone until you save.",
+    "Move To": "Move To",
+    "Move To point in {group_name}": "Move To point in {group_name}",
+    "Execute": "Execute",
+    "No point selected.\nSelect a point from the list first.": "No point selected.\nSelect a point from the list first.",
+    "Motion failed for '{label}'.\nCheck the robot is connected and the group has a position configured.": "Motion failed for '{label}'.\nCheck the robot is connected and the group has a position configured.",
+    "Unexpected error while running '{label}'.": "Unexpected error while running '{label}'.",
+    "Add Point": "Add Point",
+    "Edit Point": "Edit Point",
+    "Remove Point": "Remove Point",
+    "Point '{name}' already exists.": "Point '{name}' already exists.",
+    "Point '{name}' is marked as required and cannot be removed.": "Point '{name}' is marked as required and cannot be removed.",
+    "Remove point '{name}'?": "Remove point '{name}'?",
+    "Add Frame": "Add Frame",
+    "Edit Frame": "Edit Frame",
+    "Remove Frame": "Remove Frame",
+    "Frame '{name}' already exists.": "Frame '{name}' already exists.",
+    "Frame '{name}' is marked as required and cannot be removed.": "Frame '{name}' is marked as required and cannot be removed.",
+    "Remove frame '{name}'?": "Remove frame '{name}'?",
+    "Target Point": "Target Point",
+    "Target Frame": "Target Frame",
+    "Name cannot be empty.": "Name cannot be empty.",
+    "X and Y must be valid numbers.": "X and Y must be valid numbers."
+  }
+}

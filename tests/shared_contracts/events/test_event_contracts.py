@@ -4,6 +4,7 @@ from datetime import timezone
 from src.shared_contracts.events.glue_process_events import GlueProcessTopics
 from src.shared_contracts.events.localization_events import LanguageChangedEvent, LocalizationTopics
 from src.shared_contracts.events.notification_events import (
+    DismissNotificationEvent,
     NotificationSeverity,
     NotificationTopics,
     UserNotificationEvent,
@@ -114,10 +115,13 @@ class TestUiEvents(unittest.TestCase):
     def test_notification_event_defaults_are_independent(self):
         first = UserNotificationEvent(source="ui", severity=NotificationSeverity.INFO)
         second = UserNotificationEvent(source="ui", severity=NotificationSeverity.WARNING)
+        dismiss = DismissNotificationEvent(dedupe_key="robot-disconnected")
 
         self.assertEqual(NotificationTopics.USER, "ui/notification")
+        self.assertEqual(NotificationTopics.DISMISS, "ui/notification/dismiss")
         self.assertEqual(first.params, {})
         self.assertEqual(second.params, {})
         self.assertIsNot(first.params, second.params)
         self.assertEqual(first.timestamp.tzinfo, timezone.utc)
-
+        self.assertEqual(dismiss.dedupe_key, "robot-disconnected")
+        self.assertEqual(dismiss.timestamp.tzinfo, timezone.utc)

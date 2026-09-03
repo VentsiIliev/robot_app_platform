@@ -28,6 +28,8 @@ class PaintNavigationService:
         unwind_queue_if_busy: bool = True,
         calibration_move_vel_percent: float | None = None,
         calibration_move_acc_percent: float | None = None,
+        calibration_move_motion_type: str | None = None,
+        calibration_move_blendR: float | None = None,
         paint_process_config_service: object | None = None,
     ):
         self._nav = navigation
@@ -42,6 +44,12 @@ class PaintNavigationService:
         )
         self._calibration_move_acc_percent = (
             None if calibration_move_acc_percent is None else float(calibration_move_acc_percent)
+        )
+        self._calibration_move_motion_type = (
+            None if calibration_move_motion_type is None else str(calibration_move_motion_type)
+        )
+        self._calibration_move_blendR = (
+            None if calibration_move_blendR is None else float(calibration_move_blendR)
         )
         self._paint_process_config_service = paint_process_config_service
         self._observed_area_by_group = {
@@ -66,6 +74,12 @@ class PaintNavigationService:
             ),
             calibration_move_acc_percent=(
                 40.0 if self._calibration_move_acc_percent is None else self._calibration_move_acc_percent
+            ),
+            calibration_move_motion_type=(
+                "ptp" if self._calibration_move_motion_type is None else self._calibration_move_motion_type
+            ),
+            calibration_move_blendR=(
+                0.0 if self._calibration_move_blendR is None else self._calibration_move_blendR
             ),
         )
 
@@ -118,11 +132,34 @@ class PaintNavigationService:
             self._set_observed_area_for_group(group_name)
         return ok
 
-    def move_to_group(self, group_name: str, wait_cancelled: Callable[[], bool] | None = None) -> bool:
-        ok = self._nav.move_to_group(group_name, wait_cancelled=wait_cancelled)
+    def move_to_group(
+        self,
+        group_name: str,
+        wait_cancelled: Callable[[], bool] | None = None,
+        velocity: float | None = None,
+        acceleration: float | None = None,
+        motion_type: str | None = None,
+        blendR: float | None = None,
+    ) -> bool:
+        ok = self._nav.move_to_group(
+            group_name,
+            wait_cancelled=wait_cancelled,
+            velocity=velocity,
+            acceleration=acceleration,
+            motion_type=motion_type,
+            blendR=blendR,
+        )
         if ok:
             self._set_observed_area_for_group(group_name)
         return ok
+
+    def stop_motion(self) -> bool:
+        if self._robot is None:
+            return False
+        return bool(self._robot.stop_motion())
+
+    def mark_group_observed_area_verified(self, group_name: str) -> None:
+        self._set_observed_area_for_group(group_name)
 
     def move_linear_group(self, group_name: str) -> bool:
         ok = self._nav.move_linear_group(group_name)
@@ -160,20 +197,27 @@ class PaintNavigationService:
         wait_cancelled: Callable[[], bool] | None = None,
     ) -> bool:
         nav_return = self._navigation_return_config()
-        move_velocity = nav_return.calibration_move_vel_percent if group_name == self._GROUP_CALIBRATION else None
-        move_acceleration = nav_return.calibration_move_acc_percent if group_name == self._GROUP_CALIBRATION else None
+        move_options = {}
+        if group_name == self._GROUP_CALIBRATION:
+            move_options = {
+                "velocity": nav_return.calibration_move_vel_percent,
+                "acceleration": nav_return.calibration_move_acc_percent,
+                "motion_type": nav_return.calibration_move_motion_type,
+                "blendR": nav_return.calibration_move_blendR,
+            }
         if group_name == self._GROUP_CALIBRATION:
             _logger.info(
-                "[NAV] Calibration return move override vel=%s acc=%s",
-                move_velocity,
-                move_acceleration,
+                "[NAV] Calibration return move override vel=%s acc=%s type=%s blendR=%s",
+                move_options["velocity"],
+                move_options["acceleration"],
+                move_options["motion_type"],
+                move_options["blendR"],
             )
         if not z_offset:
             return self._nav.move_to_group(
                 group_name,
                 wait_cancelled=wait_cancelled,
-                velocity=move_velocity,
-                acceleration=move_acceleration,
+                **move_options,
             )
         try:
             group = self._nav._get_group(group_name)
@@ -186,8 +230,7 @@ class PaintNavigationService:
                 position,
                 group_name,
                 wait_cancelled=wait_cancelled,
-                velocity=move_velocity,
-                acceleration=move_acceleration,
+                **move_options,
             )
         except Exception:
             import traceback
@@ -198,6 +241,9 @@ class PaintNavigationService:
     def _set_area(self, area: str) -> None:
         if self._work_area_service is not None:
             self._work_area_service.set_active_area_id(area)
+            mark_verified = getattr(self._work_area_service, "mark_active_area_verified", None)
+            if callable(mark_verified):
+                mark_verified(area)
         elif self._vision is not None:
             self._vision.set_active_work_area(area)
 

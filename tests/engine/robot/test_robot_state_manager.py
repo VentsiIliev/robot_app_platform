@@ -113,6 +113,50 @@ class TestRobotStateManager(unittest.TestCase):
         self.assertEqual(snapshot.extra["last_error"], "bridge down")
         robot.get_current_position.assert_not_called()
 
+    def test_connection_lost_during_poll_publishes_disconnected_state(self):
+        publisher = MagicMock()
+        robot = MagicMock()
+        robot.get_connection_state.side_effect = ["idle", "disconnected"]
+        robot.get_connection_details.return_value = {
+            "state": "disconnected",
+            "last_error": "bridge down",
+        }
+        robot.get_state_snapshot.return_value = None
+        robot.get_current_position.return_value = []
+        robot.get_current_velocity.return_value = None
+        robot.get_current_acceleration.return_value = None
+        robot.set_active_tool.return_value = True
+        mgr = RobotStateManager(robot, publisher=publisher, active_tool_getter=lambda: 0)
+
+        mgr.refresh_once()
+
+        self.assertEqual(mgr.state, "disconnected")
+        self.assertEqual(mgr.position, [])
+        self.assertEqual(mgr.velocity, 0.0)
+        publisher.publish.assert_called()
+        snapshot = publisher.publish.call_args[0][0]
+        self.assertEqual(snapshot.state, "disconnected")
+
+    def test_starting_robot_publishes_starting_without_robot_reads(self):
+        publisher = MagicMock()
+        robot = MagicMock()
+        robot.get_connection_state.return_value = "starting"
+        robot.get_connection_details.return_value = {
+            "state": "starting",
+            "startup": {"phase": "initializing_runtime"},
+        }
+        mgr = RobotStateManager(robot, publisher=publisher)
+
+        mgr.refresh_once()
+
+        self.assertEqual(mgr.state, "starting")
+        robot.set_active_tool.assert_not_called()
+        robot.get_state_snapshot.assert_not_called()
+        robot.get_current_position.assert_not_called()
+        publisher.publish.assert_called()
+        snapshot = publisher.publish.call_args[0][0]
+        self.assertEqual(snapshot.state, "starting")
+
     def test_poll_exception_does_not_stop_thread(self):
         robot = MagicMock()
         robot.get_current_position.side_effect = RuntimeError("connection lost")
@@ -152,6 +196,49 @@ class TestRobotStateManager(unittest.TestCase):
         self.assertEqual(mgr.position, [])
         robot.get_current_position.assert_not_called()
         publisher.publish.assert_called()
+        snapshot = publisher.publish.call_args[0][0]
+        self.assertFalse(snapshot.extra["robot_ready"])
+        self.assertEqual(snapshot.extra["readiness_state"], "tool_mismatch")
+
+    def test_tool_sync_failure_exposes_robot_rejection_to_readiness(self):
+        publisher = MagicMock()
+        robot = MagicMock()
+        robot.set_active_tool.return_value = False
+        robot.get_connection_details.return_value = {
+            "last_command_error": "tool_id 1 maps to unknown tool 'TOOL_1'",
+        }
+        mgr = RobotStateManager(robot, publisher=publisher, active_tool_getter=lambda: 1)
+
+        mgr.refresh_once()
+
+        snapshot = publisher.publish.call_args[0][0]
+        self.assertIn("tool_id 1 maps to unknown tool 'TOOL_1'", snapshot.extra["readiness_note"])
+
+    def test_refresh_publishes_drive_not_ready_when_drive_status_blocks_motion(self):
+        publisher = MagicMock()
+        robot = MagicMock()
+        robot.get_connection_state.return_value = "idle"
+        robot.get_connection_details.return_value = {"state": "idle", "connection_generation": 0}
+        robot.set_active_tool.return_value = True
+        robot.get_state_snapshot.return_value = {
+            "position": [1, 2, 3, 0, 0, 0],
+            "velocity_magnitude": 0.0,
+            "acceleration": 0.0,
+        }
+        robot.get_drive_status.return_value = {
+            "success": False,
+            "error": "Failed to upload SDO: Invalid argument",
+        }
+        mgr = RobotStateManager(robot, publisher=publisher, active_tool_getter=lambda: 1)
+
+        mgr.refresh_once()
+
+        publisher.publish.assert_called()
+        snapshot = publisher.publish.call_args[0][0]
+        self.assertEqual(snapshot.state, "idle")
+        self.assertFalse(snapshot.extra["robot_ready"])
+        self.assertEqual(snapshot.extra["readiness_state"], "drive_not_ready")
+        self.assertEqual(snapshot.extra["readiness_note"], "EtherCAT communication error")
 
     def test_refresh_retries_tool_sync_until_success(self):
         robot = MagicMock()

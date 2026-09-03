@@ -4,12 +4,13 @@ import logging
 import time
 
 from src.engine.hardware.vacuum_pump.interfaces.i_vacuum_pump_controller import IVacuumPumpController
+from src.engine.core.i_health_checkable import IHealthCheckable
 from src.engine.robot.interfaces.i_robot_service import IRobotService
 
 _logger = logging.getLogger(__name__)
 
 
-class VacuumPumpController(IVacuumPumpController):
+class VacuumPumpController(IVacuumPumpController, IHealthCheckable):
     ON_VALUE = True
     OFF_VALUE = False
 
@@ -24,9 +25,11 @@ class VacuumPumpController(IVacuumPumpController):
         self.digital_output = int(digital_output)
         self.reset_output = int(reset_output)
         self.reset_pulse_s = float(reset_pulse_s)
+        self._last_operation_ok = False
 
     def turn_on(self) -> bool:
         ok = self._robot.set_digital_output(self.digital_output, self.ON_VALUE)
+        self._last_operation_ok = bool(ok)
         if ok:
             _logger.info("Vacuum pump ON (do=%s)", self.digital_output)
         else:
@@ -36,6 +39,7 @@ class VacuumPumpController(IVacuumPumpController):
     def turn_off(self) -> bool:
         ok = self._robot.set_digital_output(self.digital_output, self.OFF_VALUE)
         if not ok:
+            self._last_operation_ok = False
             _logger.warning("Vacuum pump OFF failed (do=%s)", self.digital_output)
             return False
 
@@ -43,6 +47,7 @@ class VacuumPumpController(IVacuumPumpController):
         time.sleep(self.reset_pulse_s)
         reset_low = self._robot.set_digital_output(self.reset_output, False)
         success = bool(reset_high and reset_low)
+        self._last_operation_ok = success
         if success:
             _logger.info(
                 "Vacuum pump OFF (do=%s reset_do=%s pulse=%.3fs)",
@@ -53,3 +58,6 @@ class VacuumPumpController(IVacuumPumpController):
         else:
             _logger.warning("Vacuum pump reset pulse failed (reset_do=%s)", self.reset_output)
         return success
+
+    def is_healthy(self) -> bool:
+        return self._last_operation_ok

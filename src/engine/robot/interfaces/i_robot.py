@@ -30,6 +30,7 @@ class IRobot(ABC):
         acc: float,
         blend_radius: float = 0.0,
         blocking: bool = True,
+        allow_collision_recovery: bool = False,
     ) -> int:
         """Straight-line TCP motion. Returns 0 on success."""
         ...
@@ -44,6 +45,58 @@ class IRobot(ABC):
         acc: float,
     ) -> int:
         ...
+
+    def start_servo_jog(
+        self,
+        axis: RobotAxis,
+        direction: Direction,
+        linear_mm_s: float | None = None,
+        angular_deg_s: float | None = None,
+        *,
+        frame: str | int = "user",
+        tool: int = 0,
+        user: int = 0,
+        disable_collision_checking: bool = False,
+    ) -> int:
+        """Optional continuous ServoJog. Intended for UI press/release jog."""
+        return -1
+
+    def start_joint_jog(
+        self,
+        joint: str,
+        direction: Direction,
+        step: float,
+        vel: float,
+        acc: float,
+    ) -> int:
+        """Optional incremental joint jog. Step is in degrees."""
+        return -1
+
+    def stop_servo_jog(self, *, restore_collision_checking: bool = True, timing_trace_id: str | None = None) -> int:
+        """Optional stop for continuous ServoJog."""
+        return -1
+
+    def servo_jog_to_z(self, **kwargs) -> dict | None:
+        """Optional blocking target-bounded +Z ServoJog operation."""
+        return None
+
+    def move_fast_linear(self, **kwargs) -> dict | None:
+        """Optional blocking Pilz LIN operation with a final outcome payload."""
+        return None
+
+    def set_motion_passage_closed(self, passage_id: str, closed: bool) -> bool:
+        """Optionally add/remove a configured ROS planning-scene passage lid."""
+        return False
+
+    def set_active_workobject(self, user: int) -> bool:
+        """Optional active workobject selection for state/current-position reporting."""
+        return True
+
+    def get_workobject_registry(self):
+        return None
+
+    def update_workobject_registry(self, user_id, name=None, transform=None, persist=False):
+        return -1
 
     @abstractmethod
     def stop_motion(self) -> int:
@@ -104,6 +157,20 @@ class IRobot(ABC):
     ) -> int:
         """Optional ordered motion chain with mixed segment types."""
         return -1
+
+    def prepare_ordered_motion_chain(self, segments: list[dict], start_position: list[float],
+                                     tool: int, user: int, *,
+                                     allow_servo_during_prepare: bool = False) -> dict | None:
+        return None
+
+    def execute_prepared_ordered_motion_chain(self, plan_id: str) -> dict | None:
+        return None
+
+    def discard_prepared_ordered_motion_chain(self, plan_id: str) -> dict | None:
+        return None
+
+    def get_prepared_ordered_motion_chain(self, plan_id: str) -> dict | None:
+        return None
 
     @abstractmethod
     def enable(self) -> None:
@@ -177,6 +244,10 @@ class IRobot(ABC):
     def set_active_tool(self, tool: int) -> bool:
         """Optional remote active TCP selection for status/current-pose reporting."""
         return False
+
+    def get_tool_registry(self):
+        """Return the remote tool registry payload when supported."""
+        return None
 
     def prefers_incremental_jog(self) -> bool:
         """Whether jog should prefer the robot's native incremental jog API over synthesized move commands."""

@@ -35,6 +35,9 @@ class IMotionService(ABC):
         blendR: float,
         wait_to_reach: bool = False,
         wait_cancelled: Callable[[], bool] | None = None,
+        allow_subzero_step_recovery: bool = False,
+        allow_collision_recovery: bool = False,
+        bypass_safety_limits: bool = False,
     ) -> bool:
         """
         Linear TCP motion (straight-line in Cartesian space).
@@ -76,6 +79,54 @@ class IMotionService(ABC):
     ) -> int:
         ...
 
+    def start_servo_jog(
+        self,
+        axis: axis.RobotAxis,
+        direction: axis.Direction,
+        linear_mm_s: float | None = None,
+        angular_deg_s: float | None = None,
+        *,
+        frame: str | int = "user",
+        tool: int = 0,
+        user: int = 0,
+        allow_subzero_descent: bool = False,
+        allow_subzero_retract_settle: bool = False,
+        disable_collision_checking: bool = False,
+    ) -> int:
+        return -1
+
+    def start_joint_jog(
+        self,
+        joint: str,
+        direction: axis.Direction,
+        step: float,
+        velocity: float | None = None,
+        acceleration: float | None = None,
+    ) -> int:
+        return -1
+
+    def stop_servo_jog(self, *, restore_collision_checking: bool = True, timing_trace_id: str | None = None) -> int:
+        return -1
+
+    def servo_jog_to_z(self, **kwargs) -> dict | None:
+        return None
+
+    def start_conditional_servo(self, request: dict) -> dict | None:
+        return None
+
+    def publish_conditional_servo_sensor(self, **event) -> bool:
+        return False
+
+    def get_conditional_servo_status(self) -> dict | None:
+        return None
+
+    def cancel_conditional_servo(self) -> dict | None:
+        return None
+
+    def move_fast_linear(self, **kwargs) -> dict | None:
+        """Optionally execute a blocking Pilz LIN move and return its final outcome."""
+        return None
+
     @abstractmethod
     def stop_motion(self) -> bool:
         ...
@@ -83,3 +134,29 @@ class IMotionService(ABC):
     @abstractmethod
     def get_current_position(self) -> List[float]:
         ...
+
+    def get_current_position_fresh(self) -> List[float]:
+        """Return a fresh pose when a safety-critical motion loop requires it."""
+        return self.get_current_position()
+
+    def register_motion_corridor(self, corridor) -> None:
+        """Register one installation-specific constrained linear-motion region."""
+        raise NotImplementedError
+
+    def set_motion_passage_closed(self, passage_id: str, closed: bool) -> bool:
+        """Add or remove a configured planning-scene passage lid."""
+        return False
+
+    def move_linear_in_corridor(
+        self,
+        corridor_id: str,
+        position: List[float],
+        tool: int,
+        user: int,
+        velocity: float,
+        acceleration: float,
+        blendR: float = 0.0,
+        wait_to_reach: bool = False,
+    ) -> bool:
+        """Execute a LIN move constrained by a registered corridor."""
+        return False

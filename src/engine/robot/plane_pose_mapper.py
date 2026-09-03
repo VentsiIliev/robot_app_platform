@@ -5,6 +5,8 @@ import math
 from dataclasses import dataclass
 from typing import Sequence
 
+TRACE_LOG_LEVEL = logging.DEBUG - 5
+
 
 @dataclass(frozen=True)
 class PlanePose:
@@ -75,7 +77,8 @@ class PlanePoseMapper:
         mapped_x = self._target_pose.x + rotated_x
         mapped_y = self._target_pose.y + rotated_y
 
-        self._logger.debug(
+        self._logger.log(
+            TRACE_LOG_LEVEL,
             "Mapped source-plane point (%.3f, %.3f) -> relative (%.3f, %.3f) -> "
             "rotated (%.3f, %.3f) -> target-plane (%.3f, %.3f)",
             x,

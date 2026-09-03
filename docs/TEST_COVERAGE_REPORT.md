@@ -192,7 +192,7 @@ Event dataclasses have no contract tests.
 | `tests/bootstrap/test_build_engine.py` | `build_engine.py` |
 | `tests/bootstrap/test_shell_configurator.py` | `shell_configurator.py` |
 | `tests/bootstrap/test_application_loader.py` | `application_loader.py` |
-| `tests/bootstrap/test_main.py` | `main.py` |
+| `tests/bootstrap/test_main.py` | `run_main.py` |
 | `tests/bootstrap/test_plugin_loader.py` | *(deleted — replaced by test_application_loader.py)* |
 | `tests/engine/hardware/communication/modbus/test_modbus_action_service.py` | `modbus_action_service.py` |
 | `tests/engine/hardware/communication/modbus/test_modbus_config.py` | `modbus.py` |

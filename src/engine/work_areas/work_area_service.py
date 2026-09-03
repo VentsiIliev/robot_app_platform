@@ -25,6 +25,7 @@ class WorkAreaService(IWorkAreaService):
         self._settings = settings_service
         self._definitions = {definition.id: definition for definition in definitions}
         self._active_area_id = self._resolve_default_active_area(default_active_area_id)
+        self._active_area_verified = False
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def get_active_area_id(self) -> Optional[str]:
@@ -34,16 +35,29 @@ class WorkAreaService(IWorkAreaService):
     def set_active_area_id(self, area_id: str | None) -> None:
         if not area_id:
             self._active_area_id = None
+            self._active_area_verified = False
             return
         area_id = str(area_id).strip()
         if not area_id:
             self._active_area_id = None
+            self._active_area_verified = False
             return
         if self._definitions and area_id not in self._definitions:
             raise KeyError(
                 f"Unknown work area '{area_id}'. Available: {sorted(self._definitions.keys())}"
             )
         self._active_area_id = area_id
+        self._active_area_verified = False
+
+    def is_active_area_verified(self) -> bool:
+        return bool(self._active_area_id and self._active_area_verified)
+
+    def mark_active_area_verified(self, area_id: str | None = None) -> None:
+        if area_id is not None:
+            normalized = str(area_id or "").strip()
+            if normalized != self._active_area_id:
+                self.set_active_area_id(normalized)
+        self._active_area_verified = bool(self._active_area_id)
 
     def get_area_config(self, area_id: str) -> WorkAreaConfig | None:
         if not area_id:
@@ -92,8 +106,6 @@ class WorkAreaService(IWorkAreaService):
         default_active_area_id = str(default_active_area_id or "").strip()
         if default_active_area_id:
             return default_active_area_id
-        if self._definitions:
-            return next(iter(self._definitions.keys()))
         return None
 
     def _load(self) -> WorkAreaSettings:

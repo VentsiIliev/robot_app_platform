@@ -53,15 +53,29 @@ class FrameGrabber:
         self._last_restart_at = 0.0
         self._last_frame_at = 0.0
         self._frame_sequence = 0
+        self._resume_event = threading.Event()
+        self._resume_event.set()
 
     def start(self):
         self.running = True
         self.thread.start()
 
+    def set_camera(self, camera) -> None:
+        self.camera = camera
+
     def _grab_loop(self):
         while self.running:
-            frame = self.camera.capture(timeout=self.read_timeout_s)
+            self._resume_event.wait()
+            if not self.running:
+                break
+            camera = self.camera
+            if camera is None:
+                time.sleep(0.05)
+                continue
+            frame = camera.capture(timeout=self.read_timeout_s)
             if frame is not None:
+                if not self._resume_event.is_set():
+                    continue
                 self._consecutive_failures = 0
                 captured_at = time.time()
                 with self.lock:
@@ -137,8 +151,24 @@ class FrameGrabber:
                 self._frame_available.wait(timeout=remaining)
             return None
 
+    def pause(self) -> None:
+        """Suspend acquisition without closing the camera device."""
+        self._resume_event.clear()
+        with self._frame_available:
+            self.buffer.clear()
+            self._last_frame_at = 0.0
+            self._frame_available.notify_all()
+
+    def resume(self) -> None:
+        """Resume acquisition and require callers to receive a newly captured frame."""
+        with self._frame_available:
+            self.buffer.clear()
+            self._last_frame_at = 0.0
+        self._resume_event.set()
+
     def stop(self):
         self.running = False
+        self._resume_event.set()
         with self._frame_available:
             self._frame_available.notify_all()
         self.thread.join()

@@ -15,6 +15,7 @@ def _make_view():
     view = MagicMock()
     view.save_requested.connect            = MagicMock()
     view.detect_ports_requested.connect    = MagicMock()
+    view.grant_permission_requested.connect = MagicMock()
     view.test_connection_requested.connect = MagicMock()
     view.destroyed.connect                 = MagicMock()
     return view
@@ -24,6 +25,7 @@ def _make_model(config=None):
     model = MagicMock(spec=ModbusSettingsModel)
     model.load.return_value             = config or ModbusConfig()
     model.detect_ports.return_value     = []
+    model.grant_serial_port_permissions.return_value = []
     model.test_connection.return_value  = False
     model.config_from_flat.return_value = config or ModbusConfig()
     return model
@@ -55,6 +57,10 @@ class TestModbusSettingsControllerInit(unittest.TestCase):
     def test_wires_test_connection_requested(self):
         _, _, view = _make_controller()
         view.test_connection_requested.connect.assert_called_once()
+
+    def test_wires_grant_permission_requested(self):
+        _, _, view = _make_controller()
+        view.grant_permission_requested.connect.assert_called_once()
 
     def test_wires_destroyed(self):
         _, _, view = _make_controller()
@@ -124,6 +130,28 @@ class TestModbusSettingsControllerDetect(unittest.TestCase):
         ctrl, _, view = _make_controller()
         ctrl._on_detect_failed("timeout")
         view.set_detected_ports.assert_called_once_with([])
+
+
+# ---------------------------------------------------------------------------
+# _on_permission_granted / _on_permission_failed
+# ---------------------------------------------------------------------------
+
+class TestModbusSettingsControllerGrantPermission(unittest.TestCase):
+
+    def test_on_permission_granted_pushes_success_to_view(self):
+        ctrl, _, view = _make_controller()
+        ctrl._on_permission_granted(["/dev/ttyUSB0"])
+        view.set_permission_result.assert_called_once_with(True, ["/dev/ttyUSB0"])
+
+    def test_on_permission_granted_empty_pushes_failure_to_view(self):
+        ctrl, _, view = _make_controller()
+        ctrl._on_permission_granted([])
+        view.set_permission_result.assert_called_once_with(False, [])
+
+    def test_on_permission_failed_pushes_failure_to_view(self):
+        ctrl, _, view = _make_controller()
+        ctrl._on_permission_failed("cancelled")
+        view.set_permission_result.assert_called_once_with(False, [])
 
 
 # ---------------------------------------------------------------------------

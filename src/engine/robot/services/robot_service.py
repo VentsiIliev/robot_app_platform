@@ -29,13 +29,38 @@ class RobotService(IRobotService):
     def tools(self) -> Optional[IToolService]:
         return self._tools
 
+    def stop(self) -> None:
+        stop_monitoring = getattr(self._state, "stop_monitoring", None)
+        if callable(stop_monitoring):
+            stop_monitoring()
+
     # --- IMotionService ---
 
     def move_ptp(self, position, tool, user, velocity, acceleration, wait_to_reach=False) -> bool:
         return self._motion.move_ptp(position, tool, user, velocity, acceleration, wait_to_reach)
 
-    def move_linear(self, position, tool, user, velocity, acceleration, blendR=0.0, wait_to_reach=False) -> bool:
-        return self._motion.move_linear(position, tool, user, velocity, acceleration, blendR, wait_to_reach)
+    def move_linear(self, position, tool, user, velocity, acceleration, blendR=0.0, wait_to_reach=False,
+                    allow_subzero_step_recovery=False, allow_collision_recovery=False,
+                    bypass_safety_limits=False) -> bool:
+        return self._motion.move_linear(
+            position, tool, user, velocity, acceleration, blendR, wait_to_reach,
+            allow_subzero_step_recovery=allow_subzero_step_recovery,
+            allow_collision_recovery=allow_collision_recovery,
+            bypass_safety_limits=bypass_safety_limits,
+        )
+
+    def register_motion_corridor(self, corridor) -> None:
+        self._motion.register_motion_corridor(corridor)
+
+    def set_motion_passage_closed(self, passage_id: str, closed: bool) -> bool:
+        return self._motion.set_motion_passage_closed(passage_id, closed)
+
+    def move_linear_in_corridor(
+        self, corridor_id, position, tool, user, velocity, acceleration, blendR=0.0, wait_to_reach=False
+    ) -> bool:
+        return self._motion.move_linear_in_corridor(
+            corridor_id, position, tool, user, velocity, acceleration, blendR, wait_to_reach
+        )
 
     def move_sequence(
         self,
@@ -65,14 +90,113 @@ class RobotService(IRobotService):
     ) -> int:
         return self._motion.start_jog(axis, direction, step, velocity=velocity, acceleration=acceleration)
 
+    def start_servo_jog(
+        self,
+        axis: RobotAxis,
+        direction: Direction,
+        linear_mm_s: float | None = None,
+        angular_deg_s: float | None = None,
+        *,
+        frame: str | int = "user",
+        tool: int = 0,
+        user: int = 0,
+        allow_subzero_descent: bool = False,
+        allow_subzero_retract_settle: bool = False,
+        disable_collision_checking: bool = False,
+    ) -> int:
+        starter = getattr(self._motion, "start_servo_jog", None)
+        if not callable(starter):
+            return -1
+        return starter(
+            axis,
+            direction,
+            linear_mm_s=linear_mm_s,
+            angular_deg_s=angular_deg_s,
+            frame=frame,
+            tool=tool,
+            user=user,
+            allow_subzero_descent=allow_subzero_descent,
+            allow_subzero_retract_settle=allow_subzero_retract_settle,
+            disable_collision_checking=disable_collision_checking,
+        )
+
+    def start_joint_jog(
+        self,
+        joint: str,
+        direction: Direction,
+        step: float,
+        velocity: float | None = None,
+        acceleration: float | None = None,
+    ) -> int:
+        starter = getattr(self._motion, "start_joint_jog", None)
+        if not callable(starter):
+            return -1
+        return starter(
+            joint,
+            direction,
+            step,
+            velocity=velocity,
+            acceleration=acceleration,
+        )
+
+    def stop_servo_jog(self, *, restore_collision_checking: bool = True, timing_trace_id: str | None = None) -> int:
+        stopper = getattr(self._motion, "stop_servo_jog", None)
+        if not callable(stopper):
+            return -1
+        kwargs = {"restore_collision_checking": restore_collision_checking}
+        if timing_trace_id is not None:
+            kwargs["timing_trace_id"] = timing_trace_id
+        return stopper(**kwargs)
+
+    def servo_jog_to_z(self, **kwargs) -> dict | None:
+        mover = getattr(self._motion, "servo_jog_to_z", None)
+        return mover(**kwargs) if callable(mover) else None
+
+    def start_conditional_servo(self, request: dict) -> dict | None:
+        method = getattr(self._motion, "start_conditional_servo", None)
+        return method(request) if callable(method) else None
+
+    def publish_conditional_servo_sensor(self, **event) -> bool:
+        method = getattr(self._motion, "publish_conditional_servo_sensor", None)
+        return bool(callable(method) and method(**event))
+
+    def get_conditional_servo_status(self) -> dict | None:
+        method = getattr(self._motion, "get_conditional_servo_status", None)
+        return method() if callable(method) else None
+
+    def cancel_conditional_servo(self) -> dict | None:
+        method = getattr(self._motion, "cancel_conditional_servo", None)
+        return method() if callable(method) else None
+
+    def move_fast_linear(self, **kwargs) -> dict | None:
+        mover = getattr(self._motion, "move_fast_linear", None)
+        return mover(**kwargs) if callable(mover) else None
+
     def stop_motion(self) -> bool:
         return self._motion.stop_motion()
+
+    def controlled_stop(self, expected_task_id, *, stop_duration_s=None) -> dict:
+        method = getattr(self._motion, "controlled_stop", None)
+        if not callable(method):
+            return {"success": False, "error": "controlled_stop_unsupported"}
+        return method(expected_task_id, stop_duration_s=stop_duration_s)
 
     def get_current_position(self) -> List[float]:
         return list(self._state.position)
 
+    def get_current_position_fresh(self) -> List[float]:
+        """Bypass the state-manager cache for safety-critical live monitoring."""
+        getter = getattr(self._robot, "get_current_position_fresh", None)
+        if not callable(getter):
+            getter = self._robot.get_current_position
+        return list(getter())
+
     def get_current_flange_position(self) -> List[float]:
         return self._robot.get_current_flange_position()
+
+    def get_current_base_tcp_position(self) -> List[float] | None:
+        getter = getattr(self._robot, "get_current_base_tcp_position", None)
+        return getter() if callable(getter) else None
 
     def set_active_tool(self, tool: int) -> bool:
         try:
@@ -88,6 +212,38 @@ class RobotService(IRobotService):
                 except Exception:
                     self._logger.warning("State refresh after set_active_tool failed", exc_info=True)
         return ok
+
+    def set_active_workobject(self, user: int) -> bool:
+        setter = getattr(self._robot, "set_active_workobject", None)
+        if not callable(setter):
+            return False
+        try:
+            ok = bool(setter(int(user)))
+        except Exception:
+            self._logger.exception("set_active_workobject failed for user=%s", user)
+            return False
+        if ok:
+            refresh = getattr(self._state, "refresh_once", None)
+            if callable(refresh):
+                try:
+                    refresh()
+                except Exception:
+                    self._logger.warning("State refresh after set_active_workobject failed", exc_info=True)
+        return ok
+
+    def get_tool_registry(self):
+        getter = getattr(self._robot, "get_tool_registry", None)
+        return getter() if callable(getter) else None
+
+    def get_workobject_registry(self):
+        getter = getattr(self._robot, "get_workobject_registry", None)
+        return getter() if callable(getter) else None
+
+    def update_workobject_registry(self, user_id, name=None, transform=None, persist=False):
+        updater = getattr(self._robot, "update_workobject_registry", None)
+        if not callable(updater):
+            return -1
+        return updater(user_id, name=name, transform=transform, persist=persist)
 
     # --- IRobotLifecycle ---
 
@@ -107,6 +263,38 @@ class RobotService(IRobotService):
 
     def get_state(self) -> str:
         return self._state.state
+
+    def get_connection_state(self) -> str:
+        getter = getattr(self._robot, "get_connection_state", None)
+        if callable(getter):
+            try:
+                return str(getter() or self.get_state())
+            except Exception:
+                self._logger.debug("get_connection_state failed", exc_info=True)
+                return "disconnected"
+        return self.get_state()
+
+    def get_connection_details(self) -> dict:
+        getter = getattr(self._robot, "get_connection_details", None)
+        if callable(getter):
+            try:
+                details = getter() or {}
+            except Exception:
+                self._logger.debug("get_connection_details failed", exc_info=True)
+                return {"state": "disconnected"}
+            return dict(details) if isinstance(details, dict) else {}
+        return {}
+
+    def get_drive_status(self) -> dict:
+        getter = getattr(self._robot, "get_drive_status", None)
+        if callable(getter):
+            try:
+                status = getter() or {}
+            except Exception:
+                self._logger.debug("get_drive_status failed", exc_info=True)
+                return {"success": False}
+            return dict(status) if isinstance(status, dict) else {}
+        return {}
 
     def get_state_topic(self) -> str:
         return self._state.state_topic
@@ -148,8 +336,28 @@ class RobotService(IRobotService):
             blocking=blocking,
         )
 
+    def get_last_motion_error(self):
+        getter = getattr(self._robot, "get_last_motion_error", None)
+        return getter() if callable(getter) else None
+
     def get_execution_status(self):
         return self._robot.get_execution_status()
+
+    def prepare_ordered_motion_chain(self, segments, start_position, tool, user,
+                                     *, allow_servo_during_prepare=False):
+        return self._robot.prepare_ordered_motion_chain(
+            segments, start_position, tool, user,
+            allow_servo_during_prepare=allow_servo_during_prepare,
+        )
+
+    def execute_prepared_ordered_motion_chain(self, plan_id):
+        return self._robot.execute_prepared_ordered_motion_chain(plan_id)
+
+    def discard_prepared_ordered_motion_chain(self, plan_id):
+        return self._robot.discard_prepared_ordered_motion_chain(plan_id)
+
+    def get_prepared_ordered_motion_chain(self, plan_id):
+        return self._robot.get_prepared_ordered_motion_chain(plan_id)
 
     def get_last_trajectory_command_info(self):
         return self._robot.get_last_trajectory_command_info()

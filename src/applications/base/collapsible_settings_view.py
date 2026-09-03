@@ -6,7 +6,13 @@ from PyQt6.QtWidgets import QFrame, QPushButton, QScrollArea, QSizePolicy, QVBox
 from pl_gui.settings.settings_view.group_widget import GenericSettingGroup
 from pl_gui.settings.settings_view.schema import SettingGroup
 from pl_gui.settings.settings_view.settings_view import SettingsView
-from pl_gui.settings.settings_view.styles import BG_COLOR, BORDER, PRIMARY_DARK, PRIMARY_LIGHT
+from pl_gui.settings.settings_view.styles import (
+    BG_COLOR,
+    BORDER,
+    PRIMARY_DARK,
+    PRIMARY_LIGHT,
+    TOUCH_SCROLL_AREA_STYLE,
+)
 
 
 class CollapsibleGroup(QWidget):
@@ -109,7 +115,7 @@ class CollapsibleSettingsView(SettingsView):
 
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
-        scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
+        scroll.setStyleSheet(TOUCH_SCROLL_AREA_STYLE)
         scroll.setWidget(content)
         return scroll
 

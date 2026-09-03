@@ -80,6 +80,15 @@ class CalibrationModel(IApplicationModel):
     def clear_tool_tcp_calibration(self) -> tuple[bool, str]:
         return self._service.clear_tool_tcp_calibration()
 
+    def capture_workobject_point(self, point_name: str) -> tuple[bool, str, dict]:
+        return self._service.capture_workobject_point(point_name)
+
+    def solve_workobject(self, user_id: int, name: str = "") -> tuple[bool, str, dict]:
+        return self._service.solve_workobject(user_id, name)
+
+    def save_workobject(self, user_id: int, name: str = "", persist: bool = True) -> tuple[bool, str, dict]:
+        return self._service.save_workobject(user_id, name=name, persist=persist)
+
     def calibrate_laser(self) -> tuple[bool, str]:
         return self._service.calibrate_laser()
 

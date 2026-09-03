@@ -159,7 +159,7 @@ class LoginView(QDialog):
             # Fallback text if asset not found
             f = QFont(); f.setPointSize(22); f.setBold(True)
             self._logo_label.setFont(f)
-            self._logo_label.setText("Robot\nPlatform")
+            self._logo_label.setText(self._t("Robot\nPlatform"))
             self._logo_label.setStyleSheet("color: #4a2060;")
 
         layout.addWidget(self._logo_label)
@@ -221,7 +221,7 @@ class LoginView(QDialog):
             )
         else:
             self._machine_pixmap = None
-            self._machine_label.setText("[Machine image not found]")
+            self._machine_label.setText(self._t("[Machine image not found]"))
             self._machine_label.setStyleSheet("color: grey; font-size: 12px;")
         layout.addWidget(self._machine_label)
 
@@ -238,7 +238,6 @@ class LoginView(QDialog):
         # TODO: remove once physical blue-button signal is wired
         self._btn_sim = QPushButton()
         self._btn_sim.setFixedHeight(44)
-        self._btn_sim.setToolTip("Temporary — simulates the physical blue button press")
         self._btn_sim.setStyleSheet("""
             QPushButton {
                 background-color: #1565C0; color: white;
@@ -416,8 +415,13 @@ class LoginView(QDialog):
 
     def retranslateUi(self, *_) -> None:
         self.setWindowTitle(self._t("Login"))
+        if self._logo_pixmap is None:
+            self._logo_label.setText(self._t("Robot\nPlatform"))
+        if getattr(self, "_machine_pixmap", None) is None:
+            self._machine_label.setText(self._t("[Machine image not found]"))
         self._setup_instruction.setText(self._t("Press the blue button on the machine to continue."))
         self._btn_sim.setText(self._t("⬤  Simulate Blue Button"))
+        self._btn_sim.setToolTip(self._t("Temporary — simulates the physical blue button press"))
         self._fr_title.setText(self._t("First-time setup"))
         self._fr_subtitle.setText(self._t("No users found. Create the first admin account."))
         self._fr_label_uid.setText(self._t("User ID:"))

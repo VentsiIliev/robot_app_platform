@@ -119,6 +119,29 @@ class TestDefaultWorkpiecePathPreparationService(unittest.TestCase):
         self.assertFalse(job["use_workpiece_layer"])
         pickup_rz.assert_called_once()
 
+    def test_transform_to_robot_uses_dynamic_calibration_frame_name_getter(self):
+        registry = MagicMock()
+        registry.by_name.return_value = SimpleNamespace(offset_x=0.0, offset_y=0.0)
+        resolver = MagicMock()
+        resolver.registry = registry
+        resolver.resolve.return_value = SimpleNamespace(final_xy=(10.0, 20.0), z=100.0)
+        service = _make_service(
+            resolver=resolver,
+            target_point_name="tool",
+            calibration_frame_name="calibration",
+            calibration_frame_name_getter=lambda: "magazine",
+            pixel_to_mm_mode=PIXEL_TO_MM_MODE_HOMOGRAPHY_RESIDUAL,
+        )
+
+        result = service._transform_to_robot(
+            np.asarray([[1.0, 2.0]], dtype=np.float64),
+            {"spraying_height": "0", "rz_angle": "0"},
+        )
+
+        self.assertEqual(10.0, result[0][0])
+        self.assertEqual(20.0, result[0][1])
+        self.assertEqual("magazine", resolver.resolve.call_args.kwargs["frame"])
+
     def test_build_execution_plan_resolves_pickup_xy_with_normalized_axis_rz(self):
         registry = MagicMock()
         registry.by_name.return_value = SimpleNamespace(offset_x=0.0, offset_y=0.0)

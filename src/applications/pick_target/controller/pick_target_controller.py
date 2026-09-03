@@ -6,9 +6,10 @@ from typing import Callable, List, Optional, Tuple
 
 import cv2
 import numpy as np
-from PyQt6.QtCore import QObject, QThread, pyqtSignal
+from PyQt6.QtCore import QCoreApplication, QObject, QThread, pyqtSignal
 
 from src.applications.base.i_application_controller import IApplicationController
+from src.applications.base.styled_message_box import show_warning
 from src.applications.pick_target.model.pick_target_model import PickTargetModel
 from src.applications.pick_target.view.pick_target_view import PickTargetView
 from src.engine.core.i_messaging_service import IMessagingService
@@ -264,7 +265,9 @@ class PickTargetController(IApplicationController):
         try:
             frame, pixel_centroids, robot_coords = self._model.capture()
         except Exception as exc:
-            self._view.append_log(f"[ERROR] Capture failed: {exc}")
+            message = str(exc)
+            self._view.append_log(f"[ERROR] Capture failed: {message}")
+            show_warning(self._view, self._t("Capture Blocked"), message)
             return
 
         self._captured_coords = robot_coords
@@ -419,3 +422,8 @@ class PickTargetController(IApplicationController):
             cv2.line(out, (x - 14, y), (x + 14, y), (0, 255, 0), 1)
             cv2.line(out, (x, y - 14), (x, y + 14), (0, 255, 0), 1)
         return out
+
+    @staticmethod
+    def _t(text: str) -> str:
+        translated = QCoreApplication.translate("PickTarget", text)
+        return translated or text

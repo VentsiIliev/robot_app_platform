@@ -27,5 +27,12 @@ class UserNotificationEvent:
     timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 
+@dataclass(frozen=True)
+class DismissNotificationEvent:
+    dedupe_key: str
+    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+
+
 class NotificationTopics:
     USER = "ui/notification"
+    DISMISS = "ui/notification/dismiss"

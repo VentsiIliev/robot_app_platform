@@ -1,6 +1,6 @@
 import logging
 import os
-from typing import TYPE_CHECKING, List, Optional, Tuple
+from typing import TYPE_CHECKING, Callable, List, Optional, Tuple
 from datetime import datetime
 
 import cv2
@@ -41,6 +41,8 @@ class PickTargetApplicationService(IPickTargetService):
         default_target_name: str = "",
         calibration_frame_name: str = "",
         pickup_frame_name: str = "",
+        active_frame_name_getter: Optional[Callable[[], str]] = None,
+        active_capture_group_getter: Optional[Callable[[], str]] = None,
     ):
         self._vision        = vision_service
         self._capture_snapshot_service = capture_snapshot_service
@@ -55,6 +57,8 @@ class PickTargetApplicationService(IPickTargetService):
         self._default_target_name = str(default_target_name or "").strip().lower()
         self._calibration_frame_name = str(calibration_frame_name or "").strip().lower()
         self._pickup_frame_name = str(pickup_frame_name or "").strip().lower()
+        self._active_frame_name_getter = active_frame_name_getter
+        self._active_capture_group_getter = active_capture_group_getter
 
         self._registry = None
         self._target_point = self._resolve_target_point(self._default_target_name)
@@ -75,12 +79,30 @@ class PickTargetApplicationService(IPickTargetService):
             return None
         return registry.by_name(target_name)
 
-    def _current_pickup_mapper(self):
+    def _mapper_for_frame(self, frame_name: str):
         resolver = self._current_resolver()
-        if resolver is None or not self._pickup_frame_name:
+        if resolver is None or not frame_name:
             return None
-        pickup_frame = resolver.get_frame(self._pickup_frame_name)
-        return pickup_frame.mapper if pickup_frame is not None else None
+        frame = resolver.get_frame(frame_name)
+        return frame.mapper if frame is not None else None
+
+    def _dynamic_active_frame_name(self) -> str:
+        if self._active_frame_name_getter is None:
+            return ""
+        try:
+            return str(self._active_frame_name_getter() or "").strip().lower()
+        except Exception:
+            _logger.debug("Failed to read active pick-target frame", exc_info=True)
+            return ""
+
+    def _active_capture_group_name(self) -> str:
+        if self._active_capture_group_getter is None:
+            return ""
+        try:
+            return str(self._active_capture_group_getter() or "").strip()
+        except Exception:
+            _logger.debug("Failed to read active pick-target capture group", exc_info=True)
+            return ""
 
     def set_target(self, target: str) -> None:
         self._target_point = self._resolve_target_point(target)
@@ -99,12 +121,14 @@ class PickTargetApplicationService(IPickTargetService):
 
     @property
     def _active_frame(self) -> str:
-        return self._pickup_frame_name if self._use_pickup_plane else self._calibration_frame_name
+        if self._use_pickup_plane and self._pickup_frame_name:
+            return self._pickup_frame_name
+        return self._dynamic_active_frame_name() or self._calibration_frame_name
 
     def get_jog_reference_rz(self) -> float:
-        pickup_mapper = self._current_pickup_mapper()
-        if self._active_frame == self._pickup_frame_name and pickup_mapper is not None:
-            return float(pickup_mapper.target_pose.rz)
+        mapper = self._mapper_for_frame(self._active_frame)
+        if mapper is not None:
+            return float(mapper.target_pose.rz)
         return 0.0
 
     def _current_capture_orientation(self) -> Tuple[float, float]:
@@ -283,6 +307,16 @@ class PickTargetApplicationService(IPickTargetService):
         try:
             if self._use_pickup_plane:
                 return self._navigation.move_home()
+            active_group = self._active_capture_group_name()
+            if active_group and active_group.upper() != "CALIBRATION":
+                move_to_group = getattr(self._navigation, "move_to_group", None)
+                if callable(move_to_group):
+                    return bool(move_to_group(active_group))
+                move_to = getattr(self._navigation, "move_to", None)
+                if callable(move_to):
+                    return bool(move_to(active_group))
+                _logger.warning("Navigation service cannot move to group %s", active_group)
+                return False
             z_offset = self._vision.get_capture_pos_offset() if self._vision is not None else 0.0
             return self._navigation.move_to_calibration_position(z_offset=z_offset)
         except Exception:

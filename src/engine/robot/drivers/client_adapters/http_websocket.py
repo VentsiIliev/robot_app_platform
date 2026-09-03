@@ -1,0 +1,1935 @@
+import asyncio
+import json
+import logging
+import os
+import requests
+import threading
+import time
+from copy import deepcopy
+from urllib.parse import urlparse, urlunparse
+
+logger = logging.getLogger(__name__)
+
+
+from src.engine.robot.drivers.client_adapters.base import RobotClientAdapter
+
+
+class HttpWebSocketRobotClient(RobotClientAdapter):
+    """Current robot transport: HTTP commands with WebSocket state/status streams."""
+
+    transport_name = "http_websocket"
+    _RECONNECT_CHECK_INTERVAL_S = 1.0
+    _HEALTH_ERROR_LOG_INTERVAL_S = 10.0
+    _STATE_WS_STALE_AFTER_S = 1.0
+    _EXECUTION_WS_STALE_AFTER_S = 1.0
+    _STATE_HTTP_FALLBACK_INTERVAL_S = 0.5
+    _GLOBAL_LAST_HEALTH_ERROR = None
+    _GLOBAL_LAST_HEALTH_ERROR_LOGGED_AT = 0.0
+    _MOTION_ERROR_DRIVE_NOT_ENABLED = -13
+    _STOP_STATE_STOPPED = "STOPPED"
+    _STOP_STATE_NO_ACTIVE_MOTION = "NO_ACTIVE_MOTION"
+    _STOP_STATE_STOP_REQUESTED_BUT_UNCONFIRMED = "STOP_REQUESTED_BUT_UNCONFIRMED"
+    _STOP_STATE_ERROR = "ERROR"
+
+    def __init__(self, server_url="http://localhost:5000", ip=None):
+        self.server_url = server_url.rstrip('/')
+        self.ip = ip or "ros2_bridge"
+        self._last_execute_path_response = None
+        self._last_stop_response = None
+        self._available = False
+        self._connection_state = "disconnected"
+        self._last_error = None
+        self._last_command_error = None
+        self._startup_status = {}
+        self._last_reconnect_check = 0.0
+        self._last_health_error = None
+        self._last_health_error_logged_at = 0.0
+        self._drive_enabled = False
+        self._connection_generation = 0
+        self._session = requests.Session()
+        self._state_ws_url = self._derive_state_ws_url(self.server_url)
+        self._execution_ws_url = self._derive_execution_ws_url(self.server_url)
+        self._state_ws_lock = threading.Lock()
+        self._state_ws_latest = None
+        self._state_ws_last_at = 0.0
+        self._state_ws_connected = False
+        self._state_ws_stop = threading.Event()
+        self._state_ws_thread = None
+        self._execution_ws_lock = threading.Lock()
+        self._execution_ws_latest = None
+        self._execution_ws_last_at = 0.0
+        self._execution_ws_connected = False
+        self._execution_ws_stop = threading.Event()
+        self._execution_ws_thread = None
+        self._execution_request_lock = threading.Lock()
+        self._last_execution_request_label = None
+        self._last_execution_request_sent_at = 0.0
+        self._last_execution_request_task_id = None
+        self._execution_ws_was_executing = False
+        self._last_execution_preplan_signature = None
+        self._state_ws_dependency_missing = False
+        self._execution_ws_dependency_missing = False
+        self._sensor_ws_url = self._derive_sensor_ws_url(self.server_url)
+        self._sensor_ws_lock = threading.Lock()
+        self._sensor_ws_loop_ref = None
+        self._sensor_ws_queue = None
+        self._sensor_ws_connected = False
+        self._sensor_ws_stop = threading.Event()
+        self._sensor_ws_thread = None
+        self._conditional_servo_latest = None
+        self._state_http_snapshot = None
+        self._state_http_snapshot_at = 0.0
+        logger.info("Connecting to ROS2 bridge at %s", self.server_url)
+        health = self.health_check()
+        logger.debug("health_check response: %s", health)
+        if health.get("status") != "ok":
+            logger.error("Bridge health check failed: %s", health)
+            self._mark_unavailable(health.get("message") or f"Could not connect to ROS2 bridge at {server_url}")
+        else:
+            self._mark_available()
+            logger.info("Connected to ROS2 bridge at %s", server_url)
+        self._start_state_websocket()
+        self._start_execution_websocket()
+        self._start_sensor_websocket()
+
+    @staticmethod
+    def _derive_state_ws_url(server_url: str) -> str:
+        explicit = os.environ.get("ROBOT_STATE_WS_URL")
+        if explicit:
+            return explicit.rstrip("/")
+
+        parsed = urlparse(server_url)
+        scheme = "wss" if parsed.scheme == "https" else "ws"
+        hostname = parsed.hostname or "localhost"
+        port = 5001
+        netloc = f"{hostname}:{port}"
+        return urlunparse((scheme, netloc, "/ws/state", "", "", ""))
+
+    @staticmethod
+    def _derive_execution_ws_url(server_url: str) -> str:
+        explicit = os.environ.get("ROBOT_EXECUTION_WS_URL")
+        if explicit:
+            return explicit.rstrip("/")
+
+        parsed = urlparse(server_url)
+        scheme = "wss" if parsed.scheme == "https" else "ws"
+        hostname = parsed.hostname or "localhost"
+        port = 5002
+        netloc = f"{hostname}:{port}"
+        return urlunparse((scheme, netloc, "/ws/execution", "", "", ""))
+
+    @staticmethod
+    def _derive_sensor_ws_url(server_url: str) -> str:
+        explicit = os.environ.get("ROBOT_SENSOR_WS_URL")
+        if explicit:
+            return explicit.rstrip("/")
+        parsed = urlparse(server_url)
+        scheme = "wss" if parsed.scheme == "https" else "ws"
+        hostname = parsed.hostname or "localhost"
+        return urlunparse((scheme, f"{hostname}:5003", "/ws/sensors", "", "", ""))
+
+    def _mark_available(self):
+        self._available = True
+        self._connection_state = "idle"
+        self._last_error = None
+        self._startup_status = {}
+
+    def _mark_unavailable(self, message, state: str = "disconnected", startup_status: dict | None = None):
+        was_available = self._available
+        self._available = False
+        self._connection_state = str(state or "disconnected")
+        self._last_error = str(message) if message else "unknown bridge error"
+        self._startup_status = dict(startup_status or {})
+        self._drive_enabled = False
+        if was_available:
+            self._connection_generation += 1
+
+    def reconnect(self):
+        health = self.health_check()
+        return health.get("status") == "ok"
+
+    def _probe_reconnect_if_needed(self):
+        if self._available:
+            return
+        now = time.monotonic()
+        if now - self._last_reconnect_check < self._RECONNECT_CHECK_INTERVAL_S:
+            return
+        self._last_reconnect_check = now
+        self.reconnect()
+
+    def get_connection_state(self):
+        self._probe_reconnect_if_needed()
+        return "idle" if self._available else self._connection_state
+
+    def get_connection_details(self):
+        with self._state_ws_lock:
+            ws_age = time.monotonic() - self._state_ws_last_at if self._state_ws_last_at else None
+        with self._execution_ws_lock:
+            execution_ws_age = time.monotonic() - self._execution_ws_last_at if self._execution_ws_last_at else None
+        return {
+            "server_url": self.server_url,
+            "transport": self.transport_name,
+            "state": self.get_connection_state(),
+            "last_error": self._last_error,
+            "last_command_error": self._last_command_error,
+            "startup": dict(self._startup_status),
+            "drive_enabled": bool(self._drive_enabled),
+            "connection_generation": self._connection_generation,
+            "state_ws_url": self._state_ws_url,
+            "state_ws_connected": bool(self._state_ws_connected),
+            "state_ws_age_s": ws_age,
+            "state_ws_dependency_missing": bool(self._state_ws_dependency_missing),
+            "execution_ws_url": self._execution_ws_url,
+            "execution_ws_connected": bool(self._execution_ws_connected),
+            "execution_ws_age_s": execution_ws_age,
+            "execution_ws_dependency_missing": bool(self._execution_ws_dependency_missing),
+        }
+
+    def _start_state_websocket(self):
+        if self._state_ws_thread is not None:
+            return
+        self._state_ws_thread = threading.Thread(
+            target=self._run_state_websocket_thread,
+            daemon=True,
+            name="RobotStateWebSocket",
+        )
+        self._state_ws_thread.start()
+
+    def _run_state_websocket_thread(self):
+        try:
+            asyncio.run(self._state_websocket_loop())
+        except Exception:
+            logger.debug("State WebSocket thread exited", exc_info=True)
+
+    async def _state_websocket_loop(self):
+        try:
+            import websockets
+        except Exception as exc:
+            self._state_ws_dependency_missing = True
+            logger.warning(
+                "State WebSocket disabled because the 'websockets' package is unavailable: %s",
+                exc,
+            )
+            return
+
+        while not self._state_ws_stop.is_set():
+            try:
+                async with websockets.connect(
+                    self._state_ws_url,
+                    open_timeout=1.0,
+                    ping_interval=10.0,
+                    ping_timeout=3.0,
+                    close_timeout=1.0,
+                ) as websocket:
+                    self._state_ws_connected = True
+                    logger.info("Connected to ROS2 state WebSocket at %s", self._state_ws_url)
+                    async for message in websocket:
+                        self._accept_state_ws_message(message)
+                        if self._state_ws_stop.is_set():
+                            break
+            except Exception as exc:
+                self._state_ws_connected = False
+                logger.debug("State WebSocket unavailable at %s: %s", self._state_ws_url, exc)
+                await asyncio.sleep(1.0)
+
+    def _accept_state_ws_message(self, message):
+        try:
+            data = json.loads(message)
+        except (TypeError, ValueError):
+            logger.debug("Ignoring non-JSON state WebSocket frame: %r", message)
+            return
+        if data.get("type") != "state":
+            return
+        if data.get("runtime_ready") is False:
+            return
+
+        snapshot = {
+            "success": data.get("success", True),
+            "partial": bool(data.get("partial", False)),
+            "unavailable_fields": list(data.get("unavailable_fields") or []),
+            "position": data.get("position"),
+            "flange_position": data.get("flange_position"),
+            "joints": data.get("joints"),
+            "velocity": data.get("velocity"),
+            "acceleration": data.get("acceleration"),
+            "timestamp": data.get("timestamp"),
+            "sequence": data.get("sequence"),
+            "source": "websocket",
+        }
+        with self._state_ws_lock:
+            self._state_ws_latest = snapshot
+            self._state_ws_last_at = time.monotonic()
+        self._mark_available()
+
+    def _get_state_ws_snapshot(self):
+        with self._state_ws_lock:
+            if self._state_ws_latest is None or not self._state_ws_last_at:
+                return None
+            if time.monotonic() - self._state_ws_last_at > self._STATE_WS_STALE_AFTER_S:
+                return None
+            return dict(self._state_ws_latest)
+
+    def _start_execution_websocket(self):
+        if self._execution_ws_thread is not None:
+            return
+        self._execution_ws_thread = threading.Thread(
+            target=self._run_execution_websocket_thread,
+            daemon=True,
+            name="RobotExecutionWebSocket",
+        )
+        self._execution_ws_thread.start()
+
+    def _run_execution_websocket_thread(self):
+        try:
+            asyncio.run(self._execution_websocket_loop())
+        except Exception:
+            logger.debug("Execution WebSocket thread exited", exc_info=True)
+
+    async def _execution_websocket_loop(self):
+        try:
+            import websockets
+        except Exception as exc:
+            self._execution_ws_dependency_missing = True
+            logger.warning(
+                "Execution WebSocket disabled because the 'websockets' package is unavailable: %s",
+                exc,
+            )
+            return
+
+        while not self._execution_ws_stop.is_set():
+            try:
+                async with websockets.connect(
+                    self._execution_ws_url,
+                    open_timeout=1.0,
+                    ping_interval=10.0,
+                    ping_timeout=3.0,
+                    close_timeout=1.0,
+                ) as websocket:
+                    self._execution_ws_connected = True
+                    logger.info("Connected to ROS2 execution WebSocket at %s", self._execution_ws_url)
+                    async for message in websocket:
+                        self._accept_execution_ws_message(message)
+                        if self._execution_ws_stop.is_set():
+                            break
+            except Exception as exc:
+                self._execution_ws_connected = False
+                logger.debug("Execution WebSocket unavailable at %s: %s", self._execution_ws_url, exc)
+                await asyncio.sleep(1.0)
+
+    def _accept_execution_ws_message(self, message):
+        try:
+            data = json.loads(message)
+        except (TypeError, ValueError):
+            logger.debug("Ignoring non-JSON execution WebSocket frame: %r", message)
+            return
+        if data.get("type") != "execution_status":
+            return
+        if data.get("runtime_ready") is False:
+            return
+
+        status = data.get("status")
+        if not isinstance(status, dict):
+            logger.debug("Ignoring execution WebSocket frame without status: %s", data)
+            return
+        snapshot = dict(status)
+        snapshot["success"] = bool(data.get("success", True))
+        snapshot["source"] = "websocket"
+        snapshot["timestamp"] = data.get("timestamp")
+        snapshot["sequence"] = data.get("sequence")
+        with self._execution_ws_lock:
+            self._execution_ws_latest = snapshot
+            self._execution_ws_last_at = time.monotonic()
+        self._log_execution_ws_transition(snapshot)
+        self._log_execution_preplan_status(snapshot)
+        self._mark_available()
+
+    def _get_execution_ws_status(self):
+        with self._execution_ws_lock:
+            if self._execution_ws_latest is None or not self._execution_ws_last_at:
+                return None
+            if time.monotonic() - self._execution_ws_last_at > self._EXECUTION_WS_STALE_AFTER_S:
+                return None
+            return dict(self._execution_ws_latest)
+
+    def _start_sensor_websocket(self):
+        if self._sensor_ws_thread is not None:
+            return
+        self._sensor_ws_thread = threading.Thread(
+            target=self._run_sensor_websocket_thread,
+            daemon=True,
+            name="RobotSensorWebSocket",
+        )
+        self._sensor_ws_thread.start()
+
+    def _run_sensor_websocket_thread(self):
+        try:
+            asyncio.run(self._sensor_websocket_loop())
+        except Exception:
+            logger.debug("Sensor WebSocket thread exited", exc_info=True)
+
+    async def _sensor_websocket_loop(self):
+        try:
+            import websockets
+        except Exception as exc:
+            logger.warning("Sensor WebSocket disabled because websockets is unavailable: %s", exc)
+            return
+        loop = asyncio.get_running_loop()
+        queue = asyncio.Queue(maxsize=64)
+        with self._sensor_ws_lock:
+            self._sensor_ws_loop_ref = loop
+            self._sensor_ws_queue = queue
+        while not self._sensor_ws_stop.is_set():
+            try:
+                async with websockets.connect(
+                    self._sensor_ws_url,
+                    open_timeout=1.0,
+                    ping_interval=10.0,
+                    ping_timeout=3.0,
+                    close_timeout=1.0,
+                ) as websocket:
+                    self._sensor_ws_connected = True
+                    logger.info("Connected to ROS2 sensor WebSocket at %s", self._sensor_ws_url)
+                    while not self._sensor_ws_stop.is_set():
+                        send_task = asyncio.create_task(queue.get())
+                        receive_task = asyncio.create_task(websocket.recv())
+                        done, pending = await asyncio.wait(
+                            {send_task, receive_task},
+                            return_when=asyncio.FIRST_COMPLETED,
+                        )
+                        for task in pending:
+                            task.cancel()
+                        if send_task in done:
+                            await websocket.send(send_task.result())
+                        if receive_task in done:
+                            self._accept_sensor_ws_message(receive_task.result())
+            except Exception as exc:
+                self._sensor_ws_connected = False
+                logger.debug("Sensor WebSocket unavailable at %s: %s", self._sensor_ws_url, exc)
+                await asyncio.sleep(1.0)
+
+    def _accept_sensor_ws_message(self, message):
+        try:
+            data = json.loads(message)
+        except (TypeError, ValueError):
+            return
+        snapshot = data.get("conditional_servo")
+        if isinstance(snapshot, dict):
+            with self._sensor_ws_lock:
+                self._conditional_servo_latest = dict(snapshot)
+
+    def publish_sensor_state(self, *, sensor: str, state: bool, stream_id: str, sequence: int,
+                             detected_monotonic_ns: int | None = None) -> bool:
+        with self._sensor_ws_lock:
+            loop = self._sensor_ws_loop_ref
+            queue = self._sensor_ws_queue
+            connected = self._sensor_ws_connected
+        if not connected or loop is None or queue is None:
+            return False
+        payload = json.dumps({
+            "type": "sensor_state",
+            "sensor": str(sensor),
+            "state": "active" if state else "inactive",
+            "stream_id": str(stream_id),
+            "sequence": int(sequence),
+            "detected_monotonic_ns": int(detected_monotonic_ns or time.monotonic_ns()),
+        }, separators=(",", ":"))
+
+        def enqueue():
+            if queue.full():
+                try:
+                    queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    pass
+            queue.put_nowait(payload)
+
+        loop.call_soon_threadsafe(enqueue)
+        return True
+
+    def get_conditional_servo_status(self) -> dict | None:
+        execution = self._get_execution_ws_status()
+        if isinstance(execution, dict) and isinstance(execution.get("conditional_servo"), dict):
+            return dict(execution["conditional_servo"])
+        with self._sensor_ws_lock:
+            return dict(self._conditional_servo_latest) if self._conditional_servo_latest else None
+
+    def _mark_execution_request_sent(self, label: str) -> float:
+        now = time.monotonic()
+        with self._execution_request_lock:
+            self._last_execution_request_label = str(label)
+            self._last_execution_request_sent_at = now
+            self._last_execution_request_task_id = None
+            self._execution_ws_was_executing = False
+            self._last_execution_preplan_signature = None
+        logger.info("[EXECUTION_TIMING] %s request_sent", label)
+        return now
+
+    def _mark_execution_request_response(self, label: str, raw: dict, elapsed_s: float) -> None:
+        task_id = raw.get("task_id") if isinstance(raw, dict) else None
+        with self._execution_request_lock:
+            self._last_execution_request_task_id = task_id
+        logger.info(
+            "[EXECUTION_TIMING] %s response_received elapsed_s=%.3f task_id=%s queued=%s final=%s",
+            label,
+            elapsed_s,
+            task_id,
+            raw.get("queued") if isinstance(raw, dict) else None,
+            raw.get("final") if isinstance(raw, dict) else None,
+        )
+
+    @staticmethod
+    def _execution_status_active(status: dict) -> bool:
+        if bool(status.get("is_executing")):
+            return True
+        state = str(status.get("state") or status.get("status") or "").strip().lower()
+        if state in {"running", "executing", "active", "moving"}:
+            return True
+        ordered = status.get("ordered_motion_chain")
+        if isinstance(ordered, dict):
+            ordered_state = str(ordered.get("state") or ordered.get("status") or "").strip().lower()
+            return bool(ordered.get("is_executing")) or ordered_state in {
+                "running",
+                "executing",
+                "active",
+                "moving",
+            }
+        return False
+
+    @staticmethod
+    def _execution_status_summary(status: dict) -> dict:
+        ordered = status.get("ordered_motion_chain")
+        summary = {
+            "source": status.get("source"),
+            "state": status.get("state") or status.get("status"),
+            "is_executing": status.get("is_executing"),
+            "task_id": status.get("current_task_id") or status.get("task_id"),
+        }
+        if isinstance(ordered, dict):
+            summary.update({
+                "ordered_state": ordered.get("state") or ordered.get("status"),
+                "segment_index": ordered.get("current_segment_index"),
+                "segment_label": ordered.get("current_segment_label") or ordered.get("segment_label"),
+                "planned_segments_count": ordered.get("planned_segments_count"),
+                "executed_segments_count": ordered.get("executed_segments_count"),
+                "preplanned_ready_count": ordered.get("preplanned_ready_count"),
+                "next_preplanned_segment_index": ordered.get("next_preplanned_segment_index"),
+                "next_preplanned_segment_label": ordered.get("next_preplanned_segment_label"),
+            })
+        return {key: value for key, value in summary.items() if value is not None}
+
+    @staticmethod
+    def _execution_preplan_summary(status: dict) -> dict | None:
+        ordered = status.get("ordered_motion_chain")
+        if not isinstance(ordered, dict):
+            return None
+        keys = (
+            "current_segment_index",
+            "current_segment_number",
+            "current_segment_label",
+            "current_segment_type",
+            "planned_segments_count",
+            "executed_segments_count",
+            "preplanned_ready_count",
+            "next_preplanned_segment_index",
+            "next_preplanned_segment_number",
+            "next_preplanned_segment_label",
+            "next_preplanned_segment_type",
+            "last_planned_segment_index",
+            "last_planned_segment_number",
+            "last_planned_segment_label",
+            "last_planned_segment_type",
+        )
+        summary = {key: ordered.get(key) for key in keys if ordered.get(key) is not None}
+        return summary or None
+
+    @staticmethod
+    def _preplan_signature(summary: dict | None) -> tuple | None:
+        if not summary:
+            return None
+        return tuple((key, summary.get(key)) for key in sorted(summary))
+
+    def _log_execution_preplan_status(self, status: dict) -> None:
+        summary = self._execution_preplan_summary(status)
+        signature = self._preplan_signature(summary)
+        active = self._execution_status_active(status)
+        now = time.monotonic()
+        with self._execution_request_lock:
+            previous_signature = self._last_execution_preplan_signature
+            if active:
+                self._last_execution_preplan_signature = signature
+            else:
+                self._last_execution_preplan_signature = None
+            label = self._last_execution_request_label or "execution"
+            sent_at = self._last_execution_request_sent_at
+
+        if not active or signature is None or signature == previous_signature:
+            return
+        logger.info(
+            "[EXECUTION_PREPLAN] %s after_request_s=%.3f status=%s",
+            label,
+            now - sent_at if sent_at else -1.0,
+            summary,
+        )
+
+    def _log_execution_ws_transition(self, status: dict) -> None:
+        active = self._execution_status_active(status)
+        now = time.monotonic()
+        with self._execution_request_lock:
+            was_active = self._execution_ws_was_executing
+            self._execution_ws_was_executing = active
+            label = self._last_execution_request_label or "execution"
+            sent_at = self._last_execution_request_sent_at
+            task_id = self._last_execution_request_task_id
+
+        if active and not was_active:
+            logger.info(
+                "[EXECUTION_TIMING] %s first_active_status after_request_s=%.3f task_id=%s status=%s",
+                label,
+                now - sent_at if sent_at else -1.0,
+                task_id,
+                self._execution_status_summary(status),
+            )
+        elif was_active and not active:
+            logger.info(
+                "[EXECUTION_TIMING] %s inactive_status after_request_s=%.3f task_id=%s status=%s",
+                label,
+                now - sent_at if sent_at else -1.0,
+                task_id,
+                self._execution_status_summary(status),
+            )
+
+    @staticmethod
+    def _parse_result(raw: dict) -> int:
+        value = raw.get("result")
+        if isinstance(value, bool):
+            return 0 if value else -1
+        return value if value is not None else -1
+
+    @staticmethod
+    def _error_text(raw: dict, fallback: str) -> str:
+        if not isinstance(raw, dict):
+            return fallback
+        return str(raw.get("error") or raw.get("message") or fallback)
+
+    def _mark_startup_failure_if_present(self, raw: dict, fallback: str) -> bool:
+        startup = raw.get("startup") if isinstance(raw, dict) else None
+        if not isinstance(startup, dict):
+            return False
+        state = "error" if startup.get("error") else "starting"
+        self._mark_unavailable(
+            self._error_text(raw, fallback),
+            state=state,
+            startup_status=startup,
+        )
+        return True
+
+    def _response_failed(self, label: str, response, raw: dict) -> bool:
+        failed = response.status_code >= 400 or raw.get("success") is False
+        if not failed:
+            return False
+        logger.warning("%s rejected: http=%s raw=%s", label, response.status_code, raw)
+        self._mark_startup_failure_if_present(raw, f"{label} failed")
+        return True
+
+    def _parse_motion_response(self, label: str, response, raw: dict, *, blocking: bool) -> int:
+        result_code = self._parse_result(raw)
+        if self._response_failed(label, response, raw):
+            return result_code
+
+        queued = bool(raw.get("queued", False))
+        final = raw.get("final")
+        if blocking and (queued or final is False):
+            logger.warning(
+                "%s returned non-final response to blocking request: http=%s raw=%s",
+                label,
+                response.status_code,
+                raw,
+            )
+            return -1
+
+        self._mark_available()
+        return result_code
+
+    @staticmethod
+    def _execution_info(response, raw: dict, result_code: int) -> dict:
+        return {
+            "http_status": response.status_code,
+            "result_code": result_code,
+            "error": raw.get("error") or raw.get("message"),
+            "task_id": raw.get("task_id"),
+            "queued": bool(raw.get("queued", False)),
+            "queue_position": raw.get("queue_position"),
+            "accepted": raw.get("accepted"),
+            "final": raw.get("final"),
+            "state": raw.get("state"),
+            "status_url": raw.get("status_url"),
+            "status_ws": raw.get("status_ws"),
+            "status_ws_port": raw.get("status_ws_port"),
+            "raw": raw,
+        }
+
+    def health_check(self):
+        try:
+            response = requests.get(f"{self.server_url}/health", timeout=2)
+            data = response.json()
+            logger.debug("health_check ← status=%s body=%s", response.status_code, data)
+            if data.get("status") == "ok":
+                self._mark_available()
+                self._last_health_error = None
+                self._last_health_error_logged_at = 0.0
+            else:
+                state = "error" if data.get("error") else "starting"
+                self._mark_unavailable(data.get("message") or data, state=state, startup_status=data)
+            return data
+        except Exception as e:
+            self._log_health_check_error(e)
+            self._mark_unavailable(e)
+            return {"status": "error", "message": str(e)}
+
+    def _log_health_check_error(self, error: Exception) -> None:
+        message = str(error)
+        now = time.monotonic()
+        cls = type(self)
+        if (
+            message == cls._GLOBAL_LAST_HEALTH_ERROR
+            and (now - cls._GLOBAL_LAST_HEALTH_ERROR_LOGGED_AT) < self._HEALTH_ERROR_LOG_INTERVAL_S
+        ):
+            logger.debug("health_check error repeated: %s", message)
+            return
+
+        self._last_health_error = message
+        self._last_health_error_logged_at = now
+        cls._GLOBAL_LAST_HEALTH_ERROR = message
+        cls._GLOBAL_LAST_HEALTH_ERROR_LOGGED_AT = now
+        logger.warning("health_check error: %s", message)
+
+    # ============ Motion Commands ============
+
+    def _motion_preflight_error(self, label: str):
+        if not self._available:
+            self._probe_reconnect_if_needed()
+        if not self._available:
+            logger.warning("%s rejected: ROS2 bridge is disconnected", label)
+            return -1
+        status = self.get_drive_status()
+        if status.get("motion_allowed_by_drive_enable") is not None:
+            self._drive_enabled = bool(status.get("motion_allowed_by_drive_enable"))
+        elif status.get("actual_enabled") is not None:
+            self._drive_enabled = bool(status.get("actual_enabled"))
+        elif status.get("requested_enabled") is not None:
+            self._drive_enabled = bool(status.get("requested_enabled"))
+        if not self._drive_enabled:
+            logger.info("%s drive is not operation_enabled; requesting enable", label)
+            if self.enable() != 0:
+                logger.warning("%s rejected: drive operation is not enabled; call enable() first", label)
+                return self._MOTION_ERROR_DRIVE_NOT_ENABLED
+            for _ in range(10):
+                status = self.get_drive_status()
+                if status.get("motion_allowed_by_drive_enable") is not None:
+                    self._drive_enabled = bool(status.get("motion_allowed_by_drive_enable"))
+                elif status.get("actual_enabled") is not None:
+                    self._drive_enabled = bool(status.get("actual_enabled"))
+                if self._drive_enabled:
+                    break
+                time.sleep(0.1)
+            if not self._drive_enabled:
+                logger.warning("%s rejected: drive enable requested but drives are not operation_enabled", label)
+                return self._MOTION_ERROR_DRIVE_NOT_ENABLED
+        return None
+
+    def move_cartesian(self, position, tool=0, user=0, vel=30, acc=30, blendR=0):
+        if not self.set_active_tool(tool):
+            return -1
+        if not self._drive_enabled and self.enable() != 0:
+            return -1
+        preflight_error = self._motion_preflight_error("move_cartesian")
+        if preflight_error is not None:
+            return preflight_error
+        payload = {"position": self._to_float_list(position), "tool": tool, "user": user, "vel": vel, "acc": acc}
+        logger.debug("move_cartesian → POST /move/cartesian payload=%s", payload)
+        try:
+            request_started = self._mark_execution_request_sent("move_cartesian")
+            response = requests.post(f"{self.server_url}/move/cartesian", json=payload, timeout=30)
+            raw = response.json()
+            result_code = self._parse_motion_response("move_cartesian", response, raw, blocking=True)
+            self._mark_execution_request_response("move_cartesian", raw, time.monotonic() - request_started)
+            logger.debug(
+                "move_cartesian ← http=%s raw=%s result_code=%s",
+                response.status_code, raw, result_code,
+            )
+            return result_code
+        except Exception as e:
+            self._mark_unavailable(e)
+            logger.error("move_cartesian error: %s", e, exc_info=True)
+            return -1
+
+    def move_liner(self, position, tool=0, user=0, vel=30, acc=30, blendR=0, blocking=True, trajectory_optimizer="TOTG",
+                   allow_collision_recovery=False):
+        if not self.set_active_tool(tool):
+            return -1
+        if not self._drive_enabled and self.enable() != 0:
+            return -1
+        preflight_error = self._motion_preflight_error("move_liner")
+        if preflight_error is not None:
+            return preflight_error
+        payload = {
+            "position": self._to_float_list(position),
+            "tool": tool,
+            "user": user,
+            "vel": vel,
+            "acc": acc,
+            "blocking": blocking,
+            "trajectory_optimizer": trajectory_optimizer,
+        }
+        if allow_collision_recovery:
+            payload["allow_collision_recovery"] = True
+        logger.debug("move_liner → POST /move/linear payload=%s", payload)
+        try:
+            request_started = self._mark_execution_request_sent("move_liner")
+            response = requests.post(f"{self.server_url}/move/linear", json=payload, timeout=30)
+            logger.debug("move_liner ← http=%s response_text=%r", response.status_code,
+                         response.text[:500] if response.text else "(empty)")
+
+            raw = response.json()
+            result_code = self._parse_motion_response("move_liner", response, raw, blocking=bool(blocking))
+            self._mark_execution_request_response("move_liner", raw, time.monotonic() - request_started)
+            logger.debug(
+                "move_liner ← http=%s raw=%s result_code=%s",
+                response.status_code, raw, result_code,
+            )
+            return result_code
+        except Exception as e:
+            self._mark_unavailable(e)
+            logger.error("move_liner error: %s", e, exc_info=True)
+            return -1
+
+    def move_ptp(self, position, tool=0, user=0, vel=30, acc=30, blendR=0, blocking=True, trajectory_optimizer="TOTG"):
+        if not self.set_active_tool(tool):
+            return -1
+        if not self._drive_enabled and self.enable() != 0:
+            return -1
+        preflight_error = self._motion_preflight_error("move_ptp")
+        if preflight_error is not None:
+            return preflight_error
+        payload = {
+            "position": self._to_float_list(position),
+            "tool": tool,
+            "user": user,
+            "vel": vel,
+            "acc": acc,
+            "blocking": blocking,
+            "trajectory_optimizer": trajectory_optimizer,
+        }
+        logger.debug("move_ptp → POST /move/ptp payload=%s", payload)
+        try:
+            request_started = self._mark_execution_request_sent("move_ptp")
+            response = requests.post(f"{self.server_url}/move/ptp", json=payload, timeout=30)
+            raw = response.json()
+            result_code = self._parse_motion_response("move_ptp", response, raw, blocking=bool(blocking))
+            self._mark_execution_request_response("move_ptp", raw, time.monotonic() - request_started)
+            logger.debug(
+                "move_ptp ← http=%s raw=%s result_code=%s",
+                response.status_code, raw, result_code,
+            )
+            return result_code
+        except Exception as e:
+            self._mark_unavailable(e)
+            logger.error("move_ptp error: %s", e, exc_info=True)
+            return -1
+
+    def execute_path(
+        self,
+        path,
+        rx=None,
+        ry=None,
+        rz=None,
+        vel=0.6,
+        acc=0.4,
+        blocking=False,
+        trajectory_optimizer=None,
+        orientation_mode="constant",
+    ):
+        if not self._drive_enabled and self.enable() != 0:
+            return -1
+        preflight_error = self._motion_preflight_error("execute_path")
+        if preflight_error is not None:
+            return preflight_error
+        sanitized_path = [self._to_float_list(p) for p in path] if path else path
+        payload = {
+            "path": sanitized_path,
+            "rx_degrees": rx,
+            "ry_degrees": ry,
+            "rz_degrees": rz,
+            "vel": vel,
+            "acc": acc,
+            "blocking": blocking,
+            "orientation_mode": orientation_mode,
+        }
+        if trajectory_optimizer:
+            payload["trajectory_optimizer"] = trajectory_optimizer
+        logger.debug(
+            "execute_path → POST /execute/path waypoints=%d blocking=%s vel=%s acc=%s optimizer=%s orientation_mode=%s",
+            len(path) if path else 0,
+            blocking,
+            vel,
+            acc,
+            trajectory_optimizer,
+            orientation_mode,
+        )
+        try:
+            request_started = self._mark_execution_request_sent("execute_path")
+            response = requests.post(f"{self.server_url}/execute/path", json=payload, timeout=120)
+            raw = response.json()
+            result_code = self._parse_motion_response("execute_path", response, raw, blocking=bool(blocking))
+            self._last_execute_path_response = self._execution_info(response, raw, result_code)
+            self._mark_execution_request_response("execute_path", raw, time.monotonic() - request_started)
+            logger.debug(
+                "execute_path ← http=%s raw=%s result_code=%s",
+                response.status_code, raw, result_code,
+            )
+            return result_code
+        except Exception as e:
+            self._mark_unavailable(e)
+            logger.error("execute_path error: %s", e, exc_info=True)
+            return -1
+
+    def get_last_execute_path_response(self):
+        return self._last_execute_path_response
+
+    def get_last_motion_error(self):
+        """Return the backend's latest motion error text, when available."""
+        response = self._last_execute_path_response
+        if isinstance(response, dict):
+            return response.get("error")
+        return self._last_command_error or self._last_error
+
+    def execute_sequence(self, segments, tool=0, user=0, blocking=False):
+        if not self._drive_enabled and self.enable() != 0:
+            return -1
+        preflight_error = self._motion_preflight_error("execute_sequence")
+        if preflight_error is not None:
+            return preflight_error
+        payload_segments = []
+        for segment in segments or []:
+            payload_segments.append(
+                {
+                    "position": self._to_float_list(segment.position),
+                    "vel": float(segment.velocity),
+                    "acc": float(segment.acceleration),
+                    "motion_type": str(segment.motion_type),
+                    "blend_radius": float(segment.blend_radius),
+                }
+            )
+        payload = {
+            "segments": payload_segments,
+            "tool": int(tool),
+            "user": int(user),
+            "blocking": bool(blocking),
+        }
+        logger.debug(
+            "execute_sequence → POST /execute/sequence segments=%d blocking=%s",
+            len(payload_segments),
+            blocking,
+        )
+        try:
+            request_started = self._mark_execution_request_sent("execute_sequence")
+            response = requests.post(f"{self.server_url}/execute/sequence", json=payload, timeout=120)
+            raw = response.json()
+            result_code = self._parse_motion_response("execute_sequence", response, raw, blocking=bool(blocking))
+            self._last_execute_path_response = self._execution_info(response, raw, result_code)
+            self._mark_execution_request_response("execute_sequence", raw, time.monotonic() - request_started)
+            logger.debug(
+                "execute_sequence ← http=%s raw=%s result_code=%s",
+                response.status_code,
+                raw,
+                result_code,
+            )
+            return result_code
+        except Exception as e:
+            self._mark_unavailable(e)
+            logger.error("execute_sequence error: %s", e, exc_info=True)
+            return -1
+
+    def execute_ordered_motion_chain(self, segments, tool=0, user=0, blocking=False, trajectory_optimizer="TOTG"):
+        if not self._drive_enabled and self.enable() != 0:
+            return -1
+        preflight_error = self._motion_preflight_error("execute_ordered_motion_chain")
+        if preflight_error is not None:
+            return preflight_error
+        payload = {
+            "segments": segments or [],
+            "tool": int(tool),
+            "user": int(user),
+            "blocking": bool(blocking),
+        }
+        if trajectory_optimizer:
+            payload["trajectory_optimizer"] = trajectory_optimizer
+        logger.debug(
+            "execute_ordered_motion_chain → POST /execute/ordered_motion_chain "
+            "segments=%d blocking=%s optimizer=%s",
+            len(payload["segments"]),
+            blocking,
+            payload.get("trajectory_optimizer"),
+        )
+        try:
+            request_started = self._mark_execution_request_sent("execute_ordered_motion_chain")
+            response = requests.post(f"{self.server_url}/execute/ordered_motion_chain", json=payload, timeout=300)
+            raw = response.json()
+            result_code = self._parse_motion_response(
+                "execute_ordered_motion_chain",
+                response,
+                raw,
+                blocking=bool(blocking),
+            )
+            self._last_execute_path_response = self._execution_info(response, raw, result_code)
+            self._mark_execution_request_response(
+                "execute_ordered_motion_chain",
+                raw,
+                time.monotonic() - request_started,
+            )
+            logger.debug(
+                "execute_ordered_motion_chain ← http=%s raw=%s result_code=%s",
+                response.status_code,
+                raw,
+                result_code,
+            )
+            return result_code
+        except Exception as e:
+            self._mark_unavailable(e)
+            logger.error("execute_ordered_motion_chain error: %s", e, exc_info=True)
+            return -1
+
+    def prepare_ordered_motion_chain(self, segments, start_position, tool=0, user=0,
+                                     trajectory_optimizer="TOTG",
+                                     allow_servo_during_prepare=False):
+        payload = {
+            "segments": segments or [],
+            "start_position": list(start_position),
+            "tool": int(tool),
+            "user": int(user),
+            "trajectory_optimizer": trajectory_optimizer,
+            "allow_servo_during_prepare": bool(allow_servo_during_prepare),
+        }
+        try:
+            response = requests.post(
+                f"{self.server_url}/execute/ordered_motion_chain/prepare",
+                json=payload,
+                timeout=10,
+            )
+            data = response.json()
+            if self._response_failed("prepare_ordered_motion_chain", response, data):
+                return None
+            return data
+        except Exception as exc:
+            self._mark_unavailable(exc)
+            logger.error("prepare_ordered_motion_chain error: %s", exc, exc_info=True)
+            return None
+
+    def execute_prepared_ordered_motion_chain(self, plan_id):
+        return self._prepared_ordered_request("post", plan_id, "/execute", timeout=300)
+
+    def discard_prepared_ordered_motion_chain(self, plan_id):
+        return self._prepared_ordered_request("delete", plan_id)
+
+    def get_prepared_ordered_motion_chain(self, plan_id):
+        return self._prepared_ordered_request("get", plan_id)
+
+    def _prepared_ordered_request(self, method, plan_id, suffix="", timeout=5):
+        url = f"{self.server_url}/execute/ordered_motion_chain/prepared/{plan_id}{suffix}"
+        try:
+            response = getattr(requests, method)(url, timeout=timeout)
+            data = response.json()
+            # Prepared execution returns a structured motion failure (for
+            # example an active-drive cancellation) with HTTP 500. Preserve
+            # that body so paint/process callers can report the real reason.
+            if suffix == "/execute" and isinstance(data, dict) and (
+                "state" in data or "error" in data
+            ):
+                return data
+            if self._response_failed(f"{method}_prepared_ordered_motion_chain", response, data):
+                return None
+            return data
+        except Exception as exc:
+            self._mark_unavailable(exc)
+            logger.error("prepared ordered motion request error: %s", exc, exc_info=True)
+            return None
+
+    def unwind_joint6(self, blocking=True, queue_if_busy=True, vel=None, acc=None):
+        if not self._drive_enabled and self.enable() != 0:
+            return -1
+        preflight_error = self._motion_preflight_error("unwind_joint6")
+        if preflight_error is not None:
+            return preflight_error
+        payload = {
+            "blocking": bool(blocking),
+            "queue_if_busy": bool(queue_if_busy),
+        }
+        if vel is not None:
+            payload["vel"] = float(vel)
+        if acc is not None:
+            payload["acc"] = float(acc)
+        logger.debug("unwind_joint6 → POST /unwind/joint6 payload=%s", payload)
+        try:
+            request_started = self._mark_execution_request_sent("unwind_joint6")
+            response = requests.post(f"{self.server_url}/unwind/joint6", json=payload, timeout=60)
+            raw = response.json()
+            result_code = self._parse_motion_response("unwind_joint6", response, raw, blocking=bool(blocking))
+            self._mark_execution_request_response("unwind_joint6", raw, time.monotonic() - request_started)
+            logger.debug(
+                "unwind_joint6 ← http=%s raw=%s result_code=%s",
+                response.status_code, raw, result_code,
+            )
+            return result_code
+        except Exception as e:
+            self._mark_unavailable(e)
+            logger.error("unwind_joint6 error: %s", e, exc_info=True)
+            return -1
+
+    def start_jog(self, axis, direction, step, vel, acc):
+        if not self._drive_enabled and self.enable() != 0:
+            return -1
+        preflight_error = self._motion_preflight_error("start_jog")
+        if preflight_error is not None:
+            return preflight_error
+        axis_val = axis.value if hasattr(axis, 'value') else axis
+        dir_val = direction.value if hasattr(direction, 'value') else direction
+        payload = {"axis": axis_val, "direction": dir_val, "step": step, "vel": vel, "acc": acc}
+        logger.debug("start_jog → POST /jog payload=%s", payload)
+        try:
+            request_started = self._mark_execution_request_sent("start_jog")
+            response = requests.post(f"{self.server_url}/jog", json=payload, timeout=10)
+            raw = response.json()
+            result_code = self._parse_motion_response("start_jog", response, raw, blocking=True)
+            self._mark_execution_request_response("start_jog", raw, time.monotonic() - request_started)
+            logger.debug(
+                "start_jog ← http=%s raw=%s result_code=%s",
+                response.status_code, raw, result_code,
+            )
+            return result_code
+        except Exception as e:
+            self._mark_unavailable(e)
+            logger.error("start_jog error: %s", e, exc_info=True)
+            return -1
+
+    def start_joint_jog(self, joint, direction, step, vel, acc):
+        if not self._drive_enabled and self.enable() != 0:
+            return -1
+        preflight_error = self._motion_preflight_error("start_joint_jog")
+        if preflight_error is not None:
+            return preflight_error
+        dir_val = direction.value if hasattr(direction, 'value') else direction
+        payload = {
+            "joint": str(joint),
+            "direction": dir_val,
+            "step": float(step),
+            "vel": float(vel),
+            "acc": float(acc),
+            "blocking": True,
+        }
+        logger.debug("start_joint_jog → POST /jog/joint payload=%s", payload)
+        try:
+            request_started = self._mark_execution_request_sent("start_joint_jog")
+            response = requests.post(f"{self.server_url}/jog/joint", json=payload, timeout=10)
+            raw = response.json()
+            result_code = self._parse_motion_response("start_joint_jog", response, raw, blocking=True)
+            self._mark_execution_request_response("start_joint_jog", raw, time.monotonic() - request_started)
+            logger.debug(
+                "start_joint_jog ← http=%s raw=%s result_code=%s",
+                response.status_code, raw, result_code,
+            )
+            return result_code
+        except Exception as e:
+            self._mark_unavailable(e)
+            logger.error("start_joint_jog error: %s", e, exc_info=True)
+            return -1
+
+    def start_servo_jog(
+        self,
+        axis,
+        direction,
+        *,
+        linear_mm_s=None,
+        angular_deg_s=None,
+        frame="user",
+        tool=0,
+        user=0,
+        disable_collision_checking=False,
+    ):
+        if not self._drive_enabled and self.enable() != 0:
+            return -1
+        preflight_error = self._motion_preflight_error("start_servo_jog")
+        if preflight_error is not None:
+            return preflight_error
+        axis_val = axis.value if hasattr(axis, 'value') else axis
+        dir_val = direction.value if hasattr(direction, 'value') else direction
+        payload = {
+            "axis": axis_val,
+            "direction": dir_val,
+            "frame": frame,
+            "tool": int(tool),
+            "user": int(user),
+        }
+        if linear_mm_s is not None:
+            payload["linear_mm_s"] = float(linear_mm_s)
+        if angular_deg_s is not None:
+            payload["angular_deg_s"] = float(angular_deg_s)
+        if disable_collision_checking:
+            payload["disable_collision_checking"] = True
+        logger.debug("start_servo_jog → POST /servojog/start payload=%s", payload)
+        try:
+            request_started = self._mark_execution_request_sent("start_servo_jog")
+            response = requests.post(f"{self.server_url}/servojog/start", json=payload, timeout=8)
+            if response.status_code == 404:
+                logger.info("start_servo_jog unsupported by runtime")
+                return -404
+            raw = response.json()
+            result_code = self._parse_motion_response("start_servo_jog", response, raw, blocking=True)
+            self._mark_execution_request_response("start_servo_jog", raw, time.monotonic() - request_started)
+            logger.debug(
+                "start_servo_jog ← http=%s raw=%s result_code=%s",
+                response.status_code, raw, result_code,
+            )
+            return result_code
+        except Exception as e:
+            self._mark_unavailable(e)
+            logger.error("start_servo_jog error: %s", e, exc_info=True)
+            return -1
+
+    def stop_servo_jog(
+        self,
+        *,
+        restore_collision_checking: bool = True,
+        timing_trace_id: str | None = None,
+    ):
+        trace_id = timing_trace_id or f"servo-stop-{time.monotonic_ns()}"
+        payload = {
+            "restore_collision_checking": bool(restore_collision_checking),
+            "timing_trace_id": trace_id,
+        }
+        logger.debug("stop_servo_jog → POST /servojog/stop payload=%s", payload)
+        try:
+            request_sent_ns = time.monotonic_ns()
+            logger.info(
+                "[SERVO_STOP_TIMING] trace_id=%s event=stop_http_send "
+                "monotonic_ns=%d",
+                trace_id,
+                request_sent_ns,
+            )
+            response = requests.post(
+                f"{self.server_url}/servojog/stop", json=payload, timeout=5
+            )
+            if response.status_code == 404:
+                logger.info("stop_servo_jog unsupported by runtime")
+                return -404
+            raw = response.json()
+            response_received_ns = time.monotonic_ns()
+            ros_timing = raw.get("timing") if isinstance(raw, dict) else None
+            ros_receive_ns = (
+                ros_timing.get("ros_http_route_enter_ns")
+                if isinstance(ros_timing, dict)
+                else None
+            )
+            send_to_ros_receive_ms = (
+                (ros_receive_ns - request_sent_ns) / 1_000_000.0
+                if isinstance(ros_receive_ns, int)
+                else None
+            )
+            logger.info(
+                "[SERVO_STOP_TIMING] trace_id=%s event=stop_http_response "
+                "monotonic_ns=%d round_trip_ms=%.3f "
+                "send_to_ros_receive_ms=%s ros_timing=%s",
+                trace_id,
+                response_received_ns,
+                (response_received_ns - request_sent_ns) / 1_000_000.0,
+                f"{send_to_ros_receive_ms:.3f}"
+                if send_to_ros_receive_ms is not None
+                else "na",
+                ros_timing,
+            )
+            result_code = self._parse_motion_response("stop_servo_jog", response, raw, blocking=True)
+            self._mark_available()
+            logger.debug(
+                "stop_servo_jog ← http=%s raw=%s result_code=%s",
+                response.status_code, raw, result_code,
+            )
+            return result_code
+        except Exception as e:
+            self._mark_unavailable(e)
+            logger.error("stop_servo_jog error: %s", e, exc_info=True)
+            return -1
+
+    def start_conditional_servo(self, request: dict) -> dict:
+        try:
+            response = requests.post(
+                f"{self.server_url}/servojog/until-condition/start",
+                json=dict(request),
+                timeout=8,
+            )
+            if response.status_code == 404:
+                return {"success": False, "unsupported": True, "error": "unsupported"}
+            raw = response.json()
+            self._mark_available()
+            snapshot = raw.get("conditional_servo") if isinstance(raw, dict) else None
+            if isinstance(snapshot, dict):
+                with self._sensor_ws_lock:
+                    self._conditional_servo_latest = dict(snapshot)
+            return raw if isinstance(raw, dict) else {"success": False, "error": "invalid_response"}
+        except Exception as exc:
+            self._mark_unavailable(exc)
+            logger.error("start_conditional_servo error: %s", exc, exc_info=True)
+            return {"success": False, "error": str(exc)}
+
+    def cancel_conditional_servo(self) -> dict:
+        try:
+            response = requests.post(
+                f"{self.server_url}/servojog/until-condition/cancel",
+                json={},
+                timeout=5,
+            )
+            raw = response.json()
+            return raw if isinstance(raw, dict) else {"success": False, "error": "invalid_response"}
+        except Exception as exc:
+            logger.error("cancel_conditional_servo error: %s", exc, exc_info=True)
+            return {"success": False, "error": str(exc)}
+
+    def servo_jog_to_z(self, **kwargs):
+        payload = dict(kwargs)
+        logger.debug("servo_jog_to_z → POST /servojog/to-z payload=%s", payload)
+        try:
+            request_timeout = max(8.0, float(payload.get("timeout_s", 10.0)) + 5.0)
+            response = requests.post(
+                f"{self.server_url}/servojog/to-z",
+                json=payload,
+                timeout=request_timeout,
+            )
+            if response.status_code == 404:
+                logger.info("servo_jog_to_z unsupported by runtime")
+                return {"success": False, "unsupported": True, "error": "unsupported"}
+            raw = response.json()
+            self._mark_available()
+            logger.debug("servo_jog_to_z ← http=%s raw=%s", response.status_code, raw)
+            return raw if isinstance(raw, dict) else {"success": False, "error": "invalid_response"}
+        except Exception as exc:
+            self._mark_unavailable(exc)
+            logger.error("servo_jog_to_z error: %s", exc, exc_info=True)
+            return {"success": False, "error": str(exc)}
+
+    def move_fast_linear(self, **kwargs):
+        payload = dict(kwargs)
+        request_timeout = max(8.0, float(payload.pop("request_timeout_s", 15.0)))
+        # Existing callers remain blocking by default.  Pickup diagnostics can
+        # opt into asynchronous execution so their sensor loop can stop the
+        # in-flight trajectory as soon as contact is detected.
+        payload["blocking"] = bool(payload.get("blocking", True))
+        payload["position"] = self._to_float_list(payload.get("position", []))
+        tool = int(payload.get("tool", 0))
+        if not self.set_active_tool(tool):
+            return {"result": -1, "success": False, "accepted": False, "final": True,
+                    "queued": False, "error": "active_tool_rejected"}
+        if not self._drive_enabled and self.enable() != 0:
+            return {"result": -1, "success": False, "accepted": False, "final": True,
+                    "queued": False, "error": "drive_enable_failed"}
+        preflight_error = self._motion_preflight_error("move_fast_linear")
+        if preflight_error is not None:
+            return {"result": preflight_error, "success": False, "accepted": False,
+                    "final": True, "queued": False, "error": "motion_preflight_failed"}
+        logger.debug("move_fast_linear → POST /move/fast_lin payload=%s", payload)
+        try:
+            response = requests.post(
+                f"{self.server_url}/move/fast_lin",
+                json=payload,
+                timeout=request_timeout,
+            )
+            if response.status_code == 404:
+                logger.info("move_fast_linear unsupported by runtime")
+                return {"success": False, "unsupported": True, "error": "unsupported"}
+            raw = response.json()
+            if not isinstance(raw, dict):
+                return {"success": False, "error": "invalid_response"}
+            self._mark_available()
+            logger.debug("move_fast_linear ← http=%s raw=%s", response.status_code, raw)
+            return raw
+        except Exception as exc:
+            self._mark_unavailable(exc)
+            logger.error("move_fast_linear error: %s", exc, exc_info=True)
+            return {"success": False, "error": str(exc)}
+
+    def set_motion_passage_closed(self, passage_id: str, closed: bool) -> bool:
+        try:
+            response = requests.post(
+                f"{self.server_url}/safety/passages/{passage_id}",
+                json={"closed": bool(closed)},
+                timeout=5,
+            )
+            raw = response.json()
+            success = bool(
+                response.ok
+                and raw.get("success")
+                and raw.get("closed") == bool(closed)
+            )
+            if success:
+                self._mark_available()
+            else:
+                logger.error(
+                    "set_motion_passage_closed rejected: http=%s raw=%s",
+                    response.status_code,
+                    raw,
+                )
+            return success
+        except Exception as exc:
+            self._mark_unavailable(exc)
+            logger.error("set_motion_passage_closed error: %s", exc, exc_info=True)
+            return False
+
+
+    def stop_motion(self):
+        logger.debug("stop_motion → POST /stop")
+        try:
+            response = requests.post(f"{self.server_url}/stop", timeout=5)
+            raw = response.json()
+            self._mark_available()
+            self._last_stop_response = raw
+            stop_state = raw.get("stop_state")
+            result_code = self._parse_stop_result(raw)
+            logger.debug(
+                "stop_motion ← http=%s raw=%s stop_state=%s result_code=%s",
+                response.status_code, raw, stop_state, result_code,
+            )
+            return result_code
+        except Exception as e:
+            self._mark_unavailable(e)
+            logger.error("stop_motion error: %s", e, exc_info=True)
+            return -1
+
+    def controlled_stop(self, expected_task_id, *, stop_duration_s=None) -> dict:
+        try:
+            payload = {"expected_task_id": expected_task_id}
+            if stop_duration_s is not None:
+                payload["stop_duration_s"] = float(stop_duration_s)
+            response = requests.post(
+                f"{self.server_url}/motion/controlled-stop",
+                json=payload,
+                timeout=2,
+            )
+            raw = response.json()
+            logger.debug(
+                "controlled_stop ← http=%s expected_task_id=%s raw=%s",
+                response.status_code,
+                expected_task_id,
+                raw,
+            )
+            return raw if isinstance(raw, dict) else {
+                "success": False, "error": "invalid_response",
+            }
+        except Exception as exc:
+            logger.error("controlled_stop error: %s", exc, exc_info=True)
+            return {"success": False, "error": str(exc)}
+
+    def get_last_stop_response(self):
+        return self._last_stop_response
+
+    def _parse_stop_result(self, raw: dict) -> int:
+        stop_state = raw.get("stop_state")
+        if stop_state in (self._STOP_STATE_STOPPED, self._STOP_STATE_NO_ACTIVE_MOTION):
+            return 0
+        if stop_state == self._STOP_STATE_STOP_REQUESTED_BUT_UNCONFIRMED:
+            return -2
+        if stop_state == self._STOP_STATE_ERROR:
+            return raw.get("result", -1)
+        return 0 if raw.get("success") else -1
+
+
+
+    # ============ State Queries ============
+
+    def get_state_snapshot(self):
+        ws_snapshot = self._get_state_ws_snapshot()
+        if ws_snapshot is not None:
+            return ws_snapshot
+
+        now = time.monotonic()
+        if (
+            self._state_http_snapshot is not None
+            and now - self._state_http_snapshot_at < self._STATE_HTTP_FALLBACK_INTERVAL_S
+        ):
+            return dict(self._state_http_snapshot)
+
+        try:
+            response = self._session.get(f"{self.server_url}/state/kinematics", timeout=2)
+            data = response.json()
+            if response.status_code == 206 and data.get("partial") is True:
+                logger.debug("get_state_snapshot partial: http=%s data=%s", response.status_code, data)
+                self._mark_available()
+                data["source"] = "http"
+                self._state_http_snapshot = dict(data)
+                self._state_http_snapshot_at = now
+                return data
+            if self._response_failed("get_state_snapshot", response, data):
+                logger.warning(
+                    "get_state_snapshot rejected: http=%s data=%s",
+                    response.status_code,
+                    data,
+                )
+                return None
+            self._mark_available()
+            data["source"] = "http"
+            self._state_http_snapshot = dict(data)
+            self._state_http_snapshot_at = now
+            return data
+        except Exception as e:
+            self._mark_unavailable(e)
+            logger.error("get_state_snapshot error: %s", e, exc_info=True)
+            return None
+
+    def get_current_position(self):
+        # logger.debug("get_current_position → GET /position/current")
+        try:
+            response = requests.get(f"{self.server_url}/position/current", timeout=2)
+            data = response.json()
+            position = data.get("position")
+            # logger.debug(
+            #     "get_current_position ← http=%s raw=%s position=%s",
+            #     response.status_code, data, position,
+            # )
+            if self._response_failed("get_current_position", response, data):
+                return None
+            if position is None or isinstance(position, int):
+                logger.warning("get_current_position: unexpected position value: %s", position)
+                return None
+            self._mark_available()
+            return position
+        except Exception as e:
+            self._mark_unavailable(e)
+            logger.error("get_current_position error: %s", e, exc_info=True)
+            return None
+
+    def get_current_flange_position(self):
+        try:
+            response = requests.get(f"{self.server_url}/position/flange", timeout=2)
+            data = response.json()
+            position = data.get("position")
+            if self._response_failed("get_current_flange_position", response, data) or position is None:
+                logger.warning("get_current_flange_position rejected: http=%s data=%s", response.status_code, data)
+                return None
+            self._mark_available()
+            return [float(v) for v in position]
+        except Exception as e:
+            self._mark_unavailable(e)
+            logger.error("get_current_flange_position error: %s", e, exc_info=True)
+            return None
+
+    def get_current_base_tcp_position(self):
+        """Return active TCP pose in robot-base coordinates, without WOBJ conversion."""
+        try:
+            response = requests.get(f"{self.server_url}/position/base_tcp", timeout=2)
+            data = response.json()
+            position = data.get("position")
+            if self._response_failed("get_current_base_tcp_position", response, data) or position is None:
+                return None
+            self._mark_available()
+            return [float(v) for v in position]
+        except Exception as e:
+            self._mark_unavailable(e)
+            logger.error("get_current_base_tcp_position error: %s", e, exc_info=True)
+            return None
+
+    def set_active_tool(self, tool: int) -> bool:
+        try:
+            tool_id = int(tool)
+            response = requests.post(
+                f"{self.server_url}/tool/active",
+                json={"tool_id": tool_id},
+                timeout=5,
+            )
+            data = response.json()
+            if response.status_code >= 400 or data.get("success") is False:
+                self._last_command_error = str(data.get("error") or f"HTTP {response.status_code}")
+                logger.warning("set_active_tool rejected: tool=%s http=%s data=%s", tool, response.status_code, data)
+                return False
+            self._last_command_error = None
+            self._mark_available()
+            logger.info("Active ROS2 tool set to %s (%s)", tool_id, data.get("tool_name"))
+            return True
+        except Exception as e:
+            self._last_command_error = str(e)
+            self._mark_unavailable(e)
+            logger.error("set_active_tool error: %s", e, exc_info=True)
+            return False
+
+    def get_tool_registry(self):
+        logger.debug("get_tool_registry → GET /tool/registry")
+        try:
+            response = requests.get(f"{self.server_url}/tool/registry", timeout=5)
+            raw = response.json()
+            if self._response_failed("get_tool_registry", response, raw):
+                return None
+            self._mark_available()
+            return raw
+        except Exception as e:
+            self._mark_unavailable(e)
+            logger.error("get_tool_registry error: %s", e, exc_info=True)
+            return None
+
+    def set_active_workobject(self, user: int) -> bool:
+        try:
+            user_id = int(user)
+            response = requests.post(
+                f"{self.server_url}/workobject/active",
+                json={"user_id": user_id},
+                timeout=5,
+            )
+            data = response.json()
+            if response.status_code >= 400 or data.get("success") is False:
+                self._last_command_error = str(data.get("error") or f"HTTP {response.status_code}")
+                logger.warning(
+                    "set_active_workobject rejected: user=%s http=%s data=%s",
+                    user,
+                    response.status_code,
+                    data,
+                )
+                return False
+            self._last_command_error = None
+            self._mark_available()
+            logger.info("Active ROS2 workobject set to %s (%s)", user_id, data.get("workobject_name"))
+            return True
+        except Exception as e:
+            self._last_command_error = str(e)
+            self._mark_unavailable(e)
+            logger.error("set_active_workobject error: %s", e, exc_info=True)
+            return False
+
+    def GetActualTCPPose(self):
+        position = self.get_current_position()
+        if position is None:
+            return (-1, [0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+        return (0, position)
+
+    def get_status(self):
+        ws_status = self._get_execution_ws_status()
+        if ws_status is not None:
+            return ws_status
+
+        try:
+            response = requests.get(f"{self.server_url}/status", timeout=2)
+            data = response.json()
+            if self._response_failed("get_status", response, data):
+                return None
+            self._mark_available()
+            logger.debug("get_status ← http=%s raw=%s", response.status_code, data)
+            return data
+        except Exception as e:
+            self._mark_unavailable(e)
+            logger.error("get_status error: %s", e, exc_info=True)
+            return None
+
+    def get_ordered_motion_chain_status(self):
+        try:
+            response = requests.get(f"{self.server_url}/execute/ordered_motion_chain/status", timeout=2)
+            data = response.json()
+            if self._response_failed("get_ordered_motion_chain_status", response, data):
+                return None
+            self._mark_available()
+            logger.debug(
+                "get_ordered_motion_chain_status ← http=%s raw=%s",
+                response.status_code,
+                data,
+            )
+            return data
+        except Exception as e:
+            self._mark_unavailable(e)
+            logger.error("get_ordered_motion_chain_status error: %s", e, exc_info=True)
+            return None
+
+    def get_safety_walls_status(self):
+        try:
+            response = requests.get(f"{self.server_url}/safety/walls/status", timeout=2)
+            data = response.json()
+            if self._response_failed("get_safety_walls_status", response, data):
+                return data
+            self._mark_available()
+            logger.debug("get_safety_walls_status ← http=%s raw=%s", response.status_code, data)
+            return data
+        except Exception as e:
+            self._mark_unavailable(e)
+            logger.error("get_safety_walls_status error: %s", e, exc_info=True)
+            return {"supported": False, "enabled": None, "error": str(e)}
+
+    def get_drive_status(self):
+        try:
+            response = requests.get(f"{self.server_url}/drive/status", timeout=2)
+            data = response.json()
+            if self._response_failed("get_drive_status", response, data):
+                self._drive_enabled = False
+                return data
+            self._mark_available()
+            if data.get("motion_allowed_by_drive_enable") is not None:
+                self._drive_enabled = bool(data.get("motion_allowed_by_drive_enable"))
+            elif data.get("actual_enabled") is not None:
+                self._drive_enabled = bool(data.get("actual_enabled"))
+            elif data.get("requested_enabled") is not None:
+                self._drive_enabled = bool(data.get("requested_enabled"))
+            return data
+        except Exception as e:
+            self._mark_unavailable(e)
+            logger.error("get_drive_status error: %s", e, exc_info=True)
+            return {"success": False, "requested_enabled": None, "error": str(e)}
+
+    def validate_pose(
+        self,
+        start_position,
+        target_position,
+        tool=0,
+        user=0,
+        start_joint_state: dict | None = None,
+    ) -> dict:
+        payload = {
+            "start_position": self._to_float_list(start_position),
+            "target_position": self._to_float_list(target_position),
+            "tool": int(tool),
+            "user": int(user),
+        }
+        if start_joint_state is not None:
+            payload["start_joint_state"] = start_joint_state
+        logger.debug("validate_pose → POST /reachability/pose payload=%s", payload)
+        try:
+            response = requests.post(f"{self.server_url}/reachability/pose", json=payload, timeout=15)
+            try:
+                data = response.json()
+            except Exception:
+                body = response.text.strip()
+                logger.error(
+                    "validate_pose non-JSON response: http=%s body=%r",
+                    response.status_code,
+                    body[:1000],
+                )
+                raise
+            if response.status_code >= 500:
+                self._response_failed("validate_pose", response, data)
+            else:
+                self._mark_available()
+            logger.debug("validate_pose ← http=%s raw=%s", response.status_code, data)
+            return data
+        except Exception as e:
+            self._mark_unavailable(e)
+            logger.error("validate_pose error: %s", e, exc_info=True)
+            return {"success": False, "supported": False, "reachable": False, "error": str(e)}
+
+    def are_safety_walls_enabled(self):
+        try:
+            response = requests.get(f"{self.server_url}/safety/walls/enabled", timeout=2)
+            data = response.json()
+            if self._response_failed("are_safety_walls_enabled", response, data):
+                return None
+            enabled = data.get("enabled")
+            self._mark_available()
+            logger.debug("are_safety_walls_enabled ← http=%s raw=%s", response.status_code, data)
+            return bool(enabled) if enabled is not None else None
+        except Exception as e:
+            self._mark_unavailable(e)
+            logger.error("are_safety_walls_enabled error: %s", e, exc_info=True)
+            return None
+
+    def enable_safety_walls(self) -> bool:
+        logger.debug("enable_safety_walls → POST /safety/walls/enable")
+        try:
+            response = requests.post(f"{self.server_url}/safety/walls/enable", timeout=5)
+            data = response.json()
+            if self._response_failed("enable_safety_walls", response, data):
+                return False
+            self._mark_available()
+            logger.debug("enable_safety_walls ← http=%s raw=%s", response.status_code, data)
+            return bool(data.get("success")) and bool(data.get("enabled"))
+        except Exception as e:
+            self._mark_unavailable(e)
+            logger.error("enable_safety_walls error: %s", e, exc_info=True)
+            return False
+
+    def disable_safety_walls(self) -> bool:
+        logger.debug("disable_safety_walls → POST /safety/walls/disable")
+        try:
+            response = requests.post(f"{self.server_url}/safety/walls/disable", timeout=5)
+            data = response.json()
+            if self._response_failed("disable_safety_walls", response, data):
+                return False
+            self._mark_available()
+            logger.debug("disable_safety_walls ← http=%s raw=%s", response.status_code, data)
+            return bool(data.get("success")) and data.get("enabled") is False
+        except Exception as e:
+            self._mark_unavailable(e)
+            logger.error("disable_safety_walls error: %s", e, exc_info=True)
+            return False
+
+    def get_current_velocity(self):
+        # logger.debug("get_current_velocity → GET /velocity/current")
+        try:
+            response = requests.get(f"{self.server_url}/velocity/current", timeout=2)
+            data = response.json()
+            velocity = data.get("velocity")
+            # logger.debug(
+            #     "get_current_velocity ← http=%s raw=%s velocity=%s",
+            #     response.status_code, data, velocity,
+            # )
+            if self._response_failed("get_current_velocity", response, data):
+                return None
+            if velocity is None:
+                return None
+            self._mark_available()
+            return (0, velocity)
+        except Exception as e:
+            self._mark_unavailable(e)
+            logger.error("get_current_velocity error: %s", e, exc_info=True)
+            return None
+
+    # ============ Configuration & Control ============
+
+    def enable(self):
+        logger.info("enable → POST /drive/enable")
+        try:
+            response = requests.post(f"{self.server_url}/drive/enable", timeout=5)
+            raw = response.json()
+            if self._response_failed("enable", response, raw):
+                logger.warning("enable rejected: http=%s raw=%s", response.status_code, raw)
+                return -1
+            verified = (
+                response.status_code == 200
+                and raw.get("success") is True
+                and raw.get("actual_enabled") is True
+                and raw.get("motion_allowed_by_drive_enable") is True
+            )
+            if not verified:
+                logger.warning("enable not verified: http=%s raw=%s", response.status_code, raw)
+                self._drive_enabled = False
+                return -1
+            self._mark_available()
+            self._drive_enabled = True
+            logger.info("enable ← http=%s raw=%s", response.status_code, raw)
+            return 0
+        except Exception as e:
+            self._mark_unavailable(e)
+            logger.error("enable error: %s", e, exc_info=True)
+            return -1
+
+    def RobotEnable(self, state):
+        return self.enable() if state == 1 else self.disable()
+
+    def disable(self):
+        logger.info("disable → POST /drive/disable")
+        try:
+            response = requests.post(f"{self.server_url}/drive/disable", timeout=5)
+            raw = response.json()
+            if self._response_failed("disable", response, raw):
+                logger.warning("disable rejected: http=%s raw=%s", response.status_code, raw)
+                return -1
+            verified = (
+                response.status_code == 200
+                and raw.get("success") is True
+                and raw.get("actual_enabled") is False
+                and raw.get("requested_enabled") is False
+            )
+            if not verified:
+                logger.warning("disable not verified: http=%s raw=%s", response.status_code, raw)
+                return -1
+            self._mark_available()
+            self._drive_enabled = False
+            logger.info("disable ← http=%s raw=%s", response.status_code, raw)
+            return 0
+        except Exception as e:
+            self._mark_unavailable(e)
+            logger.error("disable error: %s", e, exc_info=True)
+            return -1
+
+
+    def setDigitalOutput(self, portId, value):
+        payload = {"port": int(portId), "value": int(value)}
+        logger.debug("setDigitalOutput → POST /io/digital_output payload=%s", payload)
+        try:
+            response = requests.post(f"{self.server_url}/io/digital_output", json=payload, timeout=5)
+            raw = response.json()
+            result_code = self._parse_result(raw)
+            if not self._response_failed("setDigitalOutput", response, raw):
+                self._mark_available()
+            logger.debug(
+                "setDigitalOutput ← http=%s raw=%s result_code=%s",
+                response.status_code,
+                raw,
+                result_code,
+            )
+            return result_code
+        except Exception as e:
+            self._mark_unavailable(e)
+            logger.error("setDigitalOutput error: %s", e, exc_info=True)
+            return -1
+
+
+    def resetAllErrors(self):
+        logger.info("resetAllErrors called (not applicable in ROS2)")
+        return 0
+
+    def ResetAllError(self):
+        return self.resetAllErrors()
+
+    # ============ WorkObject Support ============
+
+    def get_workobject_registry(self):
+        logger.debug("get_workobject_registry → GET /workobject/registry")
+        try:
+            response = requests.get(f"{self.server_url}/workobject/registry", timeout=5)
+            raw = response.json()
+            if self._response_failed("get_workobject_registry", response, raw):
+                return None
+            self._mark_available()
+            return raw
+        except Exception as e:
+            self._mark_unavailable(e)
+            logger.error("get_workobject_registry error: %s", e, exc_info=True)
+            return None
+
+    def update_workobject_registry(self, user_id, name=None, transform=None, persist=False):
+        payload = {
+            "name": name,
+            "transform": transform,
+            "persist": bool(persist),
+        }
+        logger.debug("update_workobject_registry → POST /workobject/registry/%s payload=%s", user_id, payload)
+        try:
+            response = requests.post(
+                f"{self.server_url}/workobject/registry/{int(user_id)}",
+                json=payload,
+                timeout=5,
+            )
+            raw = response.json()
+            result_code = 0 if raw.get("success") else -1
+            if not self._response_failed("update_workobject_registry", response, raw):
+                self._mark_available()
+            logger.debug(
+                "update_workobject_registry ← http=%s raw=%s result_code=%s",
+                response.status_code,
+                raw,
+                result_code,
+            )
+            return result_code
+        except Exception as e:
+            self._mark_unavailable(e)
+            logger.error("update_workobject_registry error: %s", e, exc_info=True)
+            return -1
+
+    def set_workobject(self, origin, user_id=0):
+        payload = {"origin": origin, "user_id": user_id}
+        logger.debug("set_workobject → POST /workobject/set payload=%s", payload)
+        try:
+            response = requests.post(f"{self.server_url}/workobject/set", json=payload, timeout=5)
+            raw = response.json()
+            result_code = 0 if raw.get("success") else -1
+            if not self._response_failed("set_workobject", response, raw):
+                self._mark_available()
+            logger.debug(
+                "set_workobject ← http=%s raw=%s result_code=%s",
+                response.status_code, raw, result_code,
+            )
+            return result_code
+        except Exception as e:
+            logger.error("set_workobject error: %s", e, exc_info=True)
+            return -1
+
+    @staticmethod
+    def _to_float_list(position):
+        return [float(v) for v in position]

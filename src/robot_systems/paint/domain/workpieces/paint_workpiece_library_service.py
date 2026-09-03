@@ -15,10 +15,11 @@ def build_paint_workpiece_library_schema() -> WorkpieceSchema:
         id_key="id",
         name_key="name",
         fields=[
-            WorkpieceFieldDescriptor(key="workpieceId", label="ID", table_display=True, detail_display=True, editable=True, widget="text"),
+            WorkpieceFieldDescriptor(key="workpieceId", label="ID", table_display=True, detail_display=True, editable=False),
             WorkpieceFieldDescriptor(key="name", label="Name", table_display=True, detail_display=True, editable=True, widget="text"),
             WorkpieceFieldDescriptor(key="date", label="Date", table_display=True, detail_display=True, editable=False),
             WorkpieceFieldDescriptor(key="description", label="Description", table_display=False, detail_display=True, editable=True, widget="text"),
+            WorkpieceFieldDescriptor(key="height_mm", label="Height (mm)", table_display=True, detail_display=True, editable=True, widget="text"),
         ],
     )
 
@@ -42,6 +43,7 @@ class PaintWorkpieceLibraryService:
                         "name": raw.get("name", meta.get("name", "")),
                         "date": meta.get("date", ""),
                         "description": raw.get("description", ""),
+                        "height_mm": raw.get("height_mm", ""),
                     }
                 )
             )
@@ -51,6 +53,13 @@ class PaintWorkpieceLibraryService:
         raw = self.load_raw(storage_id)
         if raw is None:
             return False, f"Workpiece '{storage_id}' not found"
+        updates = dict(updates or {})
+        updates.pop("workpieceId", None)
+        if "height_mm" in updates:
+            try:
+                updates["height_mm"] = float(updates["height_mm"])
+            except (TypeError, ValueError):
+                return False, "Height (mm) must be a number"
         raw.update(updates)
         return self._service.update(storage_id, raw)
 

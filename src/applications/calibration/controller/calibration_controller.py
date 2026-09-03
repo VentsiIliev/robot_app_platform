@@ -72,32 +72,37 @@ class CalibrationController(IApplicationController):
         self._robot_process_running = False   # ← tracks robot calibration process state
         self._logger   = logging.getLogger(self.__class__.__name__)
         self._area_grid_verify_statuses: dict[str, str] = {}
+        self._ui_signals_connected = False
 
     def load(self) -> None:
+        if self._active:
+            self._logger.debug("CalibrationController.load ignored because the controller is already active")
+            return
         self._running = True
         self._active = True
-        self._bridge.camera_frame.connect(self._on_camera_frame)
-        self._bridge.robot_calibration_status.connect(self._on_robot_calibration_status)
-        self._bridge.log_received.connect(self._on_log_received)
-        self._bridge.stop_btn_enabled.connect(self._view.set_stop_calibration_enabled)
-        self._bridge.test_btn_enabled.connect(self._view.set_test_calibration_enabled)
-        self._bridge.camera_tcp_btn_enabled.connect(self._view.set_camera_tcp_offset_enabled)
-        self._bridge.camera_z_shift_btn_enabled.connect(self._view.set_camera_z_shift_enabled)
-        self._bridge.marker_height_btn_enabled.connect(self._view.set_measure_marker_heights_enabled)
-        self._bridge.area_grid_btn_enabled.connect(self._view.set_measure_area_grid_enabled)
-        self._bridge.test_finished.connect(self._on_test_finished)
-        self._bridge.marker_height_finished.connect(self._on_marker_height_finished)
-        self._bridge.laser_calibration_finished.connect(self._on_laser_calibration_finished)
-        self._bridge.laser_detect_finished.connect(self._on_laser_detect_finished)
-        self._bridge.area_grid_finished.connect(self._on_area_grid_finished)
-        self._bridge.area_grid_verified.connect(self._on_area_grid_verified)
-        self._bridge.area_grid_verify_progress.connect(self._on_area_grid_verify_progress)
-        self._bridge.depth_map_btn_enabled.connect(self._view.set_depth_map_enabled)
-        self._view.stop_calibration_requested.connect(self._on_stop_calibration)
-
-        self._connect_signals()
+        if not self._ui_signals_connected:
+            self._bridge.camera_frame.connect(self._on_camera_frame)
+            self._bridge.robot_calibration_status.connect(self._on_robot_calibration_status)
+            self._bridge.log_received.connect(self._on_log_received)
+            self._bridge.stop_btn_enabled.connect(self._view.set_stop_calibration_enabled)
+            self._bridge.test_btn_enabled.connect(self._view.set_test_calibration_enabled)
+            self._bridge.camera_tcp_btn_enabled.connect(self._view.set_camera_tcp_offset_enabled)
+            self._bridge.camera_z_shift_btn_enabled.connect(self._view.set_camera_z_shift_enabled)
+            self._bridge.marker_height_btn_enabled.connect(self._view.set_measure_marker_heights_enabled)
+            self._bridge.area_grid_btn_enabled.connect(self._view.set_measure_area_grid_enabled)
+            self._bridge.test_finished.connect(self._on_test_finished)
+            self._bridge.marker_height_finished.connect(self._on_marker_height_finished)
+            self._bridge.laser_calibration_finished.connect(self._on_laser_calibration_finished)
+            self._bridge.laser_detect_finished.connect(self._on_laser_detect_finished)
+            self._bridge.area_grid_finished.connect(self._on_area_grid_finished)
+            self._bridge.area_grid_verified.connect(self._on_area_grid_verified)
+            self._bridge.area_grid_verify_progress.connect(self._on_area_grid_verify_progress)
+            self._bridge.depth_map_btn_enabled.connect(self._view.set_depth_map_enabled)
+            self._view.stop_calibration_requested.connect(self._on_stop_calibration)
+            self._connect_signals()
+            self._view.destroyed.connect(self.stop)
+            self._ui_signals_connected = True
         self._subscribe()
-        self._view.destroyed.connect(self.stop)
         calibration_settings = self._model.load_calibration_settings()
         if calibration_settings is not None:
             self._view.load_calibration_settings(
@@ -191,6 +196,9 @@ class CalibrationController(IApplicationController):
         self._view.tool_tcp_solve_requested.connect(self._on_tool_tcp_solve)
         self._view.tool_tcp_save_requested.connect(self._on_tool_tcp_save)
         self._view.tool_tcp_clear_requested.connect(self._on_tool_tcp_clear)
+        self._view.workobject_capture_requested.connect(self._on_workobject_capture)
+        self._view.workobject_solve_requested.connect(self._on_workobject_solve)
+        self._view.workobject_save_requested.connect(self._on_workobject_save)
         self._view.calibrate_laser_requested.connect(self._on_calibrate_laser)
         self._view.detect_laser_requested.connect(self._on_detect_laser)
         self._view.test_calibration_requested.connect(self._on_test_calibration)
@@ -345,6 +353,23 @@ class CalibrationController(IApplicationController):
         self._log(ok, msg)
         if ok:
             self._view.set_tool_tcp_result(None)
+
+    def _on_workobject_capture(self, point: str) -> None:
+        ok, msg, payload = self._model.capture_workobject_point(point)
+        if ok:
+            self._view.set_workobject_capture(payload.get("point", point), payload.get("pose"))
+        self._view.set_workobject_result(ok, msg, payload)
+        self._log(ok, msg)
+
+    def _on_workobject_solve(self, user_id: int, name: str) -> None:
+        ok, msg, payload = self._model.solve_workobject(user_id, name)
+        self._view.set_workobject_result(ok, msg, payload)
+        self._log(ok, msg)
+
+    def _on_workobject_save(self, user_id: int, name: str) -> None:
+        ok, msg, payload = self._model.save_workobject(user_id, name=name, persist=True)
+        self._view.set_workobject_result(ok, msg, payload)
+        self._log(ok, msg)
 
     def _on_task_done(self, result) -> None:
         if not self._running:

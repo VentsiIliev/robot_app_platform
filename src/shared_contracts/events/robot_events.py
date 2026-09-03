@@ -4,6 +4,7 @@ class RobotTopics:
     VELOCITY     = "robot/velocity"
     ACCELERATION = "robot/acceleration"
     TARGETING_DEFINITIONS_CHANGED = "robot/targeting_definitions_changed"
+    ROBOT_CONFIG_CHANGED = "robot/config_changed"
 
 
 class RobotCalibrationTopics:

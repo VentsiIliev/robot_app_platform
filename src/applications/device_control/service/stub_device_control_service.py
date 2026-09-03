@@ -1,4 +1,4 @@
-from typing import Dict, List
+from typing import Dict, List, Mapping
 
 from src.applications.device_control.service.i_device_control_service import (
     IDeviceControlService, MotorEntry,
@@ -11,6 +11,22 @@ _STUB_MOTORS = [
 
 
 class StubDeviceControlService(IDeviceControlService):
+
+    def get_devices(self):
+        return []
+
+    def execute_device_action(self, device_key: str, action: str) -> bool:
+        print(f"[DeviceControl] {device_key}.{action}")
+        return True
+
+    def read_device_state(self, device_key: str) -> Mapping[str, object]:
+        return {"healthy": True}
+
+    def set_device_enabled(self, device_key: str, enabled: bool) -> bool:
+        return bool(enabled)
+
+    def is_device_enabled(self, device_key: str) -> bool:
+        return True
 
     def get_motors(self) -> List[MotorEntry]:
         return list(_STUB_MOTORS)

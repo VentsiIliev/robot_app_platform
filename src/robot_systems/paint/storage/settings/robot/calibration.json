@@ -16,7 +16,7 @@
     "post_align_settle_s": 0.3
   },
   "axis_mapping_config": {
-    "marker_id": 43,
+    "marker_id": 48,
     "move_mm": 50.0,
     "max_attempts": 100,
     "delay_after_move_s": 2.0
@@ -24,11 +24,11 @@
   "camera_tcp_offset_config": {
     "run_during_robot_calibration": false,
     "max_markers_for_tcp_capture": 4,
-    "marker_id": 41,
+    "marker_id": 100,
     "rotation_step_deg": 20.0,
     "iterations": 4,
     "approach_z": 50.0,
-    "approach_rx": -178.83,
+    "approach_rx": -179.99,
     "approach_ry": 0.0,
     "approach_rz": 0.0,
     "velocity": 20,
@@ -63,5 +63,53 @@
   "travel_acceleration": 20,
   "iterative_velocity": 20,
   "iterative_acceleration": 10,
-  "initial_ppm": 3.6574630737304688
+  "initial_ppm": 2.453448486328125,
+  "workobject_calibrations": {
+    "1": {
+      "saved_at_utc": "2026-08-27T11:29:05.270540+00:00",
+      "user_id": 1,
+      "name": "WOBJ_1",
+      "calibration_tool_id": 1,
+      "transform": [
+        -283.8642305299835,
+        -58.158491526401235,
+        2.767972852552758,
+        0.431055395925025,
+        -0.09359814515498485,
+        69.95526091225956
+      ],
+      "points": {
+        "center": [
+          -283.8642305299835,
+          -58.158491526401235,
+          2.767972852552758,
+          -178.3852564305023,
+          0.07302305849933402,
+          69.86698917539125
+        ],
+        "x": [
+          -194.90841305300887,
+          185.65308581729252,
+          3.191944761191834,
+          -178.2795729399375,
+          0.03580353528006811,
+          69.78999467756945
+        ],
+        "y": [
+          -440.3617726678244,
+          -3.293013047180975,
+          4.012113448017524,
+          -178.1739006774288,
+          0.004251198571127567,
+          69.67919517116299
+        ]
+      },
+      "surface_normal": [
+        0.006507640138988049,
+        -0.004113224662280522,
+        0.9999703655622496
+      ],
+      "xy_angle_deg": 90.72418378668107
+    }
+  }
 }

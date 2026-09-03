@@ -16,17 +16,28 @@ class VisionService(IVisionService, IHealthCheckable,IExposureControl):
         self._vision_system = vision_system
         self._work_area_service = work_area_service
         self._running = False
+        self._processing_paused = False
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def start(self) -> None:
         self._vision_system.start_system()
         self._running = True
+        self._processing_paused = False
         self._logger.info("VisionService started")
 
     def stop(self) -> None:
         self._vision_system.stop_system()
         self._running = False
+        self._processing_paused = False
         self._logger.info("VisionService stopped")
+
+    def pause_processing(self) -> None:
+        self._vision_system.pause_processing()
+        self._processing_paused = True
+
+    def resume_processing(self) -> None:
+        self._vision_system.resume_processing()
+        self._processing_paused = False
 
     def set_raw_mode(self, enabled: bool) -> None:
         self._vision_system.rawMode = enabled
@@ -41,14 +52,67 @@ class VisionService(IVisionService, IHealthCheckable,IExposureControl):
         return self._vision_system.updateSettings(settings)
 
     def is_healthy(self) -> bool:
+        details = self.get_health_details()
+        return bool(details.get("healthy"))
+
+    def get_health_details(self) -> dict:
         if not self._running:
-            return False
+            return {"healthy": False, "state": "stopped", "message": "Vision service is stopped"}
+
         state_manager = self._vision_system.state_manager
-        if state_manager is None:
-            # no messaging wired — fall back to a running flag only
-            return self._running
-        from src.engine.vision.implementation.VisionSystem.core.external_communication.system_state_management import ServiceState
-        return state_manager.state in (ServiceState.IDLE, ServiceState.STARTED)
+        state_ok = True
+        state_name = "running"
+        if state_manager is not None:
+            from src.engine.vision.implementation.VisionSystem.core.external_communication.system_state_management import ServiceState
+            state = state_manager.state
+            state_name = getattr(state, "name", str(state)).lower()
+            state_ok = state in (ServiceState.IDLE, ServiceState.STARTED)
+
+        camera_open = self._camera_is_open()
+        frame_fresh = self._latest_frame_is_fresh()
+        paused = bool(self._processing_paused)
+        # A stale frame is expected while processing is intentionally paused.
+        # Camera availability and the underlying service state must still be
+        # valid; a pause must not mask a real disconnection.
+        healthy = bool(state_ok and camera_open and (frame_fresh or paused))
+        if not state_ok:
+            message = f"Vision service state is {state_name}"
+        elif not camera_open:
+            message = "Camera is not open"
+        elif paused:
+            message = "Vision processing paused by paint process"
+        elif not frame_fresh:
+            message = "No fresh camera frame available"
+        else:
+            message = "Vision service healthy"
+        return {
+            "healthy": healthy,
+            "state": state_name,
+            "camera_open": camera_open,
+            "frame_fresh": frame_fresh,
+            "processing_paused": paused,
+            "message": message,
+        }
+
+    def _camera_is_open(self) -> bool:
+        camera = getattr(self._vision_system, "camera", None)
+        is_open = getattr(camera, "isOpened", None)
+        if callable(is_open):
+            try:
+                return bool(is_open())
+            except Exception:
+                return False
+        return camera is not None
+
+    def _latest_frame_is_fresh(self) -> bool:
+        grabber = getattr(self._vision_system, "frame_grabber", None)
+        snapshot_getter = getattr(grabber, "get_latest_snapshot", None)
+        if callable(snapshot_getter):
+            try:
+                return snapshot_getter() is not None
+            except Exception:
+                return False
+        return self.get_latest_frame() is not None
 
     def save_work_area(self, area_type: str, pixel_points) -> tuple[bool, str]:
         import numpy as np

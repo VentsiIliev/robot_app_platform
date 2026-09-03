@@ -10,24 +10,50 @@ from src.engine.common_settings_ids import CommonSettingsID
 from src.robot_systems.paint import application_wiring
 from src.robot_systems.paint.component_ids import ServiceID, SettingsID
 from src.robot_systems.paint.paint_robot_system import PaintRobotSystem
+from src.robot_systems.paint.processes.paint.config import PaintProcessConfig, PaintSafeTravelConfig
+from src.robot_systems.paint.applications.dashboard.config import PaintDashboardUiConfig
 
 
 class TestPaintApplicationWiring(unittest.TestCase):
 
+    def test_contour_preparation_bypass_is_explicit_and_disabled_by_default(self):
+        from src.robot_systems.paint import paint_system_config
+
+        self.assertFalse(application_wiring._bypass_contour_preparation_enabled())
+        with patch.object(paint_system_config, "BYPASS_CONTOUR_PREPARATION", True):
+            self.assertTrue(application_wiring._bypass_contour_preparation_enabled())
+
     def test_build_dashboard_application_passes_dashboard_service_and_messaging(self):
-        robot_system = SimpleNamespace(_dashboard_service=object())
+        dashboard_ui_config = PaintDashboardUiConfig()
+        robot_system = SimpleNamespace(
+            _dashboard_service=object(),
+            ui_config=dashboard_ui_config,
+        )
         messaging = object()
         built_widget = object()
+        jog_service = object()
         factory = MagicMock()
         factory.build.return_value = built_widget
+        factory_cls = MagicMock(return_value=factory)
 
-        with patch("src.robot_systems.paint.applications.dashboard.PaintDashboardFactory", return_value=factory):
+        with patch(
+            "src.robot_systems.paint.applications.dashboard.PaintDashboardFactory",
+            factory_cls,
+        ), patch(
+            "src.applications.base.robot_jog_service_builder.build_robot_system_jog_service",
+            return_value=jog_service,
+        ):
             app = application_wiring._build_dashboard_application(robot_system)
             app.register(messaging)
             widget = app.create_widget()
 
         self.assertIs(widget, built_widget)
-        factory.build.assert_called_once_with(robot_system._dashboard_service, messaging=messaging)
+        factory_cls.assert_called_once_with(ui_config=dashboard_ui_config)
+        factory.build.assert_called_once_with(
+            robot_system._dashboard_service,
+            messaging=messaging,
+            jog_service=jog_service,
+        )
 
     def test_build_paint_path_preparation_service_wires_vision_robot_and_navigation_context(self):
         transformer = object()
@@ -82,6 +108,16 @@ class TestPaintApplicationWiring(unittest.TestCase):
         kwargs["source_contour_processor"](np.asarray([[0.0, 0.0], [10.0, 0.0], [10.0, 10.0]], dtype=float), contour_settings)
         self.assertEqual(15.0, contour_settings["path_tangent_lookahead_mm"])
         self.assertEqual(5.0, contour_settings["path_tangent_deadband_deg"])
+        from src.robot_systems.paint import paint_system_config
+        raw_robot_path = np.asarray([
+            [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
+            [7.0, 8.0, 9.0, 10.0, 11.0, 12.0],
+        ])
+        with patch.object(paint_system_config, "BYPASS_CONTOUR_PREPARATION", True):
+            bypassed = kwargs["contour_processor"](raw_robot_path, {})
+        self.assertEqual("diagnostic_raw_transformed_points", bypassed["method"])
+        self.assertEqual([[1.0, 2.0], [7.0, 8.0]], bypassed["prepared_xy"])
+        self.assertEqual(bypassed["prepared_xy"], bypassed["curve_xy"])
         navigation.get_group_position.assert_called_once()
 
     def test_build_paint_path_preparation_service_falls_back_when_robot_config_values_are_unusable(self):
@@ -124,11 +160,20 @@ class TestPaintApplicationWiring(unittest.TestCase):
             camera_to_tcp_x_offset=1.25,
             camera_to_tcp_y_offset=-3.5,
         )
+        config_service = MagicMock()
+        config_service.get_snapshot.return_value = PaintProcessConfig(
+            safe_travel=PaintSafeTravelConfig(enabled=True, position=[70.0, 80.0, 190.0, 180.0, 0.0, 5.0])
+        )
+        dryer_release = MagicMock()
+        dryer_release.on_workpiece_release_verified.return_value = True
+        dryer_release.wait_until_ready_for_release.return_value = (True, "")
         robot_system = SimpleNamespace(
             _robot_config=robot_config,
             _navigation=navigation,
             _settings_service=settings_service,
             _vacuum_pump="pump",
+            _dryer_release_coordinator=dryer_release,
+            _paint_process_config_service=config_service,
             get_optional_service=MagicMock(return_value=robot_service),
         )
         built_executor = object()
@@ -150,11 +195,15 @@ class TestPaintApplicationWiring(unittest.TestCase):
         self.assertIs(dependencies.path_preparation_service, path_preparation_service)
         self.assertEqual("pump", dependencies.vacuum_pump)
         self.assertEqual("live_robot_config", dependencies.robot_config_provider())
-        self.assertTrue(dependencies.post_execute_callback())
+        self.assertIsNone(dependencies.post_execute_callback)
+        self.assertEqual((True, ""), dependencies.dryer_ready_for_release())
+        self.assertTrue(dependencies.on_workpiece_release_verified())
+        dryer_release.wait_until_ready_for_release.assert_called_once_with()
+        dryer_release.on_workpiece_release_verified.assert_called_once_with()
+        navigation.move_to_calibration_position.assert_not_called()
         self.assertEqual([application_wiring._get_pickup_base_group_id(), "pose"], dependencies.pickup_base_position_provider())
         self.assertEqual([application_wiring._get_paint_base_group_id(), "pose"], dependencies.base_position_provider())
         self.assertEqual([application_wiring._get_cleanup_base_group_id(robot_system), "pose"], dependencies.cleanup_base_position_provider())
-
         self.assertEqual(7, motion_config.pickup_tool)
         self.assertEqual(9, motion_config.pickup_user)
         self.assertEqual("/tmp/paint_debug", motion_config.debug_dump_dir)
@@ -179,6 +228,48 @@ class TestPaintApplicationWiring(unittest.TestCase):
             widget = app.create_widget()
 
         self.assertIs(widget, built_widget)
+        factory.build.assert_called_once_with(service, messaging=messaging, jog_service="jog")
+
+    def test_build_paint_process_settings_application_wires_current_position_provider(self):
+        movement_groups = SimpleNamespace(
+            movement_groups={
+                "Dropoff": "dropoff-group",
+            }
+        )
+        settings_service = MagicMock()
+        settings_service.get.return_value = movement_groups
+        robot = MagicMock()
+        robot.get_current_position.return_value = [1, 2, 3, 4, 5, 6]
+        robot_system = SimpleNamespace(
+            _paint_process_config_service="paint-config-service",
+            _settings_service=settings_service,
+            get_optional_service=MagicMock(return_value=robot),
+        )
+        service = MagicMock()
+        factory = MagicMock()
+        factory.build.return_value = "settings-widget"
+        messaging = object()
+
+        with (
+            patch(
+                "src.robot_systems.paint.applications.paint_process_settings.paint_process_settings_factory.PaintProcessSettingsFactory",
+                return_value=factory,
+            ),
+            patch(
+                "src.robot_systems.paint.applications.paint_process_settings.service.paint_process_settings_application_service.PaintProcessSettingsApplicationService",
+                return_value=service,
+            ) as service_cls,
+            patch("src.applications.base.robot_jog_service_builder.build_robot_system_jog_service", return_value="jog"),
+        ):
+            app = application_wiring._build_paint_process_settings_application(robot_system)
+            app.register(messaging)
+            widget = app.create_widget()
+
+        kwargs = service_cls.call_args.kwargs
+        self.assertEqual("paint-config-service", kwargs["process_config_service"])
+        self.assertEqual("dropoff-group", kwargs["dropoff_group_provider"]())
+        self.assertEqual([1, 2, 3, 4, 5, 6], kwargs["current_position_provider"]())
+        self.assertEqual("settings-widget", widget)
         factory.build.assert_called_once_with(service, messaging=messaging, jog_service="jog")
 
     def test_build_workpiece_library_application_wires_repository_service_and_factory(self):
@@ -259,6 +350,7 @@ class TestPaintApplicationWiring(unittest.TestCase):
     def test_build_camera_and_calibration_settings_applications_wire_expected_services(self):
         robot_system = SimpleNamespace(
             _settings_service="settings",
+            _robot="robot",
             get_optional_service=MagicMock(return_value="vision"),
             get_service=MagicMock(return_value="work_areas"),
             get_work_area_definitions=MagicMock(return_value=["area"]),
@@ -297,6 +389,7 @@ class TestPaintApplicationWiring(unittest.TestCase):
         calibration_service_cls.assert_called_once_with(
             "settings",
             vision_service="vision",
+            robot_service="robot",
         )
         calibration_factory.build.assert_called_once_with("calibration-service", messaging=messaging, jog_service="jog")
         work_area_service_cls.assert_called_once_with(work_area_service="work_areas", vision_service="vision")
@@ -345,14 +438,22 @@ class TestPaintApplicationWiring(unittest.TestCase):
         intrinsic_factory.build.assert_called_once_with("intrinsic-service", messaging=messaging)
 
     def test_build_hand_eye_and_pick_target_applications_wire_runtime_services(self):
+        work_area_service = MagicMock()
+        work_area_service.get_active_area_id.return_value = "paint"
         robot_system = SimpleNamespace(
             _robot_config="robot-config",
             _navigation="navigation",
             _height_measuring_service="height",
+            _work_area_service=work_area_service,
             get_optional_service=MagicMock(side_effect=lambda key: {"robot": "robot", "vision": "vision"}.get(getattr(key, "value", key), None)),
             get_shared_vision_resolver=MagicMock(return_value=("transformer", "resolver")),
             get_targeting_provider=MagicMock(return_value=SimpleNamespace(get_default_target_name=MagicMock(return_value="tool"))),
-            get_target_frame_for_work_area=MagicMock(side_effect=lambda area: SimpleNamespace(name=f"{area}-frame")),
+            get_target_frame_for_work_area=MagicMock(
+                side_effect=lambda area: SimpleNamespace(
+                    name=f"{area}-frame",
+                    target_navigation_group="Magazine" if area == "magazine" else "CALIBRATION",
+                )
+            ),
         )
         messaging = object()
         hand_eye_factory = MagicMock()
@@ -378,9 +479,8 @@ class TestPaintApplicationWiring(unittest.TestCase):
             pick_target_app.register(messaging)
             self.assertEqual(pick_target_app.create_widget(), "pick-target-widget")
 
-        snapshot_cls.assert_called_once_with(vision_service="vision", robot_service="robot")
         hand_eye_service_cls.assert_called_once_with(
-            snapshot_service="snapshot-service",
+            snapshot_service="capture-snapshot",
             robot_service="robot",
             vision_service="vision",
             robot_config="robot-config",
@@ -399,12 +499,20 @@ class TestPaintApplicationWiring(unittest.TestCase):
             default_target_name="tool",
             calibration_frame_name="paint-frame",
             pickup_frame_name="",
+            active_frame_name_getter=unittest.mock.ANY,
+            active_capture_group_getter=unittest.mock.ANY,
         )
         self.assertIs(pick_service_cls.call_args.kwargs["resolver_getter"](), "resolver")
+        self.assertEqual(pick_service_cls.call_args.kwargs["active_frame_name_getter"](), "paint-frame")
+        self.assertEqual(pick_service_cls.call_args.kwargs["active_capture_group_getter"](), "CALIBRATION")
+        work_area_service.get_active_area_id.return_value = "magazine"
+        self.assertEqual(pick_service_cls.call_args.kwargs["active_frame_name_getter"](), "magazine-frame")
+        self.assertEqual(pick_service_cls.call_args.kwargs["active_capture_group_getter"](), "Magazine")
         pick_target_factory.build.assert_called_once_with(pick_service, messaging=messaging, jog_service="jog")
 
     def test_build_capture_snapshot_and_workpiece_services_wire_dependencies(self):
         robot_system = SimpleNamespace(
+            _work_area_service="work-areas",
             get_optional_service=MagicMock(side_effect=lambda key: {"vision": "vision", "robot": "robot"}.get(getattr(key, "value", key))),
             workpieces_storage_path=MagicMock(return_value="/tmp/workpieces"),
         )
@@ -419,7 +527,12 @@ class TestPaintApplicationWiring(unittest.TestCase):
 
         self.assertEqual(snapshot_service, "snapshot-service")
         self.assertEqual(workpiece_service, "workpiece-service")
-        snapshot_cls.assert_called_once_with(vision_service="vision", robot_service="robot")
+        snapshot_cls.assert_called_once_with(
+            vision_service="vision",
+            robot_service="robot",
+            work_area_service="work-areas",
+            active_work_area_validator=unittest.mock.ANY,
+        )
         repo_cls.assert_called_once_with("/tmp/workpieces")
         service_cls.assert_called_once_with("repo")
 
@@ -597,11 +710,12 @@ class TestPaintApplicationWiring(unittest.TestCase):
             default_output_dir="/tmp/intrinsic",
             settings_service="settings",
         )
-        calibration_settings_cls.assert_called_once_with("settings")
+        calibration_settings_cls.assert_called_once_with("settings", robot_service="robot")
         service = calibration_service_cls.call_args.args[0] if calibration_service_cls.call_args.args else calibration_service_cls.call_args.kwargs
         if isinstance(service, dict):
             observer_position_provider = service["observer_position_provider"]
             self.assertEqual(["observer-pose"], observer_position_provider("observer-group"))
+            self.assertEqual("settings", service["settings_service"])
         calibration_factory_cls.assert_called_once_with(work_area_definitions=["paint-area"])
         calibration_factory.build.assert_called_once()
 
@@ -716,9 +830,15 @@ class TestPaintRobotSystemStart(unittest.TestCase):
             patch("src.robot_systems.paint.paint_robot_system.build_robot_system_calibration_service", return_value=MagicMock()),
             patch("src.engine.robot.calibration.robot_calibration_process.RobotCalibrationProcess", return_value=calibration_process),
             patch("src.robot_systems.paint.calibration.coordinator.PaintCalibrationCoordinator", return_value=MagicMock()),
-            patch("src.robot_systems.paint.processes.paint.paint_production_service.PaintProductionService", return_value=production_service),
+            patch(
+                "src.robot_systems.paint.processes.paint.paint_production_service.PaintProductionService",
+                return_value=production_service,
+            ) as production_cls,
             patch("src.robot_systems.paint.processes.PaintProcess", return_value=main_process),
-            patch("src.robot_systems.paint.applications.dashboard.service.paint_dashboard_service.PaintDashboardService", return_value=dashboard_service),
+            patch(
+                "src.robot_systems.paint.applications.dashboard.service.paint_dashboard_service.PaintDashboardService",
+                return_value=dashboard_service,
+            ) as dashboard_cls,
             patch("src.robot_systems.paint.application_wiring._build_paint_workpiece_editor_service", return_value=MagicMock()),
             patch("src.robot_systems.paint.application_wiring._build_capture_snapshot_service", return_value=MagicMock()),
             patch("src.robot_systems.paint.application_wiring._build_paint_path_preparation_service", return_value=MagicMock()),
@@ -735,12 +855,16 @@ class TestPaintRobotSystemStart(unittest.TestCase):
         self.assertEqual(nav_cls.call_args.kwargs["vision"], vision)
         self.assertEqual(nav_cls.call_args.kwargs["work_area_service"], work_area_service)
         self.assertEqual(nav_cls.call_args.kwargs["robot_service"], robot)
+        self.assertIs(production_cls.call_args.kwargs["navigation_service"], navigation)
+        self.assertIs(dashboard_cls.call_args.kwargs["robot_service"], robot)
+        self.assertIs(dashboard_cls.call_args.kwargs["vision_service"], vision)
         self.assertEqual(
             nav_cls.call_args.kwargs["observed_area_by_group"],
-            {"CALIBRATION": "paint"},
+            {"CALIBRATION": "paint", "Magazine": "magazine"},
         )
         self.assertIs(system._navigation, navigation)
         self.assertIs(system._dashboard_service, dashboard_service)
+        system.register_managed_resource.assert_any_call(robot)
         system.register_managed_resource.assert_any_call(vision)
         system.register_managed_resource.assert_any_call(calibration_process)
         system.register_managed_resource.assert_any_call(main_process)

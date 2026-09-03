@@ -13,3 +13,7 @@ class StubModbusActionService(IModbusActionService):
     def test_connection(self, config: ModbusConfig) -> bool:
         print(f"[StubModbusActionService] test_connection → port={config.port}")
         return True
+
+    def grant_serial_port_permissions(self) -> List[str]:
+        print("[StubModbusActionService] grant_serial_port_permissions")
+        return ["/dev/ttyUSB0"]

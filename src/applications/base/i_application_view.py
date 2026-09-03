@@ -25,8 +25,10 @@ class IApplicationView(AppWidget):
     JOG_DRAWER_WIDTH = 320
 
     jog_requested = pyqtSignal(str, str, str, float)
+    joint_jog_requested = pyqtSignal(str, str, str, float)
     jog_started = pyqtSignal(str)
     jog_stopped = pyqtSignal(str)
+    recovery_mode_changed = pyqtSignal(bool)
     language_changed = pyqtSignal()
 
     def __init__(self, title: str, parent=None):
@@ -45,8 +47,10 @@ class IApplicationView(AppWidget):
         self._jog_widget.enable_frame_selector(self.JOG_FRAME_SELECTOR_ENABLED)
         self._drawer.add_widget(self._jog_widget)
         self._jog_widget.jog_requested.connect(self.jog_requested)
+        self._jog_widget.joint_jog_requested.connect(self.joint_jog_requested)
         self._jog_widget.jog_started.connect(self.jog_started)
         self._jog_widget.jog_stopped.connect(self.jog_stopped)
+        self._jog_widget.recovery_mode_changed.connect(self.recovery_mode_changed)
 
         frame_changed = getattr(self, "_on_jog_frame_changed", None)
         if callable(frame_changed):
@@ -65,6 +69,10 @@ class IApplicationView(AppWidget):
     def set_jog_position(self, pos: list) -> None:
         if self._jog_widget is not None:
             self._jog_widget.set_position(pos)
+
+    def set_joint_position(self, joints: list) -> None:
+        if self._jog_widget is not None:
+            self._jog_widget.set_joint_position(joints)
 
     def set_jog_frame_options(self, names: list[str], default: str | None = None) -> None:
         if self._jog_widget is not None:

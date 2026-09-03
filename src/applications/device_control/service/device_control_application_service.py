@@ -1,13 +1,14 @@
 from __future__ import annotations
 import logging
-from typing import Dict, List, Optional
+from threading import RLock
+from typing import Dict, List, Mapping, Optional, Sequence
 
 from src.engine.hardware.generator.interfaces.i_generator_controller import IGeneratorController
 from src.engine.hardware.laser.i_laser_control import ILaserControl
 from src.engine.hardware.motor.interfaces.i_motor_service import IMotorService
 from src.engine.hardware.vacuum_pump.interfaces.i_vacuum_pump_controller import IVacuumPumpController
 from src.applications.device_control.service.i_device_control_service import (
-    IDeviceControlService, MotorEntry,
+    IDeviceControlDevice, IDeviceControlService, MotorEntry,
 )
 
 _logger = logging.getLogger(__name__)
@@ -30,12 +31,54 @@ class DeviceControlApplicationService(IDeviceControlService):
         generator:      Optional[IGeneratorController]  = None,
         laser:          Optional[ILaserControl]         = None,
         vacuum_pump:    Optional[IVacuumPumpController] = None,
+        devices:         Optional[Sequence[IDeviceControlDevice]] = None,
     ) -> None:
         self._motors    = list(motors)
         self._motor     = motor_service
         self._generator = generator
         self._laser     = laser
         self._vacuum    = vacuum_pump
+        self._devices   = {device.key: device for device in (devices or [])}
+        self._hardware_lock = RLock()
+
+    # ── Configuration-driven devices ─────────────────────────────────
+
+    def get_devices(self) -> List[IDeviceControlDevice]:
+        return list(self._devices.values())
+
+    def execute_device_action(self, device_key: str, action: str) -> bool:
+        device = self._devices.get(device_key)
+        if device is None:
+            _logger.warning("Unknown device action: %s.%s", device_key, action)
+            return False
+        try:
+            with self._hardware_lock:
+                return bool(device.execute(action))
+        except Exception:
+            _logger.exception("Device action failed: %s.%s", device_key, action)
+            return False
+
+    def read_device_state(self, device_key: str) -> Mapping[str, object]:
+        device = self._devices.get(device_key)
+        if device is None:
+            return {"healthy": False, "error": "Device is not configured"}
+        try:
+            with self._hardware_lock:
+                return dict(device.read_state())
+        except Exception:
+            _logger.exception("Device state read failed: %s", device_key)
+            return {"healthy": False, "error": "Communication failed"}
+
+    def set_device_enabled(self, device_key: str, enabled: bool) -> bool:
+        device = self._devices.get(device_key)
+        if device is None:
+            return False
+        with self._hardware_lock:
+            return bool(device.set_enabled(enabled))
+
+    def is_device_enabled(self, device_key: str) -> bool:
+        device = self._devices.get(device_key)
+        return bool(device is not None and device.is_enabled())
 
     # ── Queries ───────────────────────────────────────────────────────
 
@@ -147,4 +190,3 @@ class DeviceControlApplicationService(IDeviceControlService):
 
     def is_generator_available(self) -> bool:
         return self._generator is not None
-

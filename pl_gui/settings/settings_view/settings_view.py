@@ -7,7 +7,12 @@ from PyQt6.QtCore import pyqtSignal, Qt
 
 from pl_gui.settings.settings_view.schema import SettingGroup
 from pl_gui.settings.settings_view.group_widget import GenericSettingGroup
-from pl_gui.settings.settings_view.styles import TAB_WIDGET_STYLE, SAVE_BUTTON_STYLE, BG_COLOR
+from pl_gui.settings.settings_view.styles import (
+    BG_COLOR,
+    SAVE_BUTTON_STYLE,
+    TAB_WIDGET_STYLE,
+    TOUCH_SCROLL_AREA_STYLE,
+)
 
 
 class SettingsView(QWidget):
@@ -87,7 +92,7 @@ class SettingsView(QWidget):
 
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
-        scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
+        scroll.setStyleSheet(TOUCH_SCROLL_AREA_STYLE)
         scroll.setWidget(content)
         return scroll
 
@@ -95,7 +100,7 @@ class SettingsView(QWidget):
         """Add a tab containing an arbitrary widget (not schema-driven)."""
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
-        scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
+        scroll.setStyleSheet(TOUCH_SCROLL_AREA_STYLE)
         scroll.setWidget(widget)
         self._tabs.addTab(scroll, title)
 

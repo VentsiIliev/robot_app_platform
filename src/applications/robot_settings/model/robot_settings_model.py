@@ -54,6 +54,11 @@ class RobotSettingsModel(IApplicationModel):
     def get_current_position(self) -> Optional[List[float]]:
         return self._service.get_current_position()
 
+    def reload_config(self) -> RobotSettings:
+        """Reload config changed by another application."""
+        self._config = self._service.load_config()
+        return self._config
+
     def get_slot_info(self) -> List[Tuple[int, str]]:
         return self._service.get_slot_info()
 

@@ -338,7 +338,7 @@ Currently only checks spec name and folder_id. Missing:
 
 **File:** `tests/bootstrap/test_main.py` — currently empty (1 line).
 
-`main.py` runs the entire startup sequence which is complex. The appropriate coverage
+`run_main.py` runs the entire startup sequence which is complex. The appropriate coverage
 is integration-style smoke tests that mock hardware and Qt.
 
 | # | Test | Description |

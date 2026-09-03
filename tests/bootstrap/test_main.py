@@ -18,7 +18,7 @@ from unittest.mock import MagicMock, patch, call
 class TestMainImport(unittest.TestCase):
 
     def test_localization_service_uses_robot_system_storage_paths(self):
-        import src.bootstrap.main as m
+        import src.bootstrap.run_main as m
 
         robot_app = MagicMock()
         robot_app.metadata.translations_root = "storage/translations"
@@ -28,7 +28,7 @@ class TestMainImport(unittest.TestCase):
 
         with (
             patch.dict("sys.modules", {robot_app.__class__.__module__: fake_module}),
-            patch("src.bootstrap.main.LocalizationService") as localization_cls,
+            patch("src.bootstrap.run_main.py.LocalizationService") as localization_cls,
         ):
             localization = MagicMock()
             localization_cls.return_value = localization
@@ -115,31 +115,34 @@ class TestStartupSequenceOrder(unittest.TestCase):
         fake_shell_instance = MagicMock()
 
         with (
-            patch("src.bootstrap.main.EngineContext.build",
+            patch("src.bootstrap.run_main.py.EngineContext.build",
                   side_effect=lambda: (call_order.append("engine"), fake_ctx)[1]),
-            patch("src.bootstrap.main.load_startup_config"),
-            patch("src.bootstrap.main.load_bootstrap_provider",
+            patch("src.bootstrap.run_main.py.load_startup_config"),
+            patch("src.bootstrap.run_main.py.load_bootstrap_provider",
                   return_value=fake_provider),
-            patch("src.bootstrap.main.SystemBuilder",
+            patch("src.bootstrap.run_main.py.build_ros_backend_launcher_from_env",
+                  return_value=MagicMock(start=MagicMock(side_effect=lambda: call_order.append("backend_start")))),
+            patch("src.bootstrap.run_main.py.SystemBuilder",
                   return_value=fake_builder),
-            patch("src.bootstrap.main.ShellConfigurator.configure",
+            patch("src.bootstrap.run_main.py.ShellConfigurator.configure",
                   side_effect=lambda _: call_order.append("shell_cfg")),
-            patch("src.bootstrap.main.QApplication",
+            patch("src.bootstrap.run_main.py.QApplication",
                   side_effect=lambda _: (call_order.append("qt"), MagicMock())[1]),
-            patch("src.bootstrap.main.ApplicationLoader",
+            patch("src.bootstrap.run_main.py.ApplicationLoader",
                   side_effect=lambda _: (call_order.append("loader"), fake_loader)[1]),
-            patch("src.bootstrap.main.AppShell",
+            patch("src.bootstrap.run_main.py.AppShell",
                   side_effect=lambda **kw: (call_order.append("shell"), fake_shell_instance)[1]),
             patch.object(GlueRobotSystem, "shell", MagicMock(applications=[fake_spec])),
             patch("sys.exit"),
         ):
-            import src.bootstrap.main as m
+            import src.bootstrap.run_main as m
             try:
                 m.main()
             except Exception:
                 pass   # sys.exit or Qt errors expected in test environment
 
         self.assertIn("engine",      call_order)
+        self.assertIn("backend_start", call_order)
         self.assertIn("system_build", call_order)
         self.assertIn("shell_cfg",   call_order)
         self.assertIn("qt",          call_order)
@@ -147,6 +150,10 @@ class TestStartupSequenceOrder(unittest.TestCase):
         # engine must come before system_build
         self.assertLess(
             call_order.index("engine"),
+            call_order.index("backend_start"),
+        )
+        self.assertLess(
+            call_order.index("backend_start"),
             call_order.index("system_build"),
         )
         # system_build must come before shell_cfg
@@ -175,21 +182,23 @@ class TestStartupAbortOnFailure(unittest.TestCase):
         qt_called = []
 
         with (
-            patch("src.bootstrap.main.load_startup_config"),
+            patch("src.bootstrap.run_main.py.load_startup_config"),
             patch(
-                "src.bootstrap.main.load_bootstrap_provider",
+                "src.bootstrap.run_main.py.load_bootstrap_provider",
                 return_value=MagicMock(),
             ),
-            patch("src.bootstrap.main.EngineContext.build",
+            patch("src.bootstrap.run_main.py.EngineContext.build",
                   side_effect=RuntimeError("engine init failed")),
-            patch("src.bootstrap.main.QApplication",
+            patch("src.bootstrap.run_main.py.build_ros_backend_launcher_from_env") as backend_launcher,
+            patch("src.bootstrap.run_main.py.QApplication",
                   side_effect=lambda _: qt_called.append("qt")),
         ):
-            import src.bootstrap.main as m
+            import src.bootstrap.run_main as m
             with self.assertRaises(RuntimeError):
                 m.main()
 
         self.assertEqual(qt_called, [], "QApplication must not be called after engine failure")
+        backend_launcher.assert_not_called()
 
 
 if __name__ == "__main__":

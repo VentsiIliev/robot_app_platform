@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import unittest
 from types import SimpleNamespace
 from unittest.mock import ANY, MagicMock
@@ -15,12 +16,21 @@ from src.robot_systems.paint.applications.paint_motion_plane_setup.domain.plane_
 )
 from src.robot_systems.paint.processes.paint.config import (
     PAINT_PROCESS_CONFIG,
+    PaintContactStagingConfig,
     PaintEdgeCleanupConfig,
+    PaintMagazineLoadConfig,
     PaintProcessConfig,
+    PaintSafeTravelConfig,
     PaintSimulationConfig,
 )
+from src.robot_systems.paint.processes.paint.paint_process_config_serializer import PaintProcessConfigSerializer
 from src.robot_systems.paint.processes.paint.execute.edge_cleanup_executor import PaintEdgeCleanupExecutor
-from src.robot_systems.paint.processes.paint.execute.paint_contact_executor import PaintContactExecutor
+from src.robot_systems.paint.processes.paint.execute.paint_contact_executor import (
+    PaintContactExecutor,
+    _remove_projected_local_reversals,
+    _workpiece_largest_side_mm,
+)
+from src.engine.robot.path_preparation import WorkpieceExecutionPlan
 from src.robot_systems.paint.processes.paint.execute.workpiece_path_executor import (
     PaintWorkpiecePathExecutor,
     _camera_to_tcp_delta,
@@ -28,7 +38,152 @@ from src.robot_systems.paint.processes.paint.execute.workpiece_path_executor imp
 )
 
 
+class TestProjectedPathSanitizer(unittest.TestCase):
+    def test_workpiece_largest_side_uses_rotated_minimum_area_rectangle(self) -> None:
+        # A 100 x 20 mm rectangle rotated by 45 degrees has an axis-aligned span
+        # of about 84.85 mm, but its minimum-area rectangle retains the 100 mm side.
+        points = [
+            [-28.284271, -42.426407],
+            [42.426407, 28.284271],
+            [28.284271, 42.426407],
+            [-42.426407, -28.284271],
+        ]
+        plan = WorkpieceExecutionPlan(
+            workpiece={"height_mm": 7.0},
+            raw_paths=[],
+            prepared_paths=[],
+            curve_paths=[],
+            sampled_paths=[],
+            execution_jobs=[{"execution_path": points}],
+            total_spline_pts=len(points),
+        )
+
+        self.assertAlmostEqual(100.0, _workpiece_largest_side_mm(plan), places=3)
+
+    def test_removes_short_fold_and_preserves_retreat(self) -> None:
+        path = [
+            [0.0, 0.0, 10.0, 0.0, 0.0, 0.0],
+            [1.0, 0.1, 10.0, 0.0, 0.0, 1.0],
+            [-1.0, 0.0, 10.0, 0.0, 0.0, 2.0],
+            [-2.0, 0.0, 10.0, 0.0, 0.0, 3.0],
+            [-32.0, -30.0, 10.0, 0.0, 0.0, 3.0],
+        ]
+
+        cleaned = _remove_projected_local_reversals(path)
+
+        self.assertNotIn(path[1], cleaned)
+        self.assertEqual(cleaned[-1], path[-1])
+        self.assertEqual(len(cleaned), len(path) - 1)
+
+
 class TestPaintProcessConfig(unittest.TestCase):
+    def test_sub_zero_dropoff_corridor_settings_roundtrip_and_are_exposed(self) -> None:
+        base = PaintProcessConfig()
+        flat = PaintProcessSettingsMapper.to_flat_dict(base)
+        flat.update({
+            "dropoff_corridor_x_margin_mm": 41.0,
+            "dropoff_corridor_y_margin_mm": 42.0,
+            "dropoff_corridor_z_tolerance_mm": 1.5,
+            "dropoff_corridor_entry_z_max_mm": 75.0,
+            "dropoff_corridor_maximum_velocity_percent": 33.0,
+            "dropoff_corridor_maximum_acceleration_percent": 22.0,
+            "dropoff_sub_zero_approach_z_mm": 55.0,
+            "dropoff_sub_zero_exit_blendR_mm": 12.0,
+        })
+
+        restored = PaintProcessConfigSerializer().from_dict(
+            PaintProcessConfigSerializer().to_dict(
+                PaintProcessSettingsMapper.from_flat_dict(flat, base)
+            )
+        )
+        process_groups = dict(build_paint_process_settings_tabs())["Process"]
+        keys = [field.key for group in process_groups for field in group.fields]
+
+        self.assertEqual(restored.dropoff.corridor_x_margin_mm, 41.0)
+        self.assertEqual(restored.dropoff.corridor_y_margin_mm, 42.0)
+        self.assertEqual(restored.dropoff.corridor_z_tolerance_mm, 1.5)
+        self.assertEqual(restored.dropoff.corridor_entry_z_max_mm, 75.0)
+        self.assertEqual(restored.dropoff.corridor_maximum_velocity_percent, 33.0)
+        self.assertEqual(restored.dropoff.corridor_maximum_acceleration_percent, 22.0)
+        self.assertEqual(restored.dropoff.sub_zero_approach_z_mm, 55.0)
+        self.assertEqual(restored.dropoff.sub_zero_exit_blendR_mm, 12.0)
+        self.assertTrue({
+            "dropoff_corridor_x_margin_mm",
+            "dropoff_corridor_y_margin_mm",
+            "dropoff_corridor_z_tolerance_mm",
+            "dropoff_corridor_entry_z_max_mm",
+            "dropoff_corridor_maximum_velocity_percent",
+            "dropoff_corridor_maximum_acceleration_percent",
+            "dropoff_sub_zero_approach_z_mm",
+            "dropoff_sub_zero_exit_blendR_mm",
+        }.issubset(keys))
+
+    def test_contact_staging_settings_roundtrip_through_ui_and_serializer(self) -> None:
+        base = PaintProcessConfig()
+        flat = PaintProcessSettingsMapper.to_flat_dict(base)
+        flat.update({
+            "staging_attach_z_offset_mm": 1.0,
+            "staging_attach_paint_axis_offset_mm": 2.0,
+            "staging_attach_perpendicular_axis_offset_mm": 3.0,
+            "staging_detach_z_offset_mm": 4.0,
+            "staging_detach_paint_axis_offset_mm": 5.0,
+            "staging_detach_perpendicular_axis_offset_mm": 6.0,
+        })
+
+        mapped = PaintProcessSettingsMapper.from_flat_dict(flat, base)
+        restored = PaintProcessConfigSerializer().from_dict(
+            PaintProcessConfigSerializer().to_dict(mapped)
+        )
+
+        self.assertEqual(
+            PaintContactStagingConfig(1.0, 2.0, 3.0, 4.0, 5.0, 6.0),
+            restored.contact_staging,
+        )
+
+    def test_distance_offsets_tab_exposes_attach_and_detach_staging_offsets(self) -> None:
+        distance_groups = dict(build_paint_process_settings_tabs())["Distances & Offsets"]
+        keys = [field.key for group in distance_groups for field in group.fields]
+
+        self.assertIn("staging_attach_perpendicular_axis_offset_mm", keys)
+        self.assertIn("staging_detach_perpendicular_axis_offset_mm", keys)
+
+    def test_cleanup_perpendicular_retreat_offset_roundtrips_and_is_exposed(self) -> None:
+        base = PaintProcessConfig()
+        flat = PaintProcessSettingsMapper.to_flat_dict(base)
+        flat["cleanup_perpendicular_retreat_offset_mm"] = -37.5
+
+        mapped = PaintProcessSettingsMapper.from_flat_dict(flat, base)
+        restored = PaintProcessConfigSerializer().from_dict(
+            PaintProcessConfigSerializer().to_dict(mapped)
+        )
+        distance_groups = dict(build_paint_process_settings_tabs())["Distances & Offsets"]
+        keys = [field.key for group in distance_groups for field in group.fields]
+
+        self.assertEqual(restored.edge_cleanup.perpendicular_retreat_offset_mm, -37.5)
+        self.assertIn("cleanup_perpendicular_retreat_offset_mm", keys)
+
+    def test_cleanup_retreat_uses_axis_perpendicular_to_translation_axis(self) -> None:
+        config = PaintProcessConfig(
+            edge_cleanup=PaintEdgeCleanupConfig(perpendicular_retreat_offset_mm=-25.0)
+        )
+        owner = SimpleNamespace(
+            _contact_motion_config=SimpleNamespace(
+                planar_axes=("x", "y"),
+                translation_axis="y",
+            ),
+            _paint_process_config=lambda: config,
+        )
+
+        cleanup = PaintEdgeCleanupExecutor(owner)
+        offset_pose = cleanup._perpendicular_offset_pose([100.0, 200.0, 300.0, 0.0, 0.0, 0.0])
+
+        self.assertEqual(offset_pose[:3], [75.0, 200.0, 300.0])
+
+        owner._contact_motion_config.translation_axis = "x"
+        offset_pose = cleanup._perpendicular_offset_pose([100.0, 200.0, 300.0, 0.0, 0.0, 0.0])
+
+        self.assertEqual(offset_pose[:3], [100.0, 175.0, 300.0])
+
     def test_process_config_derived_properties_follow_motion_plane(self) -> None:
         default_config = PaintProcessConfig()
 
@@ -37,6 +192,18 @@ class TestPaintProcessConfig(unittest.TestCase):
         self.assertEqual(default_config.secondary_group_id, "Horizontal Shaft")
         self.assertEqual(default_config.cleanup_group_id, "Clean")
         self.assertEqual(default_config.pivot_contact_side, "positive")
+        self.assertFalse(default_config.magazine_load.enabled)
+        self.assertEqual(default_config.magazine_load.magazine_group_id, "Magazine")
+        self.assertEqual(default_config.magazine_load.calibration_group_id, "CALIBRATION")
+        self.assertEqual(default_config.magazine_load.move_to_magazine_vel_percent, 30.0)
+        self.assertEqual(default_config.magazine_load.move_to_magazine_acc_percent, 30.0)
+        self.assertEqual(default_config.magazine_load.transfer_to_calibration_vel_percent, 30.0)
+        self.assertEqual(default_config.magazine_load.transfer_to_calibration_acc_percent, 30.0)
+        self.assertFalse(default_config.safe_travel.enabled)
+        self.assertEqual(default_config.safe_travel.position, [])
+        self.assertFalse(default_config.dropoff_safe_travel.enabled)
+        self.assertEqual(default_config.dropoff_safe_travel.position, [])
+        self.assertFalse(default_config.enable_path_debug_plots)
 
         original = application_wiring._PAINT_PROCESS
         try:
@@ -53,7 +220,7 @@ class TestPaintProcessConfig(unittest.TestCase):
         default_config = PaintProcessConfig()
 
         self.assertEqual(default_config.pickup_motion.approach_offset_mm, 100.0)
-        self.assertEqual(default_config.pickup_motion.contact_offset_mm, 2.0)
+        self.assertEqual(default_config.pickup_motion.contact_offset_mm, 5.0)
         self.assertEqual(default_config.pickup_motion.initial_lift_clearance_mm, 20.0)
         self.assertEqual(default_config.pickup_motion.approach_vel_percent, 60.0)
         self.assertEqual(default_config.pickup_motion.approach_acc_percent, 50.0)
@@ -89,12 +256,247 @@ class TestPaintProcessConfig(unittest.TestCase):
         self.assertEqual(restored.interpolation.path_tangent_lookahead_mm, 22.5)
         self.assertEqual(restored.interpolation.path_tangent_deadband_deg, 3.5)
 
+    def test_process_settings_mapper_roundtrips_default_paint_motion(self) -> None:
+        base = PaintProcessConfig()
+        flat = PaintProcessSettingsMapper.to_flat_dict(base)
+
+        self.assertEqual(10.0, flat["default_paint_velocity_percent"])
+        self.assertEqual(10.0, flat["default_paint_acceleration_percent"])
+        self.assertEqual(0.0, flat["default_paint_offset_mm"])
+
+        restored = PaintProcessSettingsMapper.from_flat_dict(
+            {
+                **flat,
+                "default_paint_velocity_percent": 25.0,
+                "default_paint_acceleration_percent": 35.0,
+                "default_paint_offset_mm": -4.5,
+            },
+            base,
+        )
+
+        self.assertEqual(25.0, restored.default_paint_velocity_percent)
+        self.assertEqual(35.0, restored.default_paint_acceleration_percent)
+        self.assertEqual(-4.5, restored.default_paint_offset_mm)
+
+    def test_press_offset_serializer_preserves_tenth_millimeter_value(self) -> None:
+        serializer = PaintProcessConfigSerializer()
+        settings = PaintProcessConfig(default_paint_offset_mm=-4.1)
+
+        encoded = serializer.to_dict(settings)
+        json_data = json.loads(json.dumps(encoded))
+        restored = serializer.from_dict(json_data)
+
+        self.assertIsInstance(encoded["default_paint_offset_mm"], float)
+        self.assertEqual(encoded["default_paint_offset_mm"], -4.1)
+        self.assertIsInstance(json_data["default_paint_offset_mm"], float)
+        self.assertEqual(restored.default_paint_offset_mm, -4.1)
+
+    def test_process_settings_mapper_roundtrips_magazine_load_settings(self) -> None:
+        base = PaintProcessConfig(magazine_load=PaintMagazineLoadConfig(enabled=False))
+        flat = PaintProcessSettingsMapper.to_flat_dict(base)
+
+        self.assertFalse(flat["magazine_load_enabled"])
+        self.assertTrue(flat["run_while_workpiece_found"])
+        self.assertTrue(flat["enable_execution_state_timing"])
+        self.assertEqual(0.5, flat["magazine_camera_settle_s"])
+        self.assertEqual(0.5, flat["magazine_release_settle_s"])
+        self.assertEqual(50.0, flat["magazine_release_z_mm"])
+        self.assertEqual(30.0, flat["magazine_move_to_magazine_vel_percent"])
+        self.assertEqual(30.0, flat["magazine_move_to_magazine_acc_percent"])
+        self.assertEqual(30.0, flat["magazine_transfer_to_calibration_vel_percent"])
+        self.assertEqual(30.0, flat["magazine_transfer_to_calibration_acc_percent"])
+
+        restored = PaintProcessSettingsMapper.from_flat_dict(
+            {
+                **flat,
+                "magazine_load_enabled": True,
+                "run_while_workpiece_found": False,
+                "enable_execution_state_timing": False,
+                "magazine_camera_settle_s": 0.25,
+                "magazine_release_settle_s": 0.75,
+                "magazine_release_z_mm": 55.0,
+                "magazine_move_to_magazine_vel_percent": 11.0,
+                "magazine_move_to_magazine_acc_percent": 12.0,
+                "magazine_transfer_to_calibration_vel_percent": 13.0,
+                "magazine_transfer_to_calibration_acc_percent": 14.0,
+            },
+            base,
+        )
+
+        self.assertTrue(restored.magazine_load.enabled)
+        self.assertFalse(restored.run_while_workpiece_found)
+        self.assertFalse(restored.enable_execution_state_timing)
+        self.assertEqual(0.25, restored.magazine_load.camera_settle_s)
+        self.assertEqual(0.75, restored.magazine_load.release_settle_s)
+        self.assertEqual(55.0, restored.magazine_load.release_z_mm)
+        self.assertEqual(11.0, restored.magazine_load.move_to_magazine_vel_percent)
+        self.assertEqual(12.0, restored.magazine_load.move_to_magazine_acc_percent)
+        self.assertEqual(13.0, restored.magazine_load.transfer_to_calibration_vel_percent)
+        self.assertEqual(14.0, restored.magazine_load.transfer_to_calibration_acc_percent)
+
+    def test_process_settings_mapper_roundtrips_safe_travel_settings(self) -> None:
+        base = PaintProcessConfig(safe_travel=PaintSafeTravelConfig(enabled=False))
+        flat = PaintProcessSettingsMapper.to_flat_dict(base)
+
+        self.assertFalse(flat["safe_travel_enabled"])
+        self.assertEqual("", flat["safe_travel_position"])
+
+        restored = PaintProcessSettingsMapper.from_flat_dict(
+            {
+                **flat,
+                "safe_travel_enabled": True,
+                "safe_travel_position": "1, 2, 3, 4, 5, 6",
+            },
+            base,
+        )
+
+        self.assertTrue(restored.safe_travel.enabled)
+        self.assertEqual([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], restored.safe_travel.position)
+
+    def test_process_settings_mapper_roundtrips_dropoff_safe_travel_settings(self) -> None:
+        base = PaintProcessConfig()
+        flat = PaintProcessSettingsMapper.to_flat_dict(base)
+
+        self.assertFalse(flat["dropoff_safe_travel_enabled"])
+        self.assertEqual("", flat["dropoff_safe_travel_position"])
+
+        restored = PaintProcessSettingsMapper.from_flat_dict(
+            {
+                **flat,
+                "dropoff_safe_travel_enabled": True,
+                "dropoff_safe_travel_position": "7, 8, 9, 10, 11, 12",
+            },
+            base,
+        )
+
+        self.assertTrue(restored.dropoff_safe_travel.enabled)
+        self.assertEqual([7.0, 8.0, 9.0, 10.0, 11.0, 12.0], restored.dropoff_safe_travel.position)
+
+    def test_process_settings_mapper_roundtrips_diagnostics_settings(self) -> None:
+        base = PaintProcessConfig()
+        flat = PaintProcessSettingsMapper.to_flat_dict(base)
+
+        self.assertFalse(flat["enable_path_debug_plots"])
+
+        restored = PaintProcessSettingsMapper.from_flat_dict(
+            {**flat, "enable_path_debug_plots": True},
+            base,
+        )
+
+        self.assertTrue(restored.enable_path_debug_plots)
+
+    def test_process_config_serializer_roundtrips_magazine_load_section(self) -> None:
+        serializer = PaintProcessConfigSerializer()
+        config = PaintProcessConfig(
+            run_while_workpiece_found=False,
+            magazine_load=PaintMagazineLoadConfig(
+                enabled=True,
+                magazine_group_id="Magazine",
+                calibration_group_id="CALIBRATION",
+                move_to_magazine_vel_percent=21.0,
+                move_to_magazine_acc_percent=22.0,
+                transfer_to_calibration_vel_percent=23.0,
+                transfer_to_calibration_acc_percent=24.0,
+                release_z_mm=50.0,
+                camera_settle_s=1.25,
+                release_settle_s=0.75,
+            )
+        )
+
+        restored = serializer.from_dict(serializer.to_dict(config))
+
+        self.assertTrue(restored.magazine_load.enabled)
+        self.assertFalse(restored.run_while_workpiece_found)
+        self.assertEqual("Magazine", restored.magazine_load.magazine_group_id)
+        self.assertEqual("CALIBRATION", restored.magazine_load.calibration_group_id)
+        self.assertEqual(21.0, restored.magazine_load.move_to_magazine_vel_percent)
+        self.assertEqual(22.0, restored.magazine_load.move_to_magazine_acc_percent)
+        self.assertEqual(23.0, restored.magazine_load.transfer_to_calibration_vel_percent)
+        self.assertEqual(24.0, restored.magazine_load.transfer_to_calibration_acc_percent)
+        self.assertEqual(50.0, restored.magazine_load.release_z_mm)
+        self.assertEqual(1.25, restored.magazine_load.camera_settle_s)
+        self.assertEqual(0.75, restored.magazine_load.release_settle_s)
+
+    def test_process_config_serializer_roundtrips_safe_travel_section(self) -> None:
+        serializer = PaintProcessConfigSerializer()
+        config = PaintProcessConfig(
+            safe_travel=PaintSafeTravelConfig(enabled=True, position=[1, 2, 3, 4, 5, 6])
+        )
+
+        restored = serializer.from_dict(serializer.to_dict(config))
+
+        self.assertTrue(restored.safe_travel.enabled)
+        self.assertEqual([1, 2, 3, 4, 5, 6], restored.safe_travel.position)
+
     def test_process_settings_schema_has_interpolation_tab(self) -> None:
         tabs = build_paint_process_settings_tabs()
         interpolation = dict(tabs)["Interpolation"]
         keys = [field.key for group in interpolation for field in group.fields]
 
         self.assertEqual(keys, ["path_tangent_lookahead_mm", "path_tangent_deadband_deg"])
+
+    def test_default_paint_motion_controls_are_under_motion_speeds(self) -> None:
+        tabs = dict(build_paint_process_settings_tabs())
+        process_keys = [field.key for group in tabs["Process"] for field in group.fields]
+        motion_keys = [field.key for group in tabs["Motion Speeds"] for field in group.fields]
+
+        self.assertNotIn("default_paint_velocity_percent", process_keys)
+        self.assertNotIn("default_paint_acceleration_percent", process_keys)
+        self.assertIn("default_paint_velocity_percent", motion_keys)
+        self.assertIn("default_paint_offset_mm", motion_keys)
+        self.assertIn("default_paint_acceleration_percent", motion_keys)
+
+    def test_process_settings_schema_has_magazine_load_motion_speed_controls(self) -> None:
+        tabs = build_paint_process_settings_tabs()
+        motion_speeds = dict(tabs)["Motion Speeds"]
+        magazine_groups = [group for group in motion_speeds if group.title == "Magazine Load"]
+
+        self.assertEqual(1, len(magazine_groups))
+        self.assertEqual(
+            [
+                "magazine_move_to_magazine_vel_percent",
+                "magazine_move_to_magazine_acc_percent",
+                "magazine_transfer_to_calibration_vel_percent",
+                "magazine_transfer_to_calibration_acc_percent",
+            ],
+            [field.key for field in magazine_groups[0].fields],
+        )
+
+    def test_process_settings_schema_has_process_tab_controls(self) -> None:
+        tabs = build_paint_process_settings_tabs()
+        process = dict(tabs)["Process"]
+        keys = [field.key for group in process for field in group.fields]
+        safe_travel_groups = [group for group in process if group.title == "Safe Travel"]
+
+        self.assertIn("run_while_workpiece_found", keys)
+        self.assertIn("enable_execution_state_timing", keys)
+        self.assertIn("magazine_load_enabled", keys)
+        self.assertIn("magazine_release_z_mm", keys)
+        self.assertIn("magazine_camera_settle_s", keys)
+        self.assertIn("magazine_release_settle_s", keys)
+        self.assertIn("safe_travel_enabled", keys)
+        self.assertIn("safe_travel_position", keys)
+        self.assertIn("safe_travel_set_current", keys)
+        self.assertIn("dropoff_safe_travel_enabled", keys)
+        self.assertIn("dropoff_safe_travel_position", keys)
+        self.assertIn("dropoff_safe_travel_set_current", keys)
+        self.assertNotIn("safe_travel_group_id", keys)
+        self.assertEqual(1, len(safe_travel_groups))
+        self.assertEqual(
+            [
+                "safe_travel_enabled",
+                "safe_travel_position",
+                "safe_travel_set_current",
+                "dropoff_safe_travel_enabled",
+                "dropoff_safe_travel_position",
+                "dropoff_safe_travel_set_current",
+            ],
+            [field.key for field in safe_travel_groups[0].fields],
+        )
+
+        diagnostics = dict(tabs)["Diagnostics"]
+        diagnostics_keys = [field.key for group in diagnostics for field in group.fields]
+        self.assertIn("enable_path_debug_plots", diagnostics_keys)
 
     def test_executor_contact_motion_plane_refreshes_from_config_service(self) -> None:
         service = type(
@@ -239,8 +641,11 @@ class TestPaintProcessConfig(unittest.TestCase):
             _paint_contact_command_path=MagicMock(
                 side_effect=lambda path: [list(pose) for pose in path]
             ),
-            _append_contact_retreat_waypoint=MagicMock(
-                side_effect=lambda path: [list(pose) for pose in path]
+            _paint_start_staging_offset_pose=MagicMock(
+                side_effect=lambda pose: list(pose)
+            ),
+            _paint_detach_staging_offset_pose=MagicMock(
+                side_effect=lambda pose, **_: list(pose)
             ),
         )
         execution_plan = SimpleNamespace(

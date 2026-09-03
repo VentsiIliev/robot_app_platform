@@ -10,6 +10,7 @@ from src.engine.process.base_process import BaseProcess
 from src.engine.process.process_requirements import ProcessRequirements
 from src.engine.system.i_system_manager import ISystemManager
 from src.robot_systems.paint.component_ids import ProcessID
+from src.robot_systems.paint.processes.paint.config import PAINT_PROCESS_CONFIG
 
 
 class PaintProcess(BaseProcess):
@@ -20,6 +21,7 @@ class PaintProcess(BaseProcess):
         messaging: IMessagingService,
         robot_service: Optional[IRobotService] = None,
         vacuum_pump: Optional[IVacuumPumpController] = None,
+        paint_process_config_service=None,
         system_manager: Optional[ISystemManager] = None,
         requirements: Optional[ProcessRequirements] = None,
         service_checker: Optional[Callable[[str], bool]] = None,
@@ -35,6 +37,7 @@ class PaintProcess(BaseProcess):
         self._production_service = production_service
         self._robot_service = robot_service
         self._vacuum_pump = vacuum_pump
+        self._paint_process_config_service = paint_process_config_service
         self._thread: Optional[threading.Thread] = None
         self._stop_thread: Optional[threading.Thread] = None
         self._stopping = False
@@ -52,6 +55,9 @@ class PaintProcess(BaseProcess):
     def _on_stop(self) -> None:
         """Signal stop and request hardware halt without blocking the process lock."""
         self._stopping = True
+        stop_phase = getattr(self._production_service, "stop_current_phase", None)
+        if callable(stop_phase):
+            stop_phase()
         self._request_hardware_stop()
 
     def _request_hardware_stop(self) -> None:
@@ -69,19 +75,33 @@ class PaintProcess(BaseProcess):
                 self._robot_service.stop_motion()
             except Exception:
                 self._logger.exception("Paint stop failed to stop robot motion")
-        if self._vacuum_pump is not None:
+        if self._vacuum_pump is not None and self._is_vacuum_enabled():
             try:
                 self._vacuum_pump.turn_off()
             except Exception:
                 self._logger.exception("Paint stop failed to turn vacuum pump off")
 
+    def _is_vacuum_enabled(self) -> bool:
+        service = self._paint_process_config_service
+        if service is None:
+            return bool(PAINT_PROCESS_CONFIG.enable_vacuum_pump)
+        try:
+            return bool(service.get_snapshot().enable_vacuum_pump)
+        except Exception:
+            self._logger.exception("Paint stop failed to read vacuum pump setting")
+            return bool(PAINT_PROCESS_CONFIG.enable_vacuum_pump)
+
     def _on_pause(self) -> None:
-        """Ignore pause because the paint process currently has no resumable checkpoint model."""
-        pass
+        """Pause the current cooperative Paint phase if it supports pause/resume."""
+        pause_phase = getattr(self._production_service, "pause_current_phase", None)
+        if callable(pause_phase):
+            pause_phase()
 
     def _on_resume(self) -> None:
-        """Ignore resume because pause is not implemented for this process."""
-        pass
+        """Resume the current cooperative Paint phase if it supports pause/resume."""
+        resume_phase = getattr(self._production_service, "resume_current_phase", None)
+        if callable(resume_phase):
+            resume_phase()
 
     def _on_reset_errors(self) -> None:
         """Clear the internal stop flag so a new run can be started after an error reset."""
@@ -102,6 +122,16 @@ class PaintProcess(BaseProcess):
 
         if success:
             self._logger.info("Paint process completed: %s", msg)
-            self.stop()
+            self.stop(msg if self._is_no_workpiece_message(msg) else "")
         else:
+            self._logger.error("Paint process failed: %s", msg)
             self.set_error(msg)
+
+    @staticmethod
+    def _is_no_workpiece_message(message: str) -> bool:
+        lowered = str(message or "").strip().lower()
+        return (
+            "no workpiece" in lowered
+            or "no usable contour detected" in lowered
+            or "magazine empty" in lowered
+        )

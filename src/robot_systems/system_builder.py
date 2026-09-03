@@ -49,6 +49,7 @@ class SystemBuilder:
         self._settings: Any = None
         self._tool_changer: Any = None
         self._messaging_service: Optional[IMessagingService] = None   # ← no default
+        self._development_mode = False
         self._registry: Dict[Type, ServiceBuilderFn] = dict(DEFAULT_SERVICE_BUILDERS)
 
     def with_robot(self, robot: IRobot) -> SystemBuilder:
@@ -65,6 +66,10 @@ class SystemBuilder:
 
     def with_messaging_service(self, messaging_service: IMessagingService) -> SystemBuilder:
         self._messaging_service = messaging_service
+        return self
+
+    def with_development_mode(self, enabled: bool) -> SystemBuilder:
+        self._development_mode = bool(enabled)
         return self
 
     def register(self, service_type: Type, builder: ServiceBuilderFn) -> SystemBuilder:
@@ -136,6 +141,7 @@ class SystemBuilder:
             _LOGGER.debug("Built '%s' → %s", spec.name, type(instance).__name__)
 
         system = system_class()
+        system.set_development_mode(self._development_mode)
         from src.engine.system.system_manager import SystemManager
         system_manager = SystemManager(self._messaging_service)
         system.start(

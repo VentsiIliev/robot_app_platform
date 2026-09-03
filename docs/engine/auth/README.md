@@ -89,7 +89,7 @@ class IAuthorizationService(ABC):
     def can_access(self, user: IAuthenticatedUser, app_id: str) -> bool: ...
 ```
 
-Read-only. Used by `main.py` and any runtime navigation guard. Must NOT be used by the permissions editor — use `IPermissionsAdminService` there instead.
+Read-only. Used by `run_main.py` and any runtime navigation guard. Must NOT be used by the permissions editor — use `IPermissionsAdminService` there instead.
 
 ---
 
@@ -146,7 +146,7 @@ service = AuthorizationService(
 
 ### `UserSession`
 
-Thread-safe session holder. Instantiated once in `main.py` and injected everywhere as `ISessionService`.
+Thread-safe session holder. Instantiated once in `run_main.py` and injected everywhere as `ISessionService`.
 
 ```python
 session = UserSession()

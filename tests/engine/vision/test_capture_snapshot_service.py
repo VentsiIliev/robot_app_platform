@@ -2,14 +2,14 @@ import unittest
 from unittest.mock import MagicMock
 
 from src.engine.vision.capture_snapshot_service import CaptureSnapshotService
+from src.engine.vision.i_vision_service import VisionFrameUnavailableError
 
 
 class TestCaptureSnapshotService(unittest.TestCase):
 
     def test_capture_snapshot_collects_frame_contours_and_robot_pose(self):
         vision = MagicMock()
-        vision.get_latest_frame.return_value = "frame"
-        vision.get_latest_contours.return_value = ["c1", "c2"]
+        vision.compute_contours_for_latest_frame.return_value = ("frame", ["c1", "c2"])
         robot = MagicMock()
         robot.get_current_position.return_value = (1, 2, 3, 4, 5, 6)
         service = CaptureSnapshotService(vision, robot)
@@ -34,6 +34,7 @@ class TestCaptureSnapshotService(unittest.TestCase):
 
     def test_capture_snapshot_tolerates_vision_failures(self):
         vision = MagicMock()
+        vision.compute_contours_for_latest_frame.side_effect = RuntimeError("processor down")
         vision.get_latest_frame.side_effect = RuntimeError("camera down")
         vision.get_latest_contours.side_effect = RuntimeError("no contours")
         service = CaptureSnapshotService(vision, None)
@@ -44,6 +45,19 @@ class TestCaptureSnapshotService(unittest.TestCase):
         self.assertEqual(snapshot.contours, [])
         self.assertEqual(snapshot.source, "auto")
 
+    def test_capture_snapshot_blocks_stale_vision_frames_without_fallback(self):
+        vision = MagicMock()
+        vision.compute_contours_for_latest_frame.side_effect = VisionFrameUnavailableError("stale frame")
+        vision.get_latest_frame.return_value = "cached-frame"
+        vision.get_latest_contours.return_value = ["cached-contour"]
+        service = CaptureSnapshotService(vision, None)
+
+        with self.assertRaisesRegex(VisionFrameUnavailableError, "stale frame"):
+            service.capture_snapshot(source="paint")
+
+        vision.get_latest_frame.assert_not_called()
+        vision.get_latest_contours.assert_not_called()
+
     def test_capture_snapshot_tolerates_robot_pose_failure(self):
         robot = MagicMock()
         robot.get_current_position.side_effect = RuntimeError("robot offline")
@@ -52,3 +66,49 @@ class TestCaptureSnapshotService(unittest.TestCase):
         snapshot = service.capture_snapshot()
 
         self.assertIsNone(snapshot.robot_pose)
+
+    def test_capture_snapshot_blocks_when_active_work_area_unknown(self):
+        work_areas = MagicMock()
+        work_areas.get_active_area_id.return_value = None
+        service = CaptureSnapshotService(
+            MagicMock(),
+            None,
+            work_area_service=work_areas,
+            active_work_area_validator=lambda _area, _pose: (True, ""),
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "Active work area is unknown"):
+            service.capture_snapshot(source="paint")
+
+    def test_capture_snapshot_blocks_when_active_work_area_validator_fails(self):
+        work_areas = MagicMock()
+        work_areas.get_active_area_id.return_value = "magazine"
+        work_areas.is_active_area_verified.return_value = True
+        robot = MagicMock()
+        robot.get_current_position.return_value = [1, 2, 3, 4, 5, 6]
+        service = CaptureSnapshotService(
+            MagicMock(),
+            robot,
+            work_area_service=work_areas,
+            active_work_area_validator=lambda area, pose: (
+                False,
+                f"{area} invalid at {pose[0]}",
+            ),
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "magazine invalid"):
+            service.capture_snapshot(source="pick_target")
+
+    def test_capture_snapshot_blocks_when_active_work_area_not_verified(self):
+        work_areas = MagicMock()
+        work_areas.get_active_area_id.return_value = "magazine"
+        work_areas.is_active_area_verified.return_value = False
+        service = CaptureSnapshotService(
+            MagicMock(),
+            None,
+            work_area_service=work_areas,
+            active_work_area_validator=lambda _area, _pose: (True, ""),
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "not verified"):
+            service.capture_snapshot(source="paint")

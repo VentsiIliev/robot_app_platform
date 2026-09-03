@@ -23,15 +23,20 @@ class CalibrationNavigationService:
         *,
         calibration_group: str = "CALIBRATION",
         before_move: Optional[Callable[[], None]] = None,
+        after_move: Optional[Callable[[], None]] = None,
     ) -> None:
         self._navigation = navigation
         self._calibration_group = str(calibration_group)
         self._before_move = before_move
+        self._after_move = after_move
 
     def move_to_calibration_position(self, wait_cancelled=None) -> bool:
         if self._before_move is not None:
             self._before_move()
-        return self._navigation.move_to_group(
+        ok = self._navigation.move_to_group(
             self._calibration_group,
             wait_cancelled=wait_cancelled,
         )
+        if ok and self._after_move is not None:
+            self._after_move()
+        return ok

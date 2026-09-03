@@ -147,7 +147,7 @@ src/engine/
 
 ## Startup Integration
 
-The engine is wired together during platform startup (`src/bootstrap/main.py`):
+The engine is wired together during platform startup (`../../src/bootstrap/run_main.py`):
 
 ```
 1. EngineContext.build()
@@ -161,7 +161,7 @@ The engine is wired together during platform startup (`src/bootstrap/main.py`):
 
 All engine objects are created once and injected as interfaces — no engine module instantiates itself at import time.
 
-Robot-system-specific startup composition does not belong in `engine/` and should not be hardcoded in `src/bootstrap/main.py`. Concrete robot driver selection, login/auth wiring, and authorization/permissions filtering should live in the active robot system's bootstrap provider.
+Robot-system-specific startup composition does not belong in `engine/` and should not be hardcoded in `../../src/bootstrap/run_main.py`. Concrete robot driver selection, login/auth wiring, and authorization/permissions filtering should live in the active robot system's bootstrap provider.
 
 ---
 

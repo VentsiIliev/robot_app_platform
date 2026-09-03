@@ -1,5 +1,6 @@
 import logging
 
+from PyQt6.QtCore import QCoreApplication, QTimer
 from PyQt6.QtWidgets import QMessageBox
 
 from src.applications.base.i_application_controller import IApplicationController
@@ -10,6 +11,7 @@ from src.applications.base.styled_message_box import ask_yes_no, show_warning
 
 from src.engine.core.i_messaging_service import IMessagingService
 from src.shared_contracts.events.workpiece_events import WorkpieceTopics
+from src.shared_contracts.events.shell_events import ShellTopics
 _logger = logging.getLogger(__name__)
 
 class WorkpieceLibraryController(IApplicationController):
@@ -20,6 +22,7 @@ class WorkpieceLibraryController(IApplicationController):
         self._view    = view
         self._broker  = messaging
         self._all_records = []
+        self._pending_open_payload = None
 
     def load(self) -> None:
         self._connect_signals()
@@ -71,16 +74,20 @@ class WorkpieceLibraryController(IApplicationController):
         self._view.set_thumbnail(thumbnail)
 
     def _on_delete(self, workpiece_id: str) -> None:
-        if not ask_yes_no(self._view, "Delete Workpiece",
-                          f"Delete workpiece '{workpiece_id}'?"):
+        if not ask_yes_no(
+            self._view,
+            self._t("Delete Workpiece"),
+            self._t("Delete workpiece '{workpiece_id}'?").format(workpiece_id=workpiece_id),
+        ):
             return
         ok, msg = self._model.delete(workpiece_id)
         self._view.set_status(msg)
         if ok:
-            self._view.set_records(self._model.get_all())
+            self._all_records = self._model.get_all()
+            self._view.set_records(self._all_records)
             self._view.set_detail(None)
         else:
-            show_warning(self._view, "Delete Failed", msg)
+            show_warning(self._view, self._t("Delete Failed"), msg)
         _logger.info("Delete %s: %s — %s", workpiece_id, ok, msg)
 
     def _on_edit(self, record, updates: dict) -> None:
@@ -96,17 +103,33 @@ class WorkpieceLibraryController(IApplicationController):
             )
             self._view.set_detail(updated)
         else:
-            show_warning(self._view, "Save Failed", msg)
+            show_warning(self._view, self._t("Save Failed"), msg)
         _logger.info("Edit %s: %s — %s", storage_id, ok, msg)
 
     def _on_open_in_editor(self, record) -> None:
         storage_id = str(record.get_id(self._model.schema.id_key))
         raw = self._model.load_raw(storage_id)
         if raw is None:
-            show_warning(self._view, "Open Failed", f"Could not load workpiece '{storage_id}'")
+            show_warning(
+                self._view,
+                self._t("Open Failed"),
+                self._t("Could not load workpiece '{storage_id}'").format(storage_id=storage_id),
+            )
             return
-        self._broker.publish(WorkpieceTopics.OPEN_IN_EDITOR, {"raw": raw, "storage_id": storage_id})
-        self._broker.publish("shell/navigate", {"app": "WorkpieceEditor"})
+        payload = {"raw": raw, "storage_id": storage_id}
+        self._broker.publish(WorkpieceTopics.OPEN_IN_EDITOR, payload)
+        self._broker.publish(ShellTopics.NAVIGATE, {"app": "WorkpieceEditor"})
+        self._pending_open_payload = payload
+        QTimer.singleShot(100, self._publish_pending_open_in_editor)
         _logger.info("Published OPEN_IN_EDITOR storage_id=%s", storage_id)
 
+    def _publish_pending_open_in_editor(self) -> None:
+        payload = self._pending_open_payload
+        self._pending_open_payload = None
+        if payload is not None:
+            self._broker.publish(WorkpieceTopics.OPEN_IN_EDITOR, payload)
 
+    @staticmethod
+    def _t(text: str) -> str:
+        translated = QCoreApplication.translate("WorkpieceLibrary", text)
+        return translated or text

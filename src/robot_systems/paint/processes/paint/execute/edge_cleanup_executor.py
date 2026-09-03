@@ -14,12 +14,17 @@ from src.robot_systems.paint.processes.paint.execute.diagnostics import (
     execute_paint_trajectory_with_optional_trace,
     path_length_mm,
 )
+from src.robot_systems.paint.processes.paint.execution_machine.handlers.common.motion_handlers import (
+    motion_failure_message,
+)
+from src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handlers import (
+    _resolve_dropoff_preparation_pose,
+    _resolve_dropoff_safe_travel_waypoints,
+    _should_prepare_dropoff_align_before_unwind,
+)
 from src.robot_systems.paint.timing import timed_step
 
 _logger = logging.getLogger(__name__)
-
-_CLEANUP_RETREAT_Y_MM = -50.0
-
 
 @dataclass(frozen=True)
 class _CleanupPreplan:
@@ -45,12 +50,24 @@ class PaintEdgeCleanupExecutor:
         cleanup = self._owner._paint_process_config().edge_cleanup
         return float(cleanup.vel_percent), float(cleanup.acc_percent)
 
+    def _cleanup_motion_type(self) -> str:
+        return str(self._owner._paint_process_config().edge_cleanup.motion_type)
+
+    def _cleanup_blendR(self) -> float:
+        return float(self._owner._paint_process_config().edge_cleanup.blendR)
+
     def _cleanup_config(self):
         return self._owner._paint_process_config().edge_cleanup
 
     def _dropoff_speed(self) -> tuple[float, float]:
         dropoff = self._owner._paint_process_config().dropoff
         return float(dropoff.release_align_vel_percent), float(dropoff.release_align_acc_percent)
+
+    def _dropoff_motion_type(self) -> str:
+        return str(self._owner._paint_process_config().dropoff.release_align_motion_type)
+
+    def _dropoff_blendR(self) -> float:
+        return float(self._owner._paint_process_config().dropoff.release_align_blendR)
 
     def _navigation_unwind_speed(self) -> tuple[float, float]:
         nav = self._owner._paint_process_config().navigation_return
@@ -104,11 +121,13 @@ class PaintEdgeCleanupExecutor:
         if plan is None:
             return False, "XZ/RY paint succeeded, but no pickup plan is available for safe edge-cleanup unwind alignment"
         vel, acc = self._dropoff_speed()
-        if not self._owner._move_pickup_phase(
+        if not self._owner._motion.move_pickup_phase(
             "Returning to original orientation before edge-cleanup unwind",
             plan.align_pose,
             velocity=vel,
             acceleration=acc,
+            motion_type=self._dropoff_motion_type(),
+            blendR=self._dropoff_blendR(),
         ):
             return False, "XZ/RY paint succeeded, but return to original orientation failed before unwind"
         return True, ""
@@ -139,18 +158,20 @@ class PaintEdgeCleanupExecutor:
 
     @timed_step(_logger, "edge_cleanup_stage_xy_rz")
     def stage_xy_rz_cleanup(self, execution_plan: WorkpieceExecutionPlan) -> tuple[bool, str]:
-        """Build the XY/RZ edge-cleanup projection plan and move to its Y approach pose."""
+        """Build the XY/RZ edge-cleanup plan and move to its perpendicular approach pose."""
         ok, msg, approach_pose = self._prepare_xy_rz_cleanup_stage_pose(execution_plan)
         if not ok:
             return False, msg
         vel, acc = self._cleanup_speed()
-        if not self._owner._move_pickup_phase(
-            "Moving to XY/RZ Y approach before edge cleanup",
+        if not self._owner._motion.move_pickup_phase(
+            "Moving to XY/RZ perpendicular-axis approach before edge cleanup",
             approach_pose,
             velocity=vel,
             acceleration=acc,
+            motion_type=self._cleanup_motion_type(),
+            blendR=self._cleanup_blendR(),
         ):
-            return False, "XZ/RY paint succeeded, but move to XY/RZ edge-cleanup Y approach pose failed"
+            return False, "XZ/RY paint succeeded, but move to XY/RZ edge-cleanup perpendicular approach pose failed"
         return True, ""
 
     def _prepare_xy_rz_cleanup_stage_pose(self, execution_plan: WorkpieceExecutionPlan) -> tuple[bool, str, list[float]]:
@@ -161,22 +182,24 @@ class PaintEdgeCleanupExecutor:
         self._owner._last_pickup_plan = plan
         staged_command_pose = self._owner._paint_contact_staging_command_pose(plan.staged_pose, plan.change_plane_pose)
         cleanup_contact_pose = self._z_offset_pose(staged_command_pose)
-        approach_pose = self._y_offset_pose(cleanup_contact_pose)
+        approach_pose = self._perpendicular_offset_pose(cleanup_contact_pose)
         return True, "", approach_pose
 
     @timed_step(_logger, "edge_cleanup_stage_xy_rz")
     def _move_to_preplanned_xy_rz_stage(self, approach_pose: list[float]) -> tuple[bool, str]:
-        """Move to an already-computed XY/RZ edge-cleanup Y approach pose."""
+        """Move to an already-computed XY/RZ edge-cleanup perpendicular approach pose."""
         if not approach_pose:
-            return False, "XZ/RY paint succeeded, but preplanned XY/RZ edge-cleanup Y approach pose is empty"
+            return False, "XZ/RY paint succeeded, but preplanned XY/RZ edge-cleanup perpendicular approach pose is empty"
         vel, acc = self._cleanup_speed()
-        if not self._owner._move_pickup_phase(
-            "Moving to XY/RZ Y approach before edge cleanup",
+        if not self._owner._motion.move_pickup_phase(
+            "Moving to XY/RZ perpendicular-axis approach before edge cleanup",
             list(approach_pose),
             velocity=vel,
             acceleration=acc,
+            motion_type=self._cleanup_motion_type(),
+            blendR=self._cleanup_blendR(),
         ):
-            return False, "XZ/RY paint succeeded, but move to XY/RZ edge-cleanup Y approach pose failed"
+            return False, "XZ/RY paint succeeded, but move to XY/RZ edge-cleanup perpendicular approach pose failed"
         return True, ""
 
     def _active_z_offset_mm(self) -> float:
@@ -219,16 +242,30 @@ class PaintEdgeCleanupExecutor:
         pose[2] = float(pose[2]) + self._active_z_offset_mm()
         return pose
 
-    @staticmethod
-    def _y_offset_pose(contact_pose: list[float]) -> list[float]:
-        """Return the cleanup Y-offset pose used for both approach and retreat."""
+    def _cleanup_perpendicular_axis(self) -> tuple[str, int]:
+        """Return the cleanup plane axis perpendicular to its translation axis."""
+        contact_config = self._owner._contact_motion_config
+        planar_axes = tuple(getattr(contact_config, "planar_axes", ("x", "y")))
+        translation_axis = str(getattr(contact_config, "translation_axis", "x")).strip().lower()
+        perpendicular_axis = next(
+            (str(axis).strip().lower() for axis in planar_axes if str(axis).strip().lower() != translation_axis),
+            "y",
+        )
+        return perpendicular_axis, {"x": 0, "y": 1, "z": 2}.get(perpendicular_axis, 1)
+
+    def _perpendicular_offset_pose(self, contact_pose: list[float]) -> list[float]:
+        """Return the cleanup approach/retreat pose on the perpendicular plane axis."""
         retreat_pose = list(contact_pose)
         while len(retreat_pose) < 3:
             retreat_pose.append(0.0)
-        retreat_pose[1] = float(retreat_pose[1]) + _CLEANUP_RETREAT_Y_MM
+        _, axis_index = self._cleanup_perpendicular_axis()
+        retreat_pose[axis_index] = (
+            float(retreat_pose[axis_index])
+            + float(self._cleanup_config().perpendicular_retreat_offset_mm)
+        )
         return retreat_pose
 
-    def _interpolate_y_transition(
+    def _interpolate_perpendicular_transition(
         self,
         start_pose: list[float],
         end_pose: list[float],
@@ -236,7 +273,7 @@ class PaintEdgeCleanupExecutor:
         include_start: bool,
         include_end: bool,
     ) -> list[list[float]]:
-        """Return a Y-only transition with small steps for direct IK continuity."""
+        """Return a perpendicular-axis transition with small steps for direct IK continuity."""
         spacing_mm = max(float(self._cleanup_config().spacing_mm), 0.5)
         start = list(start_pose)
         end = list(end_pose)
@@ -244,26 +281,27 @@ class PaintEdgeCleanupExecutor:
             start.append(0.0)
         while len(end) < 6:
             end.append(0.0)
-        delta_y = float(end[1]) - float(start[1])
-        steps = max(int(np.ceil(abs(delta_y) / spacing_mm)), 1)
+        _, axis_index = self._cleanup_perpendicular_axis()
+        delta = float(end[axis_index]) - float(start[axis_index])
+        steps = max(int(np.ceil(abs(delta) / spacing_mm)), 1)
         first_step = 0 if include_start else 1
         last_step = steps if include_end else steps - 1
         transition: list[list[float]] = []
         for step in range(first_step, last_step + 1):
             t = float(step) / float(steps)
             pose = list(end)
-            pose[1] = float(start[1]) + delta_y * t
+            pose[axis_index] = float(start[axis_index]) + delta * t
             transition.append(pose)
         return transition
 
-    def _wrap_contact_path_with_y_approach_and_retreat(
+    def _wrap_contact_path_with_perpendicular_approach_and_retreat(
         self,
         command_path: list[list[float]],
         *,
         capture_contact_path: bool,
         apply_cleanup_z_offset: bool,
     ) -> list[list[float]]:
-        """Return cleanup contact path wrapped with densified Y approach and retreat segments."""
+        """Wrap cleanup contact with densified perpendicular-axis transitions."""
         if not command_path:
             return []
         contact_path = (
@@ -275,22 +313,24 @@ class PaintEdgeCleanupExecutor:
             self._last_cleanup_contact_path = [list(pose) for pose in contact_path]
         first_contact_pose = list(contact_path[0])
         final_contact_pose = list(contact_path[-1])
-        approach_pose = self._y_offset_pose(first_contact_pose)
-        retreat_pose = self._y_offset_pose(final_contact_pose)
-        approach_segment = self._interpolate_y_transition(
+        approach_pose = self._perpendicular_offset_pose(first_contact_pose)
+        retreat_pose = self._perpendicular_offset_pose(final_contact_pose)
+        approach_segment = self._interpolate_perpendicular_transition(
             approach_pose,
             first_contact_pose,
             include_start=True,
             include_end=False,
         )
-        retreat_segment = self._interpolate_y_transition(
+        retreat_segment = self._interpolate_perpendicular_transition(
             final_contact_pose,
             retreat_pose,
             include_start=False,
             include_end=True,
         )
         _logger.info(
-            "[EDGE_CLEANUP] added Y approach/retreat segments: approach_pts=%d retreat_pts=%d z_offset_mm=%.3f approach_pose=%s first_contact=%s final_contact=%s retreat_pose=%s",
+            "[EDGE_CLEANUP] added %s-axis approach/retreat segments: offset_mm=%.3f approach_pts=%d retreat_pts=%d z_offset_mm=%.3f approach_pose=%s first_contact=%s final_contact=%s retreat_pose=%s",
+            self._cleanup_perpendicular_axis()[0].upper(),
+            float(self._cleanup_config().perpendicular_retreat_offset_mm),
             len(approach_segment),
             len(retreat_segment),
             self._active_z_offset_mm(),
@@ -301,21 +341,21 @@ class PaintEdgeCleanupExecutor:
         )
         return approach_segment + contact_path + retreat_segment
 
-    def add_y_approach_and_retreat_waypoints(self, command_path: list[list[float]]) -> list[list[float]]:
-        """Add densified cleanup approach and retreat segments along robot Y."""
-        return self._wrap_contact_path_with_y_approach_and_retreat(
+    def add_perpendicular_approach_and_retreat_waypoints(self, command_path: list[list[float]]) -> list[list[float]]:
+        """Add cleanup approach and retreat segments along the perpendicular plane axis."""
+        return self._wrap_contact_path_with_perpendicular_approach_and_retreat(
             command_path,
             capture_contact_path=True,
             apply_cleanup_z_offset=True,
         )
 
-    def append_y_retreat_waypoint(self, command_path: list[list[float]]) -> list[list[float]]:
-        """Append a cleanup-only retreat waypoint along robot Y."""
+    def append_perpendicular_retreat_waypoint(self, command_path: list[list[float]]) -> list[list[float]]:
+        """Append a cleanup-only retreat waypoint along the perpendicular plane axis."""
         if not command_path:
             return []
         path_with_retreat = [list(pose) for pose in command_path]
         final_contact_pose = list(path_with_retreat[-1])
-        retreat_pose = self._y_offset_pose(final_contact_pose)
+        retreat_pose = self._perpendicular_offset_pose(final_contact_pose)
         if np.allclose(
             np.asarray(final_contact_pose[:3], dtype=float),
             np.asarray(retreat_pose[:3], dtype=float),
@@ -324,30 +364,34 @@ class PaintEdgeCleanupExecutor:
             return path_with_retreat
         path_with_retreat.append(retreat_pose)
         _logger.info(
-            "[EDGE_CLEANUP] appended Y retreat waypoint: contact_pose=%s retreat_pose=%s",
+            "[EDGE_CLEANUP] appended %s-axis retreat waypoint: offset_mm=%.3f contact_pose=%s retreat_pose=%s",
+            self._cleanup_perpendicular_axis()[0].upper(),
+            float(self._cleanup_config().perpendicular_retreat_offset_mm),
             [round(float(v), 3) for v in final_contact_pose[:6]],
             [round(float(v), 3) for v in retreat_pose[:6]],
         )
         return path_with_retreat
 
-    @timed_step(_logger, "edge_cleanup_y_retreat")
-    def move_y_retreat_after_cleanup(self) -> tuple[bool, str]:
-        """Move off the cleanup contact path along robot Y after contour execution."""
+    @timed_step(_logger, "edge_cleanup_perpendicular_retreat")
+    def move_perpendicular_retreat_after_cleanup(self) -> tuple[bool, str]:
+        """Move off cleanup contact along the configured perpendicular plane axis."""
         final_contact_pose = self._owner._last_process_end_pose
         if not final_contact_pose:
-            return False, "XY/RZ edge cleanup succeeded, but no final contact pose is available for Y retreat"
-        retreat_path = self.append_y_retreat_waypoint([list(final_contact_pose)])
+            return False, "XY/RZ edge cleanup succeeded, but no final contact pose is available for perpendicular retreat"
+        retreat_path = self.append_perpendicular_retreat_waypoint([list(final_contact_pose)])
         if len(retreat_path) < 2:
             return True, ""
         retreat_pose = retreat_path[-1]
         vel, acc = self._cleanup_speed()
-        if not self._owner._move_pickup_phase(
+        if not self._owner._motion.move_pickup_phase(
             "Retreating along Y after edge cleanup",
             retreat_pose,
             velocity=vel,
             acceleration=acc,
+            motion_type=self._cleanup_motion_type(),
+            blendR=self._cleanup_blendR(),
         ):
-            return False, "XY/RZ edge cleanup succeeded, but Y retreat from cleanup contact failed"
+            return False, "XY/RZ edge cleanup succeeded, but perpendicular retreat from cleanup contact failed"
         self._owner._last_process_end_pose = list(retreat_pose)
         return True, ""
 
@@ -385,7 +429,7 @@ class PaintEdgeCleanupExecutor:
             vel_override=vel,
             acc_override=acc,
             append_retreat=False,
-            retreat_fn=self.add_y_approach_and_retreat_waypoints,
+            retreat_fn=self.add_perpendicular_approach_and_retreat_waypoints,
             execute_robot=execute_robot,
             collected_command_paths=collected_paths,
         )
@@ -441,7 +485,7 @@ class PaintEdgeCleanupExecutor:
             vel_override=vel,
             acc_override=acc,
             append_retreat=False,
-            retreat_fn=self.add_y_approach_and_retreat_waypoints,
+            retreat_fn=self.add_perpendicular_approach_and_retreat_waypoints,
             execute_robot=False,
             collected_command_paths=collected_paths,
         )
@@ -549,7 +593,7 @@ class PaintEdgeCleanupExecutor:
             [list(pose) for pose in reversed(self._last_cleanup_contact_path)],
             base_z_offset_mm,
         )
-        command_path = self._wrap_contact_path_with_y_approach_and_retreat(
+        command_path = self._wrap_contact_path_with_perpendicular_approach_and_retreat(
             reverse_contact_path,
             capture_contact_path=False,
             apply_cleanup_z_offset=False,
@@ -572,13 +616,15 @@ class PaintEdgeCleanupExecutor:
             return True, "", len(command_path), command_path
 
         vel, acc = self._cleanup_speed()
-        if not self._owner._move_pickup_phase(
-            "Moving to reverse XY/RZ cleanup Y approach",
+        if not self._owner._motion.move_pickup_phase(
+            "Moving to reverse XY/RZ cleanup perpendicular-axis approach",
             list(command_path[0]),
             velocity=vel,
             acceleration=acc,
+            motion_type=self._cleanup_motion_type(),
+            blendR=self._cleanup_blendR(),
         ):
-            return False, "XY/RZ edge cleanup first pass succeeded, but move to reverse cleanup Y approach failed", 0, command_path
+            return False, "XY/RZ edge cleanup first pass succeeded, but move to reverse cleanup perpendicular approach failed", 0, command_path
 
         result = execute_paint_trajectory_with_optional_trace(
             robot_service=self._owner._robot_service,
@@ -644,7 +690,10 @@ class PaintEdgeCleanupExecutor:
                 "[TIMING] paint_process success=false stage=edge_cleanup_ordered_chain total_elapsed_s=%.3f",
                 elapsed_s(started),
             )
-            return False, f"XY/RZ ordered cleanup chain failed with code {result}", len(command_path)
+            return False, motion_failure_message(
+                self._owner._robot_service,
+                f"XY/RZ ordered cleanup chain failed with code {result}",
+            ), len(command_path)
         self._owner._dropoff_unwind_prepared = True
         self._owner._last_process_end_pose = list(final_pose)
         return True, "", len(command_path)
@@ -661,27 +710,16 @@ class PaintEdgeCleanupExecutor:
         stage_vel, stage_acc = self._cleanup_speed()
         config = self._owner._paint_process_config()
         post_cleanup_align_pose = None
-        should_align_before_unwind = getattr(
-            self._owner,
-            "_should_prepare_dropoff_align_before_unwind",
-            lambda: False,
-        )
-        if self._owner._last_pickup_plan is not None and should_align_before_unwind():
-            make_dropoff_align_pose = getattr(self._owner, "_dropoff_align_pose_near_reference", None)
-            if callable(make_dropoff_align_pose):
-                post_cleanup_align_pose = make_dropoff_align_pose(
-                    self._owner._last_pickup_plan.align_pose,
-                    command_path[-1],
-                )
-            else:
-                post_cleanup_align_pose = list(self._owner._last_pickup_plan.align_pose)
+        if _should_prepare_dropoff_align_before_unwind(self._owner):
+            post_cleanup_align_pose = _resolve_dropoff_preparation_pose(self._owner, command_path[-1])
         segments = [
             {
-                "type": "linear",
+                "type": self._dropoff_motion_type(),
                 "label": "edge_cleanup_align",
                 "position": list(align_pose),
                 "vel": align_vel,
                 "acc": align_acc,
+                "blendR": self._dropoff_blendR(),
             },
             {
                 "type": "unwind_joint6",
@@ -690,30 +728,60 @@ class PaintEdgeCleanupExecutor:
                 "acc": unwind_acc,
             },
             {
-                "type": "linear",
+                "type": self._cleanup_motion_type(),
                 "label": "edge_cleanup_stage",
                 "position": list(stage_approach_pose),
                 "vel": stage_vel,
                 "acc": stage_acc,
+                "blendR": self._cleanup_blendR(),
             },
             {
-                "type": "path",
-                "label": "edge_cleanup_follow_path",
-                "path": command_path,
-                "vel": stage_vel,
-                "acc": stage_acc,
+                    "type": "path",
+                    "label": "edge_cleanup_follow_path",
+                    "path": command_path,
+                    "vel": stage_vel,
+                    "acc": stage_acc,
+                    "blendR": self._cleanup_blendR(),
             },
         ]
         if post_cleanup_align_pose is not None:
+            safe_travel_waypoints = _resolve_dropoff_safe_travel_waypoints(self._owner)
+            if bool(getattr(getattr(config, "dropoff_safe_travel", None), "enabled", False)) and safe_travel_waypoints:
+                for index, safe_travel_waypoint in enumerate(safe_travel_waypoints, start=1):
+                    segments.append(
+                        {
+                            "type": str(safe_travel_waypoint.get("motion_type", "linear")),
+                            "label": f"prepare_dropoff_safe_travel_{index}",
+                            "position": safe_travel_waypoint["position"],
+                            "vel": float(safe_travel_waypoint["vel_percent"]),
+                            "acc": float(safe_travel_waypoint["acc_percent"]),
+                            "blendR": float(safe_travel_waypoint.get("blendR", 0.0)),
+                        }
+                    )
             segments.append(
                 {
-                    "type": "linear",
+                    "type": str(config.dropoff.release_align_motion_type),
                     "label": "prepare_dropoff_align",
                     "position": post_cleanup_align_pose,
                     "vel": float(config.dropoff.release_align_vel_percent),
                     "acc": float(config.dropoff.release_align_acc_percent),
+                    "blendR": float(config.dropoff.release_align_blendR),
                 }
             )
+        elif bool(getattr(getattr(config, "dropoff_safe_travel", None), "enabled", False)):
+            safe_travel_waypoints = _resolve_dropoff_safe_travel_waypoints(self._owner)
+            for index, safe_travel_waypoint in enumerate(safe_travel_waypoints, start=1):
+                segments.append(
+                    {
+                        "type": str(safe_travel_waypoint.get("motion_type", "linear")),
+                        "label": f"prepare_dropoff_safe_travel_{index}",
+                        "position": safe_travel_waypoint["position"],
+                        "vel": float(safe_travel_waypoint["vel_percent"]),
+                        "acc": float(safe_travel_waypoint["acc_percent"]),
+                        "blendR": float(safe_travel_waypoint.get("blendR", 0.0)),
+                    }
+                )
+                post_cleanup_align_pose = safe_travel_waypoint["position"]
         segments.append(
             {
                 "type": "unwind_joint6",

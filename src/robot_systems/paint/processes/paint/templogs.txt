@@ -1,32 +1,36 @@
-/home/ilv/Desktop/robot_app_platform/.venv/bin/python /home/ilv/Desktop/robot_app_platform/src/bootstrap/main.py
-15:58:43 [WARNING ] main._pin_process_to_non_rt_cores — Pinned robot_app_platform to CPUs: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
-15:58:43 [INFO    ] src.engine.robot.drivers.fairino.fairino_ros2_robot.__init__ — FairinoRos2Robot init — server_url=http://localhost:5000
-15:58:43 [INFO    ] src.engine.robot.drivers.fairino.fairino_ros2_client.__init__ — Connecting to ROS2 bridge at http://localhost:5000
-15:58:43 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_client.health_check — health_check ← status=200 body={'ros2_active': True, 'status': 'ok'}
-15:58:43 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_client.__init__ — health_check response: {'ros2_active': True, 'status': 'ok'}
-15:58:43 [INFO    ] src.engine.robot.drivers.fairino.fairino_ros2_client.__init__ — Connected to ROS2 bridge at http://localhost:5000
-15:58:43 [INFO    ] src.engine.robot.drivers.fairino.fairino_ros2_robot.__init__ — FairinoRos2Robot ready
-15:58:43 [DEBUG   ] SystemBuilder.build — Building PaintSystem
-15:58:43 [INFO    ] src.engine.robot.drivers.fairino.fairino_ros2_robot.__init__ — FairinoRos2Robot init — server_url=http://localhost:5000
-15:58:43 [INFO    ] src.engine.robot.drivers.fairino.fairino_ros2_client.__init__ — Connecting to ROS2 bridge at http://localhost:5000
-15:58:43 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_client.health_check — health_check ← status=200 body={'ros2_active': True, 'status': 'ok'}
-15:58:43 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_client.__init__ — health_check response: {'ros2_active': True, 'status': 'ok'}
-15:58:43 [INFO    ] src.engine.robot.drivers.fairino.fairino_ros2_client.__init__ — Connected to ROS2 bridge at http://localhost:5000
-15:58:43 [INFO    ] src.engine.robot.drivers.fairino.fairino_ros2_robot.__init__ — FairinoRos2Robot ready
-15:58:43 [DEBUG   ] SettingsService.reload — Loading settings 'robot_config'
-15:58:43 [INFO    ] RobotStateManager.start_monitoring — State monitoring started (poll interval=0.1s)
-15:58:43 [DEBUG   ] SystemBuilder.build — Built 'robot' → RobotService
-15:58:43 [DEBUG   ] SystemBuilder.build — Built 'navigation' → NavigationService
-15:58:43 [DEBUG   ] SystemBuilder.build — Built 'work_areas' → WorkAreaService
-15:58:43 [INFO    ] BaseJsonSettingsRepository.load — Loaded 'robot_config' settings from '/home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/storage/settings/robot/config.json'.
-15:58:43 [INFO    ] src.engine.robot.drivers.fairino.fairino_ros2_client.set_active_tool — Active ROS2 tool set to 1 (TOOL_1)
-15:58:43 [INFO    ] RobotStateManager._sync_configured_tool — Configured active robot tool synced: 1
+plp@plp:~/Desktop/cobot/robot_app_platform$ ./launch_robot_app.sh
+Press Ctrl+X in this terminal to stop the robot app.
+14:26:48 [INFO    ] src.bootstrap.ros_backend_launcher.start — ROS backend autostart disabled
+14:26:48 [INFO    ] src.engine.robot.drivers.ros2_robot.__init__ — Ros2Robot init — server_url=http://localhost:5000
+14:26:48 [INFO    ] src.engine.robot.drivers.client_adapters.http_websocket.__init__ — Connecting to ROS2 bridge at http://localhost:5000
+14:26:48 [DEBUG   ] src.engine.robot.drivers.client_adapters.http_websocket.health_check — health_check ← status=200 body={'error': None, 'message': 'Robot runtime is ready', 'motion_stack_fault': None, 'motion_stack_ready': True, 'phase': 'ready', 'ready': True, 'ros2_active': True, 'started_at': 1788347995.601312, 'status': 'ok', 'updated_at': 1788347996.9277315}
+14:26:48 [DEBUG   ] src.engine.robot.drivers.client_adapters.http_websocket.__init__ — health_check response: {'error': None, 'message': 'Robot runtime is ready', 'motion_stack_fault': None, 'motion_stack_ready': True, 'phase': 'ready', 'ready': True, 'ros2_active': True, 'started_at': 1788347995.601312, 'status': 'ok', 'updated_at': 1788347996.9277315}
+14:26:48 [INFO    ] src.engine.robot.drivers.client_adapters.http_websocket.__init__ — Connected to ROS2 bridge at http://localhost:5000
+14:26:48 [DEBUG   ] asyncio.__init__ — Using selector: EpollSelector
+14:26:48 [DEBUG   ] asyncio.__init__ — Using selector: EpollSelector
+14:26:48 [INFO    ] src.engine.robot.drivers.ros2_robot.__init__ — Ros2Robot ready
+14:26:48 [DEBUG   ] asyncio.__init__ — Using selector: EpollSelector
+14:26:48 [DEBUG   ] SystemBuilder.build — Building PaintSystem
+14:26:48 [DEBUG   ] SettingsService.reload — Loading settings 'robot_config'
+14:26:48 [INFO    ] BaseJsonSettingsRepository.load — Loaded 'robot_config' settings from '/home/plp/Desktop/cobot/robot_app_platform/src/robot_systems/paint/storage/settings/robot/config.json'.
+14:26:48 [INFO    ] RobotStateManager.start_monitoring — State monitoring started (poll interval=0.0s)
+14:26:48 [DEBUG   ] SystemBuilder.build — Built 'robot' → RobotService
+14:26:48 [DEBUG   ] SystemBuilder.build — Built 'navigation' → NavigationService
+14:26:48 [DEBUG   ] SystemBuilder.build — Built 'work_areas' → WorkAreaService
+14:26:48 [INFO    ] src.engine.robot.drivers.client_adapters.http_websocket.set_active_tool — Active ROS2 tool set to 1 (TOOL_1)
+14:26:48 [INFO    ] RobotStateManager._sync_configured_tool — Configured active robot tool synced: 1
+14:26:48 [INFO    ] src.engine.robot.drivers.client_adapters.http_websocket.set_active_workobject — Active ROS2 workobject set to 1 (WOBJ_1)
+14:26:48 [INFO    ] RobotStateManager._sync_configured_workobject — Configured active robot workobject synced: 1
+14:26:48 [INFO    ] src.engine.robot.drivers.client_adapters.http_websocket._execution_websocket_loop — Connected to ROS2 execution WebSocket at ws://localhost:5002/ws/execution
+14:26:48 [INFO    ] src.engine.robot.drivers.client_adapters.http_websocket._sensor_websocket_loop — Connected to ROS2 sensor WebSocket at ws://localhost:5003/ws/sensors
+14:26:48 [INFO    ] src.engine.robot.drivers.client_adapters.http_websocket._state_websocket_loop — Connected to ROS2 state WebSocket at ws://localhost:5001/ws/state
 4.13.0
-15:58:44 [INFO    ] DataManager.build_storage_paths — Building storage paths: /home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/storage/settings/vision/data
-15:58:44 [INFO    ] SettingsManager.loadSettings — [SettingsManager] Loading settings from /home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/storage/settings/vision/camera_settings.json
-15:58:44 [INFO    ] Service.loadSettings — [SettingsManager] settings type in loadSettings
-15:58:44 [INFO    ] Service.loadSettings — <class 'dict'>
-15:58:44 [INFO    ] Service.loadSettings — [SettingsManager] after from dict <class 'src.engine.vision.implementation.VisionSystem.core.settings.CameraSettings.CameraSettings'> CameraSettings:
+14:26:49 [INFO    ] DataManager.build_storage_paths — Building storage paths: /home/plp/Desktop/cobot/robot_app_platform/src/robot_systems/paint/storage/settings/vision/data
+14:26:49 [INFO    ] src.engine.vision.implementation.VisionSystem.VisionSystem._configure_opencv_threads — OpenCV worker threads capped at 2
+14:26:49 [INFO    ] SettingsManager.loadSettings — [SettingsManager] Loading settings from /home/plp/Desktop/cobot/robot_app_platform/src/robot_systems/paint/storage/settings/vision/camera_settings.json
+14:26:49 [INFO    ] Service.loadSettings — [SettingsManager] settings type in loadSettings
+14:26:49 [INFO    ] Service.loadSettings — <class 'dict'>
+14:26:49 [INFO    ] Service.loadSettings — [SettingsManager] after from dict <class 'src.engine.vision.implementation.VisionSystem.core.settings.CameraSettings.CameraSettings'> CameraSettings:
   Index: 0
   Resolution: 1280x720
   Skip Frames: 30
@@ -35,14 +39,14 @@
   Epsilon: 0.0
   Min Contour Area: 1000.0
   Max Contour Area: 10010000.0
-  Contour Detection: True
-  Draw Contours: True
+  Contour Detection: False
+  Draw Contours: False
   Gaussian Blur: True
   Blur Kernel Size: 5
   Threshold Type: binary_inv
-  Dilate: False (kernel: 3, iter: 3)
-  Erode: False (kernel: 3, iter: 3)
-  Chessboard: 19x12
+  Dilate: True (kernel: 3, iter: 3)
+  Erode: True (kernel: 3, iter: 3)
+  Chessboard: 15x15
   Square Size: 15.0mm
   Calibration Skip Frames: 30
   Auto Brightness: True
@@ -51,979 +55,473 @@
   ArUco Enabled: False
   ArUco Dictionary: DICT_4X4_250
   ArUco Flip Image: False
-15:58:44 [INFO    ] CameraInitializer.initializeCameraWithRetry — Attempting camera 0 (attempt 1/10)
-15:58:44 [INFO    ] CameraInitializer.initializeCameraWithRetry — Camera 0 initialised on attempt 1
-15:58:44 [INFO    ] DataManager.loadPerspectiveMatrix — No perspective matrix found at: /home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/storage/settings/vision/data/perspectiveTransform.npy
-15:58:44 [INFO    ] DataManager.loadCameraToRobotMatrix — Camera-to-robot matrix loaded from: /home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/storage/settings/vision/data/cameraToRobotMatrix_camera_center.npy
-15:58:44 [DEBUG   ] SystemBuilder.build — Built 'vision' → VisionService
-15:58:44 [DEBUG   ] SystemBuilder.build — Built 'ServiceID.VACUUM_PUMP' → RelayVacuumPumpController
-15:58:44 [INFO    ] PaintRobotSystem.start — Starting PaintSystem v1.0.0
-15:58:44 [DEBUG   ] PaintRobotSystem._validate_and_inject — Injected 'robot' (RobotService)
-15:58:44 [DEBUG   ] PaintRobotSystem._validate_and_inject — Injected 'navigation' (NavigationService)
-15:58:44 [DEBUG   ] PaintRobotSystem._validate_and_inject — Injected 'work_areas' (WorkAreaService)
-15:58:44 [DEBUG   ] PaintRobotSystem._validate_and_inject — Injected 'vision' (VisionService)
-15:58:44 [DEBUG   ] PaintRobotSystem._validate_and_inject — Injected 'ServiceID.VACUUM_PUMP' (RelayVacuumPumpController)
-15:58:44 [DEBUG   ] SettingsService.reload — Loading settings 'robot_calibration'
-15:58:44 [INFO    ] BaseJsonSettingsRepository.load — Loaded 'robot_calibration' settings from '/home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/storage/settings/robot/calibration.json'.
-15:58:44 [DEBUG   ] SettingsService.reload — Loading settings 'targeting'
-15:58:44 [INFO    ] BaseJsonSettingsRepository.load — Loaded 'targeting' settings from '/home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/storage/settings/targeting/definitions.json'.
-15:58:44 [INFO    ] VisionService.start — VisionService started
-15:58:45 [DEBUG   ] SettingsService.reload — Loading settings 'height_measuring_settings'
-15:58:45 [DEBUG   ] SettingsService.reload — Loading settings 'work_area_settings'
-15:58:45 [INFO    ] BaseJsonSettingsRepository.load — Loaded 'height_measuring_settings' settings from '/home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/storage/settings/height_measuring/settings.json'.
-15:58:45 [INFO    ] BaseJsonSettingsRepository.load — Loaded 'work_area_settings' settings from '/home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/storage/settings/vision/work_areas.json'.
-15:58:45 [INFO    ] BaseJsonSettingsRepository.load — Loaded 'laser_calibration_data' settings from '/home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/storage/settings/height_measuring/calibration_data.json'.
-15:58:45 [INFO    ] src.engine.robot.height_measuring.height_measuring_service._load_calibration — No calibration data found
-15:58:45 [DEBUG   ] SettingsService.reload — Loading settings 'calibration_vision_settings'
-15:58:45 [INFO    ] BaseJsonSettingsRepository.load — Loaded 'calibration_vision_settings' settings from '/home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/storage/settings/vision/calibration_settings.json'.
-15:58:45 [INFO    ] src.robot_systems.paint.domain.workpieces.repository.json_paint_workpiece_repository.__init__ — JsonPaintWorkpieceRepository: root -> /home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/storage/workpieces
-15:58:45 [INFO    ] src.robot_systems.paint.domain.workpieces.repository.json_paint_workpiece_repository.__init__ — JsonPaintWorkpieceRepository: root -> /home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/storage/workpieces
-15:58:45 [INFO    ] src.robot_systems.paint.domain.workpieces.repository.json_paint_workpiece_repository.__init__ — JsonPaintWorkpieceRepository: root -> /home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/storage/workpieces
-15:58:45 [INFO    ] src.robot_systems.paint.domain.workpieces.repository.json_paint_workpiece_repository.__init__ — JsonPaintWorkpieceRepository: root -> /home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/storage/workpieces
-15:58:45 [INFO    ] src.robot_systems.paint.domain.workpieces.repository.json_paint_workpiece_repository.__init__ — JsonPaintWorkpieceRepository: root -> /home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/storage/workpieces
-15:58:45 [INFO    ] src.robot_systems.paint.domain.workpieces.repository.json_paint_workpiece_repository.__init__ — JsonPaintWorkpieceRepository: root -> /home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/storage/workpieces
-15:58:45 [INFO    ] src.engine.robot.drivers.fairino.fairino_ros2_robot.enable — enable →
-15:58:45 [INFO    ] src.engine.robot.drivers.fairino.fairino_ros2_client.enable — enable called (ROS2 robot is always enabled)
-15:58:45 [INFO    ] src.engine.robot.drivers.fairino.fairino_ros2_robot.enable — enable ← done
-15:58:45 [INFO    ] PaintRobotSystem.start — PaintSystem started
-15:58:45 [INFO    ] ShellConfigurator.configure — Registered shell folder: Production (id=1)
-15:58:45 [INFO    ] ShellConfigurator.configure — Registered shell folder: Service (id=2)
-15:58:45 [INFO    ] ShellConfigurator.configure — Registered shell folder: Administration (id=3)
-15:58:45 [INFO    ] ShellConfigurator.configure — Registered shell folder: Tests (id=4)
-15:58:45 [INFO    ] ShellConfigurator.configure — PaintSystem: configured 4 folders
+14:26:49 [INFO    ] DataManager.loadPerspectiveMatrix — No perspective matrix found at: /home/plp/Desktop/cobot/robot_app_platform/src/robot_systems/paint/storage/settings/vision/data/perspectiveTransform.npy
+14:26:49 [INFO    ] DataManager.loadCameraToRobotMatrix — Camera-to-robot matrix loaded from: /home/plp/Desktop/cobot/robot_app_platform/src/robot_systems/paint/storage/settings/vision/data/cameraToRobotMatrix_camera_center.npy
+14:26:49 [INFO    ] CameraInitializer.initializeCameraWithRetry — Attempting camera 0 (attempt 1/10)
+14:26:49 [DEBUG   ] SystemBuilder.build — Built 'vision' → VisionService
+14:26:49 [DEBUG   ] SettingsService.reload — Loading settings 'modbus_config'
+14:26:49 [INFO    ] BaseJsonSettingsRepository.load — Loaded 'modbus_config' settings from '/home/plp/Desktop/cobot/robot_app_platform/src/robot_systems/paint/storage/settings/hardware/modbus.json'.
+14:26:49 [DEBUG   ] SettingsService.reload — Loading settings 'SettingsID.PERIPHERALS'
+14:26:49 [INFO    ] BaseJsonSettingsRepository.load — Loaded 'peripheral_config' settings from '/home/plp/Desktop/cobot/robot_app_platform/src/robot_systems/paint/storage/settings/hardware/peripherals.json'.
+14:26:49 [DEBUG   ] SystemBuilder.build — Built 'ServiceID.VACUUM_PUMP' → VacuumPumpController
+14:26:49 [DEBUG   ] SystemBuilder.build — Built 'ServiceID.FAN' → ModbusFanControl
+14:26:49 [DEBUG   ] SystemBuilder.build — Built 'ServiceID.PHYSICAL_CONTROL_BUTTONS' → ModbusPhysicalControlButtons
+14:26:49 [DEBUG   ] SystemBuilder.build — Built 'ServiceID.VACUUM_SENSOR' → VacuumSensorService
+14:26:49 [DEBUG   ] SettingsService.reload — Loading settings 'SettingsID.DRYER_CONFIG'
+14:26:49 [INFO    ] BaseJsonSettingsRepository.load — Loaded 'dryer_config' settings from '/home/plp/Desktop/cobot/robot_app_platform/src/robot_systems/paint/storage/settings/dryer/settings.json'.
+14:26:49 [DEBUG   ] ModbusRegisterTransport.write_registers — Writing starting register 0 (values=[0, 0, 600, 180, 600, 180, 80, 50, 100, 100, 500, 350, 50, 50, 1, 500, 500])
+MinimalModbus debug mode. Will write to instrument (expecting 8 bytes back): 0A 10 00 00 00 11 22 00 00 00 00 02 58 00 B4 02 58 00 B4 00 50 00 32 00 64 00 64 01 F4 01 5E 00 32 00 32 00 01 01 F4 01 F4 52 B8 (43 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 24454604.78 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 10 00 00 00 11 01 7E (8 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:49 [INFO    ] DryerController.write_data — Dryer write ok start_register=0 values=[0, 0, 600, 180, 600, 180, 80, 50, 100, 100, 500, 350, 50, 50, 1, 500, 500]
+14:26:49 [INFO    ] DryerController.next_position — [DRYER] Sending NEXT_POSITION command=0x01 command_register=1
+14:26:49 [DEBUG   ] ModbusRegisterTransport.write_registers — Writing starting register 1 (values=[1])
+MinimalModbus debug mode. Will write to instrument (expecting 8 bytes back): 0A 10 00 01 00 01 02 00 01 15 71 (11 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 2.36 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 10 00 01 00 01 51 72 (8 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:49 [INFO    ] DryerController.next_position — [DRYER] NEXT_POSITION FC16 write completed success=True command_register=1 command=0x01
+14:26:49 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 31.47 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:49 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:49 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:49 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.69 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:49 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:49 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:49 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 102.56 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:49 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:49 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:49 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 102.05 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:49 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:49 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:50 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.35 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:50 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:50 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:50 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.61 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:50 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:50 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:50 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.38 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:50 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:50 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:50 [INFO    ] CameraInitializer.initializeCameraWithRetry — Camera 0 initialised on attempt 1
+14:26:50 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.72 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:50 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:50 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:50 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.50 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:50 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:50 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:50 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.56 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:50 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:50 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:50 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.50 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:50 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:50 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:50 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.96 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:50 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:50 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:50 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 102.56 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:50 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:50 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:51 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 102.11 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:51 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:51 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:51 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.36 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:51 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:51 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:51 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.91 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:51 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:51 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:51 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.35 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:51 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:51 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:51 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.36 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:51 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:51 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:51 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.40 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:51 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:51 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:51 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.45 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:51 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:51 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:51 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.54 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:51 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:51 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:51 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.49 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:51 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:51 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:52 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.94 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:52 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:52 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:52 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.71 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:52 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:52 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:52 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 102.55 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:52 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:52 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:52 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.63 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:52 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:52 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:52 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.42 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:52 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:52 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:52 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.85 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:52 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:52 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:52 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.45 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:52 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:52 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:52 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.54 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:52 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:52 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:52 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.94 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:52 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:52 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:53 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.71 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:53 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:53 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:53 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.71 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:53 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:53 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:53 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.97 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:53 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:53 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:53 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.60 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:53 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:53 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:53 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.81 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:53 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:53 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:53 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.44 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:53 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:53 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:53 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 102.39 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:53 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:53 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:53 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.49 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:53 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:53 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:53 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.73 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:53 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:53 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:54 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.43 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:54 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:54 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:54 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.44 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:54 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:54 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:54 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.57 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:54 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:54 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:54 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.38 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 51 DC 79 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:54 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=81 (0x0051) healthy=True ready=True ejecting=False eject_done=True next_position_moving=False next_position_done=True
+14:26:54 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0051 healthy=True ready=True next_pos_done=True
+14:26:54 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization completed: next position confirmed
+14:26:54 [DEBUG   ] SystemBuilder.build — Built 'ServiceID.DRYER' → DryerService
+14:26:54 [INFO    ] PaintRobotSystem.start — Starting PaintSystem v1.0.0
+14:26:54 [DEBUG   ] PaintRobotSystem._validate_and_inject — Injected 'robot' (RobotService)
+14:26:54 [DEBUG   ] PaintRobotSystem._validate_and_inject — Injected 'navigation' (NavigationService)
+14:26:54 [DEBUG   ] PaintRobotSystem._validate_and_inject — Injected 'work_areas' (WorkAreaService)
+14:26:54 [DEBUG   ] PaintRobotSystem._validate_and_inject — Injected 'vision' (VisionService)
+14:26:54 [DEBUG   ] PaintRobotSystem._validate_and_inject — Injected 'ServiceID.VACUUM_PUMP' (VacuumPumpController)
+14:26:54 [DEBUG   ] PaintRobotSystem._validate_and_inject — Injected 'ServiceID.FAN' (ModbusFanControl)
+14:26:54 [DEBUG   ] PaintRobotSystem._validate_and_inject — Injected 'ServiceID.PHYSICAL_CONTROL_BUTTONS' (ModbusPhysicalControlButtons)
+14:26:54 [DEBUG   ] PaintRobotSystem._validate_and_inject — Injected 'ServiceID.VACUUM_SENSOR' (VacuumSensorService)
+14:26:54 [DEBUG   ] PaintRobotSystem._validate_and_inject — Injected 'ServiceID.DRYER' (DryerService)
+14:26:54 [DEBUG   ] SettingsService.reload — Loading settings 'SettingsID.PAINT_PROCESS_CONFIG'
+14:26:54 [INFO    ] BaseJsonSettingsRepository.load — Loaded 'paint_process_config' settings from '/home/plp/Desktop/cobot/robot_app_platform/src/robot_systems/paint/storage/settings/paint/process.json'.
+14:26:54 [DEBUG   ] SettingsService.reload — Loading settings 'movement_groups'
+14:26:54 [INFO    ] BaseJsonSettingsRepository.load — Loaded 'movement_group_settings' settings from '/home/plp/Desktop/cobot/robot_app_platform/src/robot_systems/paint/storage/settings/robot/movement_groups.json'.
+14:26:54 [DEBUG   ] SettingsService.reload — Loading settings 'robot_calibration'
+14:26:54 [INFO    ] BaseJsonSettingsRepository.load — Loaded 'robot_calibration' settings from '/home/plp/Desktop/cobot/robot_app_platform/src/robot_systems/paint/storage/settings/robot/calibration.json'.
+14:26:54 [DEBUG   ] SettingsService.reload — Loading settings 'targeting'
+14:26:54 [INFO    ] BaseJsonSettingsRepository.load — Loaded 'targeting' settings from '/home/plp/Desktop/cobot/robot_app_platform/src/robot_systems/paint/storage/settings/targeting/definitions.json'.
+14:26:54 [INFO    ] VisionService.start — VisionService started
+14:26:54 [DEBUG   ] SettingsService.reload — Loading settings 'height_measuring_settings'
+14:26:54 [INFO    ] BaseJsonSettingsRepository.load — Loaded 'height_measuring_settings' settings from '/home/plp/Desktop/cobot/robot_app_platform/src/robot_systems/paint/storage/settings/height_measuring/settings.json'.
+14:26:54 [INFO    ] BaseJsonSettingsRepository.load — Loaded 'laser_calibration_data' settings from '/home/plp/Desktop/cobot/robot_app_platform/src/robot_systems/paint/storage/settings/height_measuring/calibration_data.json'.
+14:26:54 [INFO    ] src.engine.robot.height_measuring.height_measuring_service._load_calibration — No calibration data found
+14:26:54 [DEBUG   ] SettingsService.reload — Loading settings 'calibration_vision_settings'
+14:26:54 [INFO    ] BaseJsonSettingsRepository.load — Loaded 'calibration_vision_settings' settings from '/home/plp/Desktop/cobot/robot_app_platform/src/robot_systems/paint/storage/settings/vision/calibration_settings.json'.
+14:26:54 [INFO    ] src.robot_systems.paint.domain.workpieces.repository.json_paint_workpiece_repository.__init__ — JsonPaintWorkpieceRepository: root -> /home/plp/Desktop/cobot/robot_app_platform/src/robot_systems/paint/storage/workpieces
+14:26:54 [INFO    ] src.robot_systems.paint.domain.workpieces.repository.json_paint_workpiece_repository.__init__ — JsonPaintWorkpieceRepository: root -> /home/plp/Desktop/cobot/robot_app_platform/src/robot_systems/paint/storage/workpieces
+14:26:54 [INFO    ] src.robot_systems.paint.domain.workpieces.repository.json_paint_workpiece_repository.__init__ — JsonPaintWorkpieceRepository: root -> /home/plp/Desktop/cobot/robot_app_platform/src/robot_systems/paint/storage/workpieces
+14:26:54 [INFO    ] src.robot_systems.paint.domain.workpieces.repository.json_paint_workpiece_repository.__init__ — JsonPaintWorkpieceRepository: root -> /home/plp/Desktop/cobot/robot_app_platform/src/robot_systems/paint/storage/workpieces
+14:26:54 [INFO    ] src.robot_systems.paint.domain.workpieces.repository.json_paint_workpiece_repository.__init__ — JsonPaintWorkpieceRepository: root -> /home/plp/Desktop/cobot/robot_app_platform/src/robot_systems/paint/storage/workpieces
+14:26:54 [INFO    ] src.robot_systems.paint.domain.workpieces.repository.json_paint_workpiece_repository.__init__ — JsonPaintWorkpieceRepository: root -> /home/plp/Desktop/cobot/robot_app_platform/src/robot_systems/paint/storage/workpieces
+14:26:54 [INFO    ] src.engine.robot.drivers.ros2_robot.enable — enable →
+14:26:54 [INFO    ] src.engine.robot.drivers.client_adapters.http_websocket.enable — enable → POST /drive/enable
+14:26:54 [INFO    ] src.engine.robot.drivers.client_adapters.http_websocket._log_execution_ws_transition — [EXECUTION_TIMING] execution first_active_status after_request_s=-1.000 task_id=None status={'source': 'websocket', 'is_executing': True}
+14:26:55 [INFO    ] src.engine.robot.drivers.client_adapters.http_websocket._log_execution_ws_transition — [EXECUTION_TIMING] execution inactive_status after_request_s=-1.000 task_id=None status={'source': 'websocket', 'is_executing': False}
+14:26:55 [INFO    ] src.engine.robot.drivers.client_adapters.http_websocket.enable — enable ← http=200 raw={'actual_enabled': True, 'command_accepted': True, 'desired_enabled': True, 'hardware_fault': None, 'hardware_ready': True, 'motion_allowed_by_drive_enable': True, 'request': {'controller_deactivate_ok': True, 'controller_switch_ok': True, 'mode': 'csp', 'requested_enabled': True, 'state': 'ENABLE_REQUESTED', 'success': True}, 'requested_enabled': True, 'state': 'OPERATION_ENABLED', 'status_state': ['operation_enabled', 'operation_enabled', 'operation_enabled', 'operation_enabled', 'operation_enabled', 'operation_enabled'], 'statusword': [5815, 4791, 5815, 5815, 5815, 5815], 'success': True}
+14:26:55 [INFO    ] src.engine.robot.drivers.ros2_robot.enable — enable ← done
+14:26:55 [INFO    ] PaintRobotSystem.start — PaintSystem started
 [ShellConfig] Cleared all folder definitions
 [ShellConfig] Added folder: PRODUCTION (ID: 1)
+14:26:55 [INFO    ] ShellConfigurator.configure — Registered shell folder: Production (id=1)
 [ShellConfig] Added folder: SERVICE (ID: 2)
+14:26:55 [INFO    ] ShellConfigurator.configure — Registered shell folder: Service (id=2)
 [ShellConfig] Added folder: ADMIN (ID: 3)
+14:26:55 [INFO    ] ShellConfigurator.configure — Registered shell folder: Administration (id=3)
 [ShellConfig] Added folder: Tests (ID: 4)
+14:26:55 [INFO    ] ShellConfigurator.configure — Registered shell folder: Tests (id=4)
+14:26:55 [INFO    ] ShellConfigurator.configure — PaintSystem: configured 4 folders
+14:26:55 [WARNING ] main.main — ui.dev_skip_login is enabled — bypassing authentication
+14:26:55 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'PaintDashboard' → folder 1
+14:26:55 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'WorkpieceLibrary' → folder 1
+14:26:55 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'WorkpieceEditor' → folder 1
+14:26:55 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'RobotSettings' → folder 2
+14:26:55 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'EthercatDiagnostics' → folder 2
+14:26:55 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'ModbusSettings' → folder 2
+14:26:55 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'DryerSettings' → folder 2
+14:26:55 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'DeviceControl' → folder 2
+14:26:55 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'WorkAreaSettings' → folder 2
+14:26:55 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'CameraSettings' → folder 2
+14:26:55 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'CalibrationSettings' → folder 2
+14:26:55 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'PaintProcessSettings' → folder 2
+14:26:55 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'Calibration' → folder 2
+14:26:55 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'BrokerDebug' → folder 4
+14:26:55 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'UserManagement' → folder 3
+14:26:55 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'PickTarget' → folder 4
+14:26:55 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'PaintMotionPlaneSetup' → folder 4
+14:26:55 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'PaintMotionRecipe' → folder 4
 [AppShell] Added PaintDashboard to folder 1
-[AppShell] Added WorkpieceLibrary to folder 4
-[AppShell] Added WorkpieceEditor to folder 4
+[AppShell] Added WorkpieceLibrary to folder 1
+[AppShell] Added WorkpieceEditor to folder 1
 [AppShell] Added RobotSettings to folder 2
+[AppShell] Added EthercatDiagnostics to folder 2
+[AppShell] Added ModbusSettings to folder 2
+[AppShell] Added DryerSettings to folder 2
+[AppShell] Added DeviceControl to folder 2
 [AppShell] Added WorkAreaSettings to folder 2
 [AppShell] Added CameraSettings to folder 2
 [AppShell] Added CalibrationSettings to folder 2
+[AppShell] Added PaintProcessSettings to folder 2
 [AppShell] Added Calibration to folder 2
 [AppShell] Added BrokerDebug to folder 4
 [AppShell] Added UserManagement to folder 3
-[AppShell] Added IntrinsicCapture to folder 4
-[AppShell] Added HandEyeCalibration to folder 4
 [AppShell] Added PickTarget to folder 4
 [AppShell] Added PaintMotionPlaneSetup to folder 4
-15:58:46 [WARNING ] main.main — DEV_SKIP_LOGIN is enabled — bypassing authentication
-15:58:46 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'PaintDashboard' → folder 1
-15:58:46 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'WorkpieceLibrary' → folder 4
-15:58:46 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'WorkpieceEditor' → folder 4
-15:58:46 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'RobotSettings' → folder 2
-15:58:46 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'WorkAreaSettings' → folder 2
-15:58:46 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'CameraSettings' → folder 2
-15:58:46 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'CalibrationSettings' → folder 2
-15:58:46 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'Calibration' → folder 2
-15:58:46 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'BrokerDebug' → folder 4
-15:58:46 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'UserManagement' → folder 3
-15:58:46 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'IntrinsicCapture' → folder 4
-15:58:46 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'HandEyeCalibration' → folder 4
-15:58:46 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'PickTarget' → folder 4
-15:58:46 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'PaintMotionPlaneSetup' → folder 4
-MainWindow: Folder closed - restoring all folders
-Currently running app: None
-MainWindow: App selected - WorkpieceEditor
-MainWindow: Creating app widget for 'WorkpieceEditor'
-[SegmentManagerProvider] Using custom manager: Adapter
-✅ Segment manager configured
-[SettingsProviderRegistry] Using custom provider: SegmentSettingsProviderAdapter
-✅ Settings provider registered
-✅ Settings UI configured
-✅ Layer config registered
-[WidgetProvider] Using custom factory: VirtualKeyboardWidgetFactory
-✅ Custom widgets configured
-[AdditionalFormProvider] Using factory: WorkpieceFormFactory
-✅ Additional data form configured
-Loaded 62 settings from /home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/contour_editor/persistence/config/contour_editor_settings.json
-Applied 62 settings to constants module
-Segment click overlay set up for editor <contour_editor.core.editor.ContourEditor object at 0x742cd56e3ed0>
-15:58:52 [INFO    ] src.robot_systems.paint.domain.workpieces.repository.json_paint_workpiece_repository.__init__ — JsonPaintWorkpieceRepository: root -> /home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/storage/workpieces
-15:58:52 [DEBUG   ] WidgetApplication.register — WidgetApplication registered
-✅ Save callback connected
-✅ Capture callback connected
-✅ Execute callback connected
-✅ Camera feed update callback connected
-✅ Contour Editor built successfully
-Set workpiece manager OK
-✅ Workpiece Editor built successfully with WorkpieceManager, StartHandler, and CaptureHandler
-15:58:52 [DEBUG   ] ApplicationFactory.finalize_application_build — WorkpieceEditorFactory built: WorkpieceEditorModel / WorkpieceEditorView / WorkpieceEditorController
-Unknown property transform
-Unknown property transform
-MAIN_WINDOW LEN RUNNING WIDGETS: 1
-Unknown property transform
-Unknown property transform
-QPropertyAnimation::updateState (geometry): Changing state of an animation without target
-QPropertyAnimation::updateState (windowOpacity): Changing state of an animation without target
-15:58:53 [DEBUG   ] WorkpieceEditorController._on_capture — Capture: got 1 contours from vision
-15:58:53 [DEBUG   ] WorkpieceEditorController._on_capture — Capture: largest contour has 254 points
-Passing contour with 254 points to layer Workpiece, settings: {}
-15:58:57 [DEBUG   ] src.robot_systems.paint.domain.paint_workpiece_editor_adapter.to_workpiece_data — paint to_workpiece_data — Workpiece/Main segs=1 Contour segs=0 Fill segs=0
-15:58:57 [DEBUG   ] src.applications.workpiece_editor.service.workpiece_editor_service.execute_workpiece — Execute workpiece: {'form_data': {}, 'editor_data': ContourEditorData(layers=[Workpiece(1 segments)]), 'contour': array([[[472.62726, 366.58936]],
+[AppShell] Added PaintMotionRecipe to folder 4
 
-       [[472.62723, 366.5898 ]],
-
-       [[472.62723, 366.58987]],
-
-       [[472.62723, 366.58987]],
-
-       [[476.     , 372.     ]],
-
-       [[478.55405, 376.49515]],
-
-       [[478.55405, 376.49512]],
-
-       [[478.55402, 376.4951 ]],
-
-       [[478.55423, 376.49542]],
-
-       [[478.55423, 376.49542]],
-
-       [[487.08276, 386.16577]],
-
-       [[492.89722, 391.31067]],
-
-       [[493.40765, 391.66977]],
-
-       [[493.40775, 391.66983]],
-
-       [[493.4076 , 391.66974]],
-
-       [[499.     , 395.     ]],
-
-       [[501.     , 397.     ]],
-
-       [[502.     , 397.     ]],
-
-       [[507.65305, 400.88446]],
-
-       [[507.65308, 400.88446]],
-
-       [[507.65305, 400.88446]],
-
-       [[507.65317, 400.88455]],
-
-       [[507.65308, 400.8845 ]],
-
-       [[507.65308, 400.88446]],
-
-       [[513.     , 403.     ]],
-
-       [[514.     , 403.     ]],
-
-       [[515.3853 , 404.05872]],
-
-       [[515.386  , 404.05902]],
-
-       [[517.60095, 405.04636]],
-
-       [[517.6011 , 405.0464 ]],
-
-       [[519.8796 , 405.873  ]],
-
-       [[519.8797 , 405.87302]],
-
-       [[524.0576 , 407.29532]],
-
-       [[526.881  , 408.20212]],
-
-       [[526.8804 , 408.20193]],
-
-       [[529.4475 , 408.97238]],
-
-       [[529.44836, 408.97253]],
-
-       [[529.4482 , 408.9725 ]],
-
-       [[529.44824, 408.97253]],
-
-       [[535.     , 410.     ]],
-
-       [[536.     , 411.     ]],
-
-       [[542.56525, 412.38052]],
-
-       [[542.56537, 412.38055]],
-
-       [[542.5654 , 412.38055]],
-
-       [[542.5672 , 412.38083]],
-
-       [[551.2624 , 413.72226]],
-
-       [[551.2626 , 413.72226]],
-
-       [[558.     , 414.     ]],
-
-       [[561.5321 , 414.89856]],
-
-       [[570.     , 415.     ]],
-
-       [[575.28784, 415.84586]],
-
-       [[590.     , 416.     ]],
-
-       [[591.     , 417.     ]],
-
-       [[611.     , 417.     ]],
-
-       [[612.     , 418.     ]],
-
-       [[625.6124 , 418.2282 ]],
-
-       [[630.76416, 418.55966]],
-
-       [[652.0094 , 419.74796]],
-
-       [[651.3644 , 419.72064]],
-
-       [[675.     , 420.     ]],
-
-       [[676.     , 419.     ]],
-
-       [[688.3754 , 418.69183]],
-
-       [[694.     , 418.     ]],
-
-       [[709.     , 418.     ]],
-
-       [[710.     , 419.     ]],
-
-       [[732.162  , 419.7708 ]],
-
-       [[732.1621 , 419.7708 ]],
-
-       [[744.43054, 421.0681 ]],
-
-       [[744.43054, 421.0681 ]],
-
-       [[744.43054, 421.0681 ]],
-
-       [[750.81714, 422.21954]],
-
-       [[754.     , 422.     ]],
-
-       [[755.     , 423.     ]],
-
-       [[762.8877 , 424.0024 ]],
-
-       [[762.8883 , 424.00247]],
-
-       [[762.88904, 424.0026 ]],
-
-       [[768.5976 , 425.14365]],
-
-       [[771.9552 , 425.78586]],
-
-       [[771.9551 , 425.78586]],
-
-       [[786.6056 , 426.7382 ]],
-
-       [[786.6056 , 426.7382 ]],
-
-       [[805.365  , 427.74988]],
-
-       [[805.3649 , 427.7499 ]],
-
-       [[826.9939 , 428.7804 ]],
-
-       [[827.0009 , 428.78094]],
-
-       [[846.3645 , 429.67627]],
-
-       [[846.36444, 429.67627]],
-
-       [[864.8508 , 430.62177]],
-
-       [[864.8509 , 430.62177]],
-
-       [[898.70154, 430.61386]],
-
-       [[898.70245, 430.61377]],
-
-       [[905.4674 , 429.93454]],
-
-       [[905.4677 , 429.93454]],
-
-       [[915.7308 , 427.90186]],
-
-       [[915.7308 , 427.90186]],
-
-       [[915.73004, 427.902  ]],
-
-       [[915.7305 , 427.90192]],
-
-       [[919.1097 , 427.11035]],
-
-       [[919.10974, 427.11032]],
-
-       [[923.2354 , 426.08987]],
-
-       [[925.     , 425.     ]],
-
-       [[930.0586 , 424.21002]],
-
-       [[930.05804, 424.21024]],
-
-       [[930.06274, 424.2083 ]],
-
-       [[930.06335, 424.20804]],
-
-       [[938.6523 , 420.98462]],
-
-       [[938.65234, 420.98465]],
-
-       [[938.65234, 420.98453]],
-
-       [[938.6511 , 420.98523]],
-
-       [[940.3935 , 420.17075]],
-
-       [[940.39343, 420.17087]],
-
-       [[942.1297 , 419.2221 ]],
-
-       [[942.12805, 419.223  ]],
-
-       [[942.1262 , 419.22394]],
-
-       [[942.1265 , 419.2238 ]],
-
-       [[948.     , 416.     ]],
-
-       [[949.     , 415.     ]],
-
-       [[950.     , 415.     ]],
-
-       [[956.7649 , 410.37634]],
-
-       [[956.76495, 410.3763 ]],
-
-       [[956.76495, 410.37634]],
-
-       [[956.7649 , 410.37634]],
-
-       [[969.     , 398.     ]],
-
-       [[972.6382 , 392.82733]],
-
-       [[972.6382 , 392.82736]],
-
-       [[972.63824, 392.82748]],
-
-       [[972.6382 , 392.82727]],
-
-       [[972.6381 , 392.82684]],
-
-       [[972.6381 , 392.82693]],
-
-       [[972.6381 , 392.827  ]],
-
-       [[972.6382 , 392.82697]],
-
-       [[970.     , 387.     ]],
-
-       [[967.76544, 383.61212]],
-
-       [[967.7657 , 383.61243]],
-
-       [[967.761  , 383.6058 ]],
-
-       [[967.75574, 383.59842]],
-
-       [[953.4577 , 368.64474]],
-
-       [[953.4578 , 368.64487]],
-
-       [[953.45776, 368.64478]],
-
-       [[948.     , 365.     ]],
-
-       [[947.40625, 364.22934]],
-
-       [[947.4062 , 364.2293 ]],
-
-       [[943.25397, 361.66904]],
-
-       [[940.26935, 359.93402]],
-
-       [[940.26935, 359.93402]],
-
-       [[940.26935, 359.93402]],
-
-       [[938.2704 , 358.83444]],
-
-       [[938.27094, 358.8347 ]],
-
-       [[936.47894, 357.9318 ]],
-
-       [[936.47894, 357.93176]],
-
-       [[934.24176, 356.92618]],
-
-       [[931.73444, 355.84015]],
-
-       [[931.7344 , 355.84015]],
-
-       [[931.     , 356.     ]],
-
-       [[930.     , 355.     ]],
-
-       [[923.30164, 352.62146]],
-
-       [[923.3014 , 352.6214 ]],
-
-       [[923.30145, 352.62143]],
-
-       [[923.30194, 352.62152]],
-
-       [[921.3134 , 351.94708]],
-
-       [[921.313  , 351.94696]],
-
-       [[921.3129 , 351.94693]],
-
-       [[918.1713 , 350.9446 ]],
-
-       [[918.1693 , 350.94406]],
-
-       [[915.1308 , 350.06494]],
-
-       [[915.13086, 350.06494]],
-
-       [[912.     , 349.     ]],
-
-       [[904.393  , 347.45032]],
-
-       [[904.3931 , 347.45035]],
-
-       [[904.393  , 347.45032]],
-
-       [[904.39294, 347.45032]],
-
-       [[897.     , 347.     ]],
-
-       [[896.     , 346.     ]],
-
-       [[886.2931 , 345.1141 ]],
-
-       [[886.2931 , 345.1141 ]],
-
-       [[875.6924 , 344.18878]],
-
-       [[875.6922 , 344.18875]],
-
-       [[856.6312 , 343.18817]],
-
-       [[856.63184, 343.18823]],
-
-       [[834.8867 , 342.36023]],
-
-       [[834.9188 , 342.3631 ]],
-
-       [[815.266  , 341.08588]],
-
-       [[815.266  , 341.08588]],
-
-       [[799.05347, 340.204  ]],
-
-       [[799.0632 , 340.2044 ]],
-
-       [[784.3562 , 339.35684]],
-
-       [[784.     , 339.     ]],
-
-       [[772.7064 , 339.26968]],
-
-       [[772.7063 , 339.26968]],
-
-       [[759.56647, 340.2882 ]],
-
-       [[759.56665, 340.2882 ]],
-
-       [[727.     , 341.     ]],
-
-       [[726.     , 340.     ]],
-
-       [[711.     , 340.     ]],
-
-       [[710.     , 339.     ]],
-
-       [[701.     , 339.     ]],
-
-       [[695.0442 , 337.6486 ]],
-
-       [[695.0426 , 337.64844]],
-
-       [[693.     , 337.     ]],
-
-       [[686.     , 337.     ]],
-
-       [[685.     , 336.     ]],
-
-       [[676.77527, 334.90143]],
-
-       [[676.77527, 334.90143]],
-
-       [[676.7779 , 334.9019 ]],
-
-       [[673.     , 334.     ]],
-
-       [[667.45105, 333.3637 ]],
-
-       [[667.4507 , 333.3637 ]],
-
-       [[650.     , 333.     ]],
-
-       [[649.     , 332.     ]],
-
-       [[623.3574 , 331.54147]],
-
-       [[622.     , 331.     ]],
-
-       [[602.     , 331.     ]],
-
-       [[601.     , 330.     ]],
-
-       [[584.     , 330.     ]],
-
-       [[583.     , 329.     ]],
-
-       [[538.1154 , 330.12402]],
-
-       [[538.115  , 330.12408]],
-
-       [[538.11017, 330.12494]],
-
-       [[538.11017, 330.12494]],
-
-       [[533.55804, 330.85855]],
-
-       [[527.57996, 332.14633]],
-
-       [[526.91315, 332.29517]],
-
-       [[524.7017 , 332.7886 ]],
-
-       [[524.7017 , 332.78864]],
-
-       [[524.7017 , 332.7886 ]],
-
-       [[520.     , 334.     ]],
-
-       [[519.     , 335.     ]],
-
-       [[513.6254 , 335.93372]],
-
-       [[513.6255 , 335.9337 ]],
-
-       [[513.6252 , 335.93375]],
-
-       [[513.6252 , 335.93375]],
-
-       [[511.1269 , 336.76367]],
-
-       [[511.12677, 336.76373]],
-
-       [[511.12692, 336.76367]],
-
-       [[511.1271 , 336.7636 ]],
-
-       [[505.71658, 339.00946]],
-
-       [[504.     , 340.     ]],
-
-       [[503.     , 340.     ]],
-
-       [[502.     , 341.     ]],
-
-       [[496.3407 , 344.00226]],
-
-       [[496.34073, 344.00226]],
-
-       [[496.34058, 344.00232]],
-
-       [[496.34073, 344.00226]],
-
-       [[496.3407 , 344.00226]],
-
-       [[493.2256 , 345.91443]],
-
-       [[493.22684, 345.91364]],
-
-       [[489.69156, 348.40625]],
-
-       [[489.69153, 348.40625]],
-
-       [[487.     , 351.     ]],
-
-       [[486.     , 351.     ]],
-
-       [[472.62726, 366.5893 ]],
-
-       [[472.62726, 366.5892 ]],
-
-       [[472.62726, 366.58942]],
-
-       [[472.62726, 366.58926]]], dtype=float32), 'velocity': '10', 'acceleration': '10', 'rz_angle': '0', 'offset': '0', 'preprocess_min_spacing_mm': '2.5', 'interpolation_spacing_mm': '10.0', 'dense_sampling_factor': '0.25', 'execution_spacing_mm': '7.5', 'path_tangent_lookahead_mm': '15.0', 'path_tangent_deadband_deg': '5.0', 'sprayPattern': {'Contour': [], 'Fill': []}, 'height_mm': 0.0}
-15:58:57 [INFO    ] HomographyResidualTransformer._load — Homography residual model loaded (basis=tps) from /home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/storage/settings/vision/data/cameraToRobotMatrix_camera_center_homography_residual.json
-15:58:57 [INFO    ] src.robot_systems.base_robot_system._build_shared_base_transformer — [CALIB] Built base transformer: class=HomographyResidualTransformer matrix_path=/home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/storage/settings/vision/data/cameraToRobotMatrix_camera_center.npy residual_path=/home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/storage/settings/vision/data/cameraToRobotMatrix_camera_center_homography_residual.json available=True
-15:58:57 [INFO    ] src.robot_systems.base_robot_system.get_shared_vision_resolver — [CALIB] Built shared vision resolver: transformer=HomographyResidualTransformer available=True tcp_offset=(1.145, 71.110) frames=['calibration']
-15:58:57 [DEBUG   ] src.robot_systems.paint.application_wiring.build_execution_plan — SPRAY PATTERN: {'Contour': [], 'Fill': []}
-15:58:57 [INFO    ] src.robot_systems.paint.application_wiring.build_execution_plan — [EXECUTE] No spray patterns found; using workpiece layer for execution
-15:58:57 [DEBUG   ] src.robot_systems.paint.application_wiring.build_execution_plan — USING WORKPIECE LAYER
-[MainApplicationFrame] Start/Execute requested - collecting complete data
-[MainApplicationFrame] No form available
-[MainApplicationFrame] Editor data: 1 segments, 254 points
-15:58:58 [INFO    ] src.robot_systems.paint.processes.paint.plan.paint_contour_interpolation._fair_resampled_contour_xy — [PAINT] Source contour fairing removed 704 resampling wiggle sample(s); max_bridge_error=0.0769mm tolerance=0.1000mm
-15:58:58 [INFO    ] src.robot_systems.paint.application_wiring._process_source_contour — [EXECUTE] Source contour processor: workpiece_layer input_px=255 processed_px=356
-15:58:58 [INFO    ] src.robot_systems.paint.application_wiring.build_execution_plan — [EXECUTE] source=workpiece_layer cleaned_contour_px=254 prepared_px=356 settings={'form_data': {}, 'editor_data': ContourEditorData(layers=[Workpiece(1 segments)]), 'velocity': '10', 'acceleration': '10', 'rz_angle': '0', 'offset': '0', 'preprocess_min_spacing_mm': '2.5', 'interpolation_spacing_mm': '10.0', 'dense_sampling_factor': '0.25', 'execution_spacing_mm': '7.5', 'path_tangent_lookahead_mm': '15.0', 'path_tangent_deadband_deg': '5.0', 'height_mm': 0.0}
-15:58:58 [DEBUG   ] SettingsService.reload — Loading settings 'movement_groups'
-15:58:58 [INFO    ] BaseJsonSettingsRepository.load — Loaded 'movement_group_settings' settings from '/home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/storage/settings/robot/movement_groups.json'.
-15:58:58 [INFO    ] src.robot_systems.paint.application_wiring._load_geometry_ppm — [EXECUTE] Loaded geometry PPM 3.633564 from /home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/storage/settings/vision/data/cameraToRobotMatrix_camera_center_geometry_scale.json
-15:58:58 [INFO    ] src.engine.robot.targeting.vision_target_resolver.resolve — [TARGETING] point=tool frame=calibration pixels=(722.968, 379.869) calibration_xy=(15.149, 361.326) plane_xy=(15.149, 361.326) orientation=(-178.778, -0.020, 0.000) reference_rz=0.000 tcp_delta=(0.000, 0.000, 0.000) point_offset_local=(1.470, 71.650) point_delta_rotated=(1.471, -71.634, -1.528) final_xyz=(16.619, 432.976, 200.139)
-15:58:58 [INFO    ] src.robot_systems.paint.application_wiring.convert — [EXECUTE] Geometry transform: mode=ppm_anchor ppm=3.633564 mm_per_px=0.275212 anchor_px=(722.968, 379.869) anchor_robot_xy=(16.619, 432.976) basis_x=(0.998624, -0.052442) basis_y=(-0.052442, -0.998624) bbox_robot_mm=(136.945 x 32.755) points=356
-15:58:58 [DEBUG   ] src.robot_systems.paint.application_wiring._transform_to_robot — [EXECUTE] RZ mode=path_tangent first headings=[0.0, 0.0, 16.41, 17.153, 17.858]
-15:58:58 [INFO    ] src.robot_systems.paint.application_wiring.build_execution_plan — [EXECUTE] Contour processor: pattern=Workpiece method=paint_mm_1mm_resample input=356 prepared=293 curve=293
-15:58:58 [INFO    ] src.robot_systems.paint.application_wiring.build_execution_plan — [EXECUTE] Prepared contour output is final: pattern=Workpiece method=paint_mm_1mm_resample points=293
-15:58:58 [INFO    ] src.engine.robot.targeting.vision_target_resolver.resolve — [TARGETING] point=tool frame=calibration pixels=(723.030, 379.822) calibration_xy=(15.166, 361.338) plane_xy=(15.166, 361.338) orientation=(-178.778, -0.020, 0.000) reference_rz=0.000 tcp_delta=(0.000, 0.000, 0.000) point_offset_local=(1.470, 71.650) point_delta_rotated=(1.471, -71.634, -1.528) final_xyz=(16.636, 432.988, 200.139)
-15:58:58 [INFO    ] src.robot_systems.paint.application_wiring.build_execution_plan — [PICKUP_RZ] method=initial_paint_segment pickup_px=(723.030, 379.822) pickup_camera_xy=(16.636, 432.988) pickup_rz=177.866 reference_rz=0.000 path_pts=293
-15:58:58 [INFO    ] src.engine.robot.targeting.vision_target_resolver.resolve — [TARGETING] point=tool frame=calibration pixels=(723.030, 379.822) calibration_xy=(15.166, 361.338) plane_xy=(15.166, 361.338) orientation=(-178.778, -0.020, 177.866) reference_rz=0.000 tcp_delta=(-4.937, -142.128, 0.000) point_offset_local=(1.470, 71.650) point_delta_rotated=(1.198, 71.639, -1.528) final_xyz=(15.967, 431.921, 200.139)
-15:58:58 [INFO    ] src.robot_systems.paint.application_wiring.build_execution_plan — [PICKUP_RZ] pickup point resolved at pickup_rz=177.866 pickup_xy=(15.967, 431.921)
-15:58:58 [INFO    ] src.robot_systems.paint.processes.paint.execute.workpiece_path_executor._prepare_pivot_source_plan — [PIVOT_PIPELINE] job=1 final_contour_source=execution_path source_pts=293 pivot_source_pts=293 actual_spacing[min=0.042 mean=0.996 max=1.000]mm
-15:58:58 [INFO    ] src.applications.workpiece_editor.service.workpiece_editor_service.execute_workpiece — [EXECUTE] Done — 1 path(s), 293 total spline waypoints
-15:58:58 [INFO    ] WorkpieceEditorController._on_execute — Execute workpiece: True — Prepared process: 1 path(s), 293 interpolated waypoints
-15:58:58 [INFO    ] WorkpieceEditorController._on_execute_process_confirmed — [TIMING] controller pre-execute elapsed_s=0.000
-15:58:58 [INFO    ] src.robot_systems.paint.processes.paint.execute.workpiece_path_executor._execute_pickup_to_pivot_stage — [TIMING] pickup_to_pivot entered
-15:58:58 [DEBUG   ] src.robot_systems.paint.processes.paint.execute.workpiece_path_executor._build_pickup_and_stage_poses — pickup_pivot_pose -> [12.631, 455.215, 200.139, -178.778, -0.02, -0.115]
-15:58:58 [DEBUG   ] src.robot_systems.paint.processes.paint.execute.workpiece_path_executor._build_pickup_and_stage_poses — paint_pivot_pose -> [-1.859, 686.548, 379.063, -89.945, -0.332, -0.464]
-15:58:58 [DEBUG   ] src.robot_systems.paint.processes.paint.execute.workpiece_path_executor._build_pickup_and_stage_poses — first_pivot_pose -> [44.318545045775416, 686.548, 362.1172793019247, -89.945, -0.8216863526467966, -0.464]
-15:58:58 [INFO    ] src.robot_systems.paint.processes.paint.execute.workpiece_path_executor._build_pickup_and_stage_poses — [PICKUP] pivot anchor offset: source_first=(-22.075, 448.882) source_anchor=(15.967, 431.921) source_first_minus_anchor=(-38.042, 16.961) command_tcp_minus_pivot_xz=(46.178, -16.946)
-15:58:58 [INFO    ] src.robot_systems.paint.processes.paint.execute.workpiece_path_executor._build_pickup_and_stage_poses — [PICKUP] pickup_xy=(15.967, 431.921) pickup_rz=177.866 pickup_rz_source=execution_plan pickup_target=tool workpiece_height=0.000 pickup_z=10.000 safety_z_min=8.000 apply_tcp_offset=False configured_tcp_offset=(1.145, 71.110) rotated_tcp_offset=(0.000, 0.000)
-15:58:58 [INFO    ] src.robot_systems.paint.processes.paint.execute.workpiece_path_executor._build_pickup_and_stage_poses — [PICKUP] carried source rotation applied to pivot geometry: pickup_rz=177.866 align_rz=0.000 source_rotation_deg=-177.866 first_pivot=[45.419, 686.548, 365.564, -89.945, -0.46, -0.464]
-15:58:58 [INFO    ] src.robot_systems.paint.processes.paint.execute.workpiece_path_executor._build_pickup_and_stage_poses — [PICKUP] xz/ry handoff: mirrored=False pickup_rz=177.866 first_pivot_ry=-0.460 paint_reference_ry=-0.332 align_rz=0.000
-15:58:58 [DEBUG   ] src.robot_systems.paint.processes.paint.execute.workpiece_path_executor._build_pickup_and_stage_poses — staged_pose = [45.419279807262114, 686.548, 365.56413347324593, -89.945, -0.46010537872766855, -0.464]
-15:58:58 [INFO    ] src.robot_systems.paint.processes.paint.execute.workpiece_path_executor._build_pickup_and_stage_poses — [PICKUP] xz/ry stage axis selection: raw_ry=-0.460 reference_ry=-0.020 selected_ry=-0.020 fixed_rz=0.000 initial_rotation_deferred=true
-15:58:58 [INFO    ] src.robot_systems.paint.processes.paint.execute.workpiece_path_executor._build_pickup_and_stage_poses — [PICKUP] xz/ry staged pose: first_pivot=[45.419, 686.548, 365.564, -89.945, -0.46, -0.464] change_plane=[15.967, 431.921, 110.0, -89.945, -0.02, 0.0] staged=[45.419, 686.548, 365.564, -89.945, -0.02, 0.0]
-15:58:58 [INFO    ] src.robot_systems.paint.processes.paint.execute.workpiece_path_executor._execute_pickup_to_pivot_stage — [TIMING] pickup_to_pivot stage=build_poses elapsed_s=0.230
-15:58:58 [INFO    ] src.robot_systems.paint.processes.paint.execute.workpiece_path_executor._turn_vacuum_on — [PICKUP] Turning vacuum pump ON before pickup
-15:58:58 [INFO    ] src.robot_systems.paint.domain.vacuum_pump.relay_vacuum_pump_controller._set_state — Relay vacuum pump ON output=0 host=127.0.0.1 port=5003
-15:58:58 [INFO    ] src.robot_systems.paint.processes.paint.execute.workpiece_path_executor._move_pickup_phase — [PICKUP] Moving to pickup approach pose tool=1 user=0 pose=[15.967, 431.921, 110.0, -178.778, -0.02, 177.866]
-15:58:58 [INFO    ] MotionService.move_ptp — [TIMING] move_ptp_safety_check elapsed_s=0.000 violations=0
-15:58:58 [DEBUG   ] MotionService.move_ptp — move_ptp → pos=[15.966522236426105, 431.920721326, 110.0, -178.778, -0.02, 177.86595097939752] tool=1 user=0 vel=30.0 acc=50.0
-15:58:58 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_robot.move_linear — move_linear → pos=[15.966522236426105, 431.920721326, 110.0, -178.778, -0.02, 177.86595097939752] tool=1 user=0 vel=30.0 acc=50.0 blend=0
-15:58:58 [INFO    ] src.engine.robot.drivers.fairino.fairino_ros2_client.set_active_tool — Active ROS2 tool set to 1 (TOOL_1)
-15:58:58 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_client.move_liner — move_liner → POST /move/linear payload={'position': [15.966522236426105, 431.920721326, 110.0, -178.778, -0.02, 177.86595097939752], 'tool': 1, 'user': 0, 'vel': 30.0, 'acc': 50.0, 'blocking': True, 'trajectory_optimizer': 'TOTG'}
-15:59:04 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_client.move_liner — move_liner ← http=200 response_text='{"queued":false,"result":0,"success":true,"task_id":310}\n'
-15:59:04 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_client.move_liner — move_liner ← http=200 raw={'queued': False, 'result': 0, 'success': True, 'task_id': 310} result_code=0
-15:59:04 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_robot.move_linear — move_linear ← raw_ret=0 accepted=True
-15:59:04 [INFO    ] MotionService.move_ptp — [TIMING] move_ptp_total success=True driver_elapsed_s=6.508 wait_elapsed_s=0.005 total_elapsed_s=6.513 pos=[15.967, 431.921, 110.0, -178.778, -0.02, 177.866] vel=30.0 acc=50.0
-15:59:04 [DEBUG   ] MotionService.move_ptp — move_ptp ← success=True
-15:59:04 [INFO    ] src.robot_systems.paint.processes.paint.execute.workpiece_path_executor._move_pickup_phase — [PICKUP] Descending to pickup pose tool=1 user=0 pose=[15.967, 431.921, 10.0, -178.778, -0.02, 177.866]
-15:59:04 [INFO    ] MotionService.move_ptp — [TIMING] move_ptp_safety_check elapsed_s=0.000 violations=0
-15:59:04 [DEBUG   ] MotionService.move_ptp — move_ptp → pos=[15.966522236426105, 431.920721326, 10.0, -178.778, -0.02, 177.86595097939752] tool=1 user=0 vel=60.0 acc=40.0
-15:59:04 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_robot.move_linear — move_linear → pos=[15.966522236426105, 431.920721326, 10.0, -178.778, -0.02, 177.86595097939752] tool=1 user=0 vel=60.0 acc=40.0 blend=0
-15:59:04 [INFO    ] src.engine.robot.drivers.fairino.fairino_ros2_client.set_active_tool — Active ROS2 tool set to 1 (TOOL_1)
-15:59:04 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_client.move_liner — move_liner → POST /move/linear payload={'position': [15.966522236426105, 431.920721326, 10.0, -178.778, -0.02, 177.86595097939752], 'tool': 1, 'user': 0, 'vel': 60.0, 'acc': 40.0, 'blocking': True, 'trajectory_optimizer': 'TOTG'}
-15:59:05 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_client.move_liner — move_liner ← http=200 response_text='{"queued":false,"result":0,"success":true,"task_id":311}\n'
-15:59:05 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_client.move_liner — move_liner ← http=200 raw={'queued': False, 'result': 0, 'success': True, 'task_id': 311} result_code=0
-15:59:05 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_robot.move_linear — move_linear ← raw_ret=0 accepted=True
-15:59:05 [INFO    ] MotionService.move_ptp — [TIMING] move_ptp_total success=True driver_elapsed_s=0.995 wait_elapsed_s=0.005 total_elapsed_s=1.000 pos=[15.967, 431.921, 10.0, -178.778, -0.02, 177.866] vel=60.0 acc=40.0
-15:59:05 [DEBUG   ] MotionService.move_ptp — move_ptp ← success=True
-15:59:05 [INFO    ] src.robot_systems.paint.processes.paint.execute.workpiece_path_executor._move_pickup_phase — [PICKUP] Lifting from pickup pose tool=1 user=0 pose=[15.967, 431.921, 110.0, -178.778, -0.02, 177.866]
-15:59:05 [INFO    ] MotionService.move_ptp — [TIMING] move_ptp_safety_check elapsed_s=0.000 violations=0
-15:59:05 [DEBUG   ] MotionService.move_ptp — move_ptp → pos=[15.966522236426105, 431.920721326, 110.0, -178.778, -0.02, 177.86595097939752] tool=1 user=0 vel=50.0 acc=100.0
-15:59:05 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_robot.move_linear — move_linear → pos=[15.966522236426105, 431.920721326, 110.0, -178.778, -0.02, 177.86595097939752] tool=1 user=0 vel=50.0 acc=100.0 blend=0
-15:59:05 [INFO    ] src.engine.robot.drivers.fairino.fairino_ros2_client.set_active_tool — Active ROS2 tool set to 1 (TOOL_1)
-15:59:05 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_client.move_liner — move_liner → POST /move/linear payload={'position': [15.966522236426105, 431.920721326, 110.0, -178.778, -0.02, 177.86595097939752], 'tool': 1, 'user': 0, 'vel': 50.0, 'acc': 100.0, 'blocking': True, 'trajectory_optimizer': 'TOTG'}
-15:59:06 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_client.move_liner — move_liner ← http=200 response_text='{"queued":false,"result":0,"success":true,"task_id":312}\n'
-15:59:06 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_client.move_liner — move_liner ← http=200 raw={'queued': False, 'result': 0, 'success': True, 'task_id': 312} result_code=0
-15:59:06 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_robot.move_linear — move_linear ← raw_ret=0 accepted=True
-15:59:06 [INFO    ] MotionService.move_ptp — [TIMING] move_ptp_total success=True driver_elapsed_s=0.739 wait_elapsed_s=0.005 total_elapsed_s=0.743 pos=[15.967, 431.921, 110.0, -178.778, -0.02, 177.866] vel=50.0 acc=100.0
-15:59:06 [DEBUG   ] MotionService.move_ptp — move_ptp ← success=True
-15:59:06 [INFO    ] src.robot_systems.paint.processes.paint.execute.workpiece_path_executor._move_pickup_phase — [PICKUP] Aligning workpiece to paint axis tool=1 user=0 pose=[15.967, 431.921, 110.0, -178.778, -0.02, 0.0]
-15:59:06 [INFO    ] MotionService.move_ptp — [TIMING] move_ptp_safety_check elapsed_s=0.000 violations=0
-15:59:06 [DEBUG   ] MotionService.move_ptp — move_ptp → pos=[15.966522236426105, 431.920721326, 110.0, -178.778, -0.02, 0.0] tool=1 user=0 vel=50.0 acc=100.0
-15:59:06 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_robot.move_linear — move_linear → pos=[15.966522236426105, 431.920721326, 110.0, -178.778, -0.02, 0.0] tool=1 user=0 vel=50.0 acc=100.0 blend=0
-15:59:06 [INFO    ] src.engine.robot.drivers.fairino.fairino_ros2_client.set_active_tool — Active ROS2 tool set to 1 (TOOL_1)
-15:59:06 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_client.move_liner — move_liner → POST /move/linear payload={'position': [15.966522236426105, 431.920721326, 110.0, -178.778, -0.02, 0.0], 'tool': 1, 'user': 0, 'vel': 50.0, 'acc': 100.0, 'blocking': True, 'trajectory_optimizer': 'TOTG'}
-15:59:16 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_client.move_liner — move_liner ← http=200 response_text='{"queued":false,"result":0,"success":true,"task_id":313}\n'
-15:59:16 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_client.move_liner — move_liner ← http=200 raw={'queued': False, 'result': 0, 'success': True, 'task_id': 313} result_code=0
-15:59:16 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_robot.move_linear — move_linear ← raw_ret=0 accepted=True
-15:59:16 [INFO    ] MotionService.move_ptp — [TIMING] move_ptp_total success=True driver_elapsed_s=9.941 wait_elapsed_s=0.004 total_elapsed_s=9.946 pos=[15.967, 431.921, 110.0, -178.778, -0.02, 0.0] vel=50.0 acc=100.0
-15:59:16 [DEBUG   ] MotionService.move_ptp — move_ptp ← success=True
-15:59:16 [INFO    ] src.robot_systems.paint.processes.paint.execute.workpiece_path_executor._execute_pickup_to_pivot_stage — [PICKUP] Changing plane skipped as standalone move; orientation will be combined with first pivot contact pose
-15:59:16 [INFO    ] src.robot_systems.paint.processes.paint.execute.workpiece_path_executor._pivot_staging_command_pose — [PICKUP] xz/ry pivot staging command mapped: planned_xz=(45.419, 365.564) planned_ry=-0.020 planned_rz=0.000 reference_xz=(-1.859, 379.063) reference_ry=-0.020 command_xz=(45.419, 365.564) command_ry=-0.020 command_rz=0.000 projection_rotation_sign=-1
-15:59:16 [INFO    ] src.robot_systems.paint.processes.paint.execute.workpiece_path_executor._execute_pickup_to_pivot_stage — [PICKUP] staging offset before pivot contact: z_offset_mm=-10.000 paint_axis=x paint_axis_offset_mm=10.000 direction=reverse contact_pose=[45.419, 686.548, 365.564, -89.945, -0.02, 0.0] offset_pose=[55.419, 686.548, 355.564, -89.945, -0.02, 0.0]
-15:59:16 [INFO    ] src.robot_systems.paint.processes.paint.execute.workpiece_path_executor._move_pickup_phase — [PICKUP] Moving to staging offset before first pivot contact pose tool=1 user=0 pose=[55.419, 686.548, 355.564, -89.945, -0.02, 0.0]
-15:59:16 [INFO    ] MotionService.move_ptp — [TIMING] move_ptp_safety_check elapsed_s=0.000 violations=0
-15:59:16 [DEBUG   ] MotionService.move_ptp — move_ptp → pos=[55.419279807262114, 686.548, 355.56413347324593, -89.945, -0.02, 0.0] tool=1 user=0 vel=40.0 acc=60.0
-15:59:16 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_robot.move_linear — move_linear → pos=[55.419279807262114, 686.548, 355.56413347324593, -89.945, -0.02, 0.0] tool=1 user=0 vel=40.0 acc=60.0 blend=0
-15:59:16 [INFO    ] src.engine.robot.drivers.fairino.fairino_ros2_client.set_active_tool — Active ROS2 tool set to 1 (TOOL_1)
-15:59:16 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_client.move_liner — move_liner → POST /move/linear payload={'position': [55.419279807262114, 686.548, 355.56413347324593, -89.945, -0.02, 0.0], 'tool': 1, 'user': 0, 'vel': 40.0, 'acc': 60.0, 'blocking': True, 'trajectory_optimizer': 'TOTG'}
-15:59:18 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_client.move_liner — move_liner ← http=200 response_text='{"queued":false,"result":0,"success":true,"task_id":314}\n'
-15:59:18 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_client.move_liner — move_liner ← http=200 raw={'queued': False, 'result': 0, 'success': True, 'task_id': 314} result_code=0
-15:59:18 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_robot.move_linear — move_linear ← raw_ret=0 accepted=True
-15:59:18 [INFO    ] MotionService.move_ptp — [TIMING] move_ptp_total success=True driver_elapsed_s=1.731 wait_elapsed_s=0.004 total_elapsed_s=1.735 pos=[55.419, 686.548, 355.564, -89.945, -0.02, 0.0] vel=40.0 acc=60.0
-15:59:18 [DEBUG   ] MotionService.move_ptp — move_ptp ← success=True
-15:59:18 [INFO    ] src.robot_systems.paint.processes.paint.execute.workpiece_path_executor._execute_pivot_paths — [PIVOT_PATH] Reusing pickup-stage projected path for job_1: points=600 source_rotation_deg=-177.866
-15:59:18 [INFO    ] src.robot_systems.paint.processes.paint.execute.workpiece_path_executor._execute_pivot_paths — [PIVOT_PATH] XZ/RY desired rotation direction was applied during projection; command path will not mirror RY afterward
-15:59:18 [INFO    ] src.robot_systems.paint.processes.paint.execute.workpiece_path_executor._execute_pivot_paths — [PIVOT_PATH] Applied xz/ry staging RY alignment shift: staged_ry=-0.020 raw_start_ry=-0.460 shift=0.440 selected_start_ry=-0.020
-15:59:18 [INFO    ] src.robot_systems.paint.processes.paint.execute.workpiece_path_executor._pivot_execution_command_path — [PIVOT_PATH] xz/ry execution command mapped: planned_start_xz=(45.419, 365.564) planned_start_ry=-0.020 planned_start_rz=-0.464 command_start_xz=(45.419, 365.564) command_start_ry=-0.020 command_start_rz=-0.464 planned_end_xz=(45.331, 365.258) planned_end_ry=-359.648 planned_end_rz=-0.464 command_end_xz=(45.331, 365.258) command_end_ry=-359.648 command_end_rz=-0.464 reference_xz=(-1.859, 379.063) reference_ry=-0.020 projection_rotation_sign=-1
-15:59:18 [INFO    ] src.robot_systems.paint.processes.paint.execute.workpiece_path_executor._execute_pivot_paths — [PIVOT_PATH] command_truth job=1 first_pose=[45.419, 686.548, 365.564, -89.945, -0.02, -0.464] last_pose=[45.331, 686.548, 365.258, -89.945, -359.648, -0.464] total_xyz_len_mm=539.858
-15:59:18 [INFO    ] src.robot_systems.paint.processes.paint.execute.paint_debug_artifacts.write_pivot_debug_dump — [PIVOT] Wrote pivot trajectory debug dump to /home/ilv/Desktop/robot_app_platform/src/bootstrap/debug_plots/pivot_trajectory_execute_workpiece_xz_y_ry_20260625_155918.txt
-15:59:18 [INFO    ] src.robot_systems.paint.processes.paint.execute.workpiece_path_executor._validate_xz_ry_pivot_path — [PIVOT_PATH] xz/ry preflight skipped: disabled by configuration
-15:59:18 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_robot.execute_trajectory — execute_trajectory → waypoints=600 rx_degrees=180 ry_degrees=0 rz_degrees=0 vel=10.0 acc=10.0 blocking=True orientation_mode=per_waypoint
-15:59:18 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_client.execute_path — execute_path → POST /execute/path waypoints=600 blocking=True vel=10.0 acc=10.0 optimizer=None orientation_mode=per_waypoint
-15:59:40 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_client.execute_path — execute_path ← http=200 raw={'queued': False, 'result': 0, 'success': True, 'task_id': 315} result_code=0
-15:59:40 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_robot.execute_trajectory — execute_trajectory ← result=0
-15:59:41 [INFO    ] src.robot_systems.paint.processes.paint.execute.paint_debug_artifacts.write_execution_motion_trace — [PIVOT] Wrote execution motion trace to /home/ilv/Desktop/robot_app_platform/src/bootstrap/debug_plots/execution_motion_trace_execute_workpiece_xz_y_ry_20260625_155940.json
-15:59:41 [INFO    ] src.robot_systems.paint.processes.paint.execute.workpiece_path_executor._execute_pivot_paths — [TIMING] pivot_job index=1 pattern=Workpiece success=true input_pts=293 output_pts=600 execute_elapsed_s=22.733 total_elapsed_s=22.748
-15:59:41 [INFO    ] src.robot_systems.paint.processes.paint.execute.workpiece_path_executor._execute_pivot_paths — [TIMING] pivot_paths success=true jobs=1 total_waypoints=600 elapsed_s=22.749
-15:59:41 [INFO    ] src.robot_systems.paint.processes.paint.execute.workpiece_path_executor._move_pickup_phase — [PICKUP] Returning to align pose for release tool=1 user=0 pose=[15.967, 431.921, 110.0, -178.778, -0.02, 0.0]
-15:59:41 [INFO    ] MotionService.move_ptp — [TIMING] move_ptp_safety_check elapsed_s=0.000 violations=0
-15:59:41 [DEBUG   ] MotionService.move_ptp — move_ptp → pos=[15.966522236426105, 431.920721326, 110.0, -178.778, -0.02, 0.0] tool=1 user=0 vel=30.0 acc=70.0
-15:59:41 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_robot.move_linear — move_linear → pos=[15.966522236426105, 431.920721326, 110.0, -178.778, -0.02, 0.0] tool=1 user=0 vel=30.0 acc=70.0 blend=0
-15:59:41 [INFO    ] src.engine.robot.drivers.fairino.fairino_ros2_client.set_active_tool — Active ROS2 tool set to 1 (TOOL_1)
-15:59:41 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_client.move_liner — move_liner → POST /move/linear payload={'position': [15.966522236426105, 431.920721326, 110.0, -178.778, -0.02, 0.0], 'tool': 1, 'user': 0, 'vel': 30.0, 'acc': 70.0, 'blocking': True, 'trajectory_optimizer': 'TOTG'}
-15:59:42 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_client.move_liner — move_liner ← http=200 response_text='{"queued":false,"result":0,"success":true,"task_id":316}\n'
-15:59:42 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_client.move_liner — move_liner ← http=200 raw={'queued': False, 'result': 0, 'success': True, 'task_id': 316} result_code=0
-15:59:42 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_robot.move_linear — move_linear ← raw_ret=0 accepted=True
-15:59:42 [INFO    ] MotionService.move_ptp — [TIMING] move_ptp_total success=True driver_elapsed_s=1.666 wait_elapsed_s=0.004 total_elapsed_s=1.669 pos=[15.967, 431.921, 110.0, -178.778, -0.02, 0.0] vel=30.0 acc=70.0
-15:59:42 [DEBUG   ] MotionService.move_ptp — move_ptp ← success=True
-15:59:42 [INFO    ] src.robot_systems.paint.processes.paint.execute.workpiece_path_executor._move_pickup_phase — [PICKUP] Changing back to original pickup orientation tool=1 user=0 pose=[15.967, 431.921, 110.0, -178.778, -0.02, 177.866]
-15:59:42 [INFO    ] MotionService.move_ptp — [TIMING] move_ptp_safety_check elapsed_s=0.000 violations=0
-15:59:42 [DEBUG   ] MotionService.move_ptp — move_ptp → pos=[15.966522236426105, 431.920721326, 110.0, -178.778, -0.02, 177.86595097939752] tool=1 user=0 vel=30.0 acc=70.0
-15:59:42 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_robot.move_linear — move_linear → pos=[15.966522236426105, 431.920721326, 110.0, -178.778, -0.02, 177.86595097939752] tool=1 user=0 vel=30.0 acc=70.0 blend=0
-15:59:42 [INFO    ] src.engine.robot.drivers.fairino.fairino_ros2_client.set_active_tool — Active ROS2 tool set to 1 (TOOL_1)
-15:59:42 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_client.move_liner — move_liner → POST /move/linear payload={'position': [15.966522236426105, 431.920721326, 110.0, -178.778, -0.02, 177.86595097939752], 'tool': 1, 'user': 0, 'vel': 30.0, 'acc': 70.0, 'blocking': True, 'trajectory_optimizer': 'TOTG'}
-15:59:52 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_client.move_liner — move_liner ← http=200 response_text='{"queued":false,"result":0,"success":true,"task_id":317}\n'
-15:59:52 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_client.move_liner — move_liner ← http=200 raw={'queued': False, 'result': 0, 'success': True, 'task_id': 317} result_code=0
-15:59:52 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_robot.move_linear — move_linear ← raw_ret=0 accepted=True
-15:59:52 [INFO    ] MotionService.move_ptp — [TIMING] move_ptp_total success=True driver_elapsed_s=9.851 wait_elapsed_s=0.003 total_elapsed_s=9.854 pos=[15.967, 431.921, 110.0, -178.778, -0.02, 177.866] vel=30.0 acc=70.0
-15:59:52 [DEBUG   ] MotionService.move_ptp — move_ptp ← success=True
-15:59:52 [INFO    ] src.robot_systems.paint.processes.paint.execute.workpiece_path_executor._turn_vacuum_off — [PICKUP] Turning vacuum pump OFF after staged pivot move
-15:59:52 [INFO    ] src.robot_systems.paint.domain.vacuum_pump.relay_vacuum_pump_controller._set_state — Relay vacuum pump OFF output=0 host=127.0.0.1 port=5003
-15:59:52 [INFO    ] src.robot_systems.paint.processes.paint.execute.workpiece_path_executor._execute_pivot_paint_and_release — [EXECUTE] Pickup and pivot paint completed: jobs=1 total_waypoints=600
-15:59:52 [INFO    ] src.robot_systems.paint.navigation._unwind_joint6_before_calibration_return — [NAV] Unwinding Joint 6 before calibration return vel=100.0 acc=100.0 queue_if_busy=True
-15:59:52 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_robot.unwind_joint6 — unwind_joint6 → blocking=True queue_if_busy=True vel=100.0 acc=100.0
-15:59:52 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_client.unwind_joint6 — unwind_joint6 → POST /unwind/joint6 payload={'blocking': True, 'queue_if_busy': True, 'vel': 100.0, 'acc': 100.0}
-15:59:58 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_client.unwind_joint6 — unwind_joint6 ← http=200 raw={'queued': False, 'result': 0, 'success': True, 'task_id': 318} result_code=0
-15:59:58 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_robot.unwind_joint6 — unwind_joint6 ← raw_ret=0 success=True
-15:59:58 [INFO    ] src.robot_systems.paint.navigation._unwind_joint6_before_calibration_return — [NAV] Joint 6 unwind completed before calibration return
-15:59:58 [INFO    ] src.robot_systems.paint.navigation._move_with_z_offset — [NAV] Calibration return move override vel=30.0 acc=40.0
-15:59:58 [INFO    ] MotionService.move_ptp — [TIMING] move_ptp_safety_check elapsed_s=0.000 violations=0
-15:59:58 [DEBUG   ] MotionService.move_ptp — move_ptp → pos=[-7.132, 366.722, 99.866, -178.877, 0.001, -0.005] tool=1 user=0 vel=30.0 acc=40.0
-15:59:58 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_robot.move_linear — move_linear → pos=[-7.132, 366.722, 99.866, -178.877, 0.001, -0.005] tool=1 user=0 vel=30.0 acc=40.0 blend=0
-15:59:58 [INFO    ] src.engine.robot.drivers.fairino.fairino_ros2_client.set_active_tool — Active ROS2 tool set to 1 (TOOL_1)
-15:59:58 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_client.move_liner — move_liner → POST /move/linear payload={'position': [-7.132, 366.722, 99.866, -178.877, 0.001, -0.005], 'tool': 1, 'user': 0, 'vel': 30.0, 'acc': 40.0, 'blocking': True, 'trajectory_optimizer': 'TOTG'}
-16:00:05 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_client.move_liner — move_liner ← http=200 response_text='{"queued":false,"result":0,"success":true,"task_id":319}\n'
-16:00:05 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_client.move_liner — move_liner ← http=200 raw={'queued': False, 'result': 0, 'success': True, 'task_id': 319} result_code=0
-16:00:05 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_robot.move_linear — move_linear ← raw_ret=0 accepted=True
-16:00:05 [INFO    ] MotionService.move_ptp — [TIMING] move_ptp_total success=True driver_elapsed_s=6.629 wait_elapsed_s=0.003 total_elapsed_s=6.632 pos=[-7.132, 366.722, 99.866, -178.877, 0.001, -0.005] vel=30.0 acc=40.0
-16:00:05 [DEBUG   ] MotionService.move_ptp — move_ptp ← success=True
-16:00:05 [INFO    ] src.robot_systems.paint.processes.paint.execute.workpiece_path_executor.log_summary — [TIMING_SUMMARY] name=pickup_and_paint operations=34 csv=/home/ilv/Desktop/robot_app_platform/src/bootstrap/debug_plots/paint_timing_pickup_and_paint_20260625_160005.csv
-16:00:05 [INFO    ] src.robot_systems.paint.processes.paint.execute.workpiece_path_executor.log_summary — [TIMING_SUMMARY] order=1 step=pickup_and_paint label=- success=True elapsed_s=66.921 start_s=0.000 end_s=66.921
-16:00:05 [INFO    ] src.robot_systems.paint.processes.paint.execute.workpiece_path_executor.log_summary — [TIMING_SUMMARY] order=2 step=pickup_to_pivot label=- success=True elapsed_s=20.213 start_s=0.000 end_s=20.213
-16:00:05 [INFO    ] src.robot_systems.paint.processes.paint.execute.workpiece_path_executor.log_summary — [TIMING_SUMMARY] order=3 step=pickup_to_pivot_prepare label=build_pickup_and_stage_poses success=True elapsed_s=0.230 start_s=0.000 end_s=0.230
-16:00:05 [INFO    ] src.robot_systems.paint.processes.paint.execute.workpiece_path_executor.log_summary — [TIMING_SUMMARY] order=4 step=pickup_plan_build label=refresh_runtime_config success=True elapsed_s=0.000 start_s=0.000 end_s=0.000
-16:00:05 [INFO    ] src.robot_systems.paint.processes.paint.execute.workpiece_path_executor.log_summary — [TIMING_SUMMARY] order=5 step=pickup_plan_build label=resolve_pickup_base_position success=True elapsed_s=0.000 start_s=0.000 end_s=0.000
-16:00:05 [INFO    ] src.robot_systems.paint.processes.paint.execute.workpiece_path_executor.log_summary — [TIMING_SUMMARY] order=6 step=pickup_plan_build label=resolve_paint_base_position success=True elapsed_s=0.000 start_s=0.000 end_s=0.000
-16:00:05 [INFO    ] src.robot_systems.paint.processes.paint.execute.workpiece_path_executor.log_summary — [TIMING_SUMMARY] order=7 step=pickup_plan_build label=project_initial_pivot_path success=True elapsed_s=0.123 start_s=0.000 end_s=0.123
-16:00:05 [INFO    ] src.robot_systems.paint.processes.paint.execute.workpiece_path_executor.log_summary — [TIMING_SUMMARY] order=8 step=pickup_plan_build label=project_carried_rotation_path success=True elapsed_s=0.107 start_s=0.123 end_s=0.230
-16:00:05 [INFO    ] src.robot_systems.paint.processes.paint.execute.workpiece_path_executor.log_summary — [TIMING_SUMMARY] order=9 step=vacuum_on label=- success=True elapsed_s=0.045 start_s=0.230 end_s=0.276
-16:00:05 [INFO    ] src.robot_systems.paint.processes.paint.execute.workpiece_path_executor.log_summary — [TIMING_SUMMARY] order=10 step=pickup_phase label=Moving to pickup approach pose success=True elapsed_s=6.513 start_s=0.276 end_s=6.789
-16:00:05 [INFO    ] src.robot_systems.paint.processes.paint.execute.workpiece_path_executor.log_summary — [TIMING_SUMMARY] order=11 step=pickup_phase label=Descending to pickup pose success=True elapsed_s=1.000 start_s=6.789 end_s=7.789
-16:00:05 [INFO    ] src.robot_systems.paint.processes.paint.execute.workpiece_path_executor.log_summary — [TIMING_SUMMARY] order=12 step=pickup_phase label=Lifting from pickup pose success=True elapsed_s=0.744 start_s=7.789 end_s=8.532
-16:00:05 [INFO    ] src.robot_systems.paint.processes.paint.execute.workpiece_path_executor.log_summary — [TIMING_SUMMARY] order=13 step=pickup_phase label=Aligning workpiece to paint axis success=True elapsed_s=9.946 start_s=8.532 end_s=18.478
-16:00:05 [INFO    ] src.robot_systems.paint.processes.paint.execute.workpiece_path_executor.log_summary — [TIMING_SUMMARY] order=14 step=pickup_phase label=Changing plane combined with first pivot contact pose success=True elapsed_s=0.000 start_s=18.478 end_s=18.478
-16:00:05 [INFO    ] src.robot_systems.paint.processes.paint.execute.workpiece_path_executor.log_summary — [TIMING_SUMMARY] order=15 step=pickup_phase label=Moving to staging offset before first pivot contact pose success=True elapsed_s=1.735 start_s=18.478 end_s=20.213
-16:00:05 [INFO    ] src.robot_systems.paint.processes.paint.execute.workpiece_path_executor.log_summary — [TIMING_SUMMARY] order=16 step=pivot_paint_and_release label=- success=True elapsed_s=34.318 start_s=20.213 end_s=54.531
-16:00:05 [INFO    ] src.robot_systems.paint.processes.paint.execute.workpiece_path_executor.log_summary — [TIMING_SUMMARY] order=17 step=execute_pivot_paths label=- success=True elapsed_s=22.749 start_s=20.213 end_s=42.962
-16:00:05 [INFO    ] src.robot_systems.paint.processes.paint.execute.workpiece_path_executor.log_summary — [TIMING_SUMMARY] order=18 step=pivot_paths_prepare label=refresh_runtime_config success=True elapsed_s=0.000 start_s=20.213 end_s=20.213
-16:00:05 [INFO    ] src.robot_systems.paint.processes.paint.execute.workpiece_path_executor.log_summary — [TIMING_SUMMARY] order=19 step=pivot_job_prepare label=job_1:build_execution_path success=True elapsed_s=0.000 start_s=20.213 end_s=20.213
-16:00:05 [INFO    ] src.robot_systems.paint.processes.paint.execute.workpiece_path_executor.log_summary — [TIMING_SUMMARY] order=20 step=pivot_job_prepare label=job_1:shift_xz_ry_rotation success=True elapsed_s=0.000 start_s=20.213 end_s=20.214
-16:00:05 [INFO    ] src.robot_systems.paint.processes.paint.execute.workpiece_path_executor.log_summary — [TIMING_SUMMARY] order=21 step=pivot_job_prepare label=job_1:build_command_path success=True elapsed_s=0.000 start_s=20.214 end_s=20.214
-16:00:05 [INFO    ] src.robot_systems.paint.processes.paint.execute.workpiece_path_executor.log_summary — [TIMING_SUMMARY] order=22 step=pivot_job_debug label=job_1:build_diagnostics success=True elapsed_s=0.000 start_s=20.214 end_s=20.215
-16:00:05 [INFO    ] src.robot_systems.paint.processes.paint.execute.workpiece_path_executor.log_summary — [TIMING_SUMMARY] order=23 step=pivot_job_debug label=job_1:write_debug_dump success=True elapsed_s=0.013 start_s=20.215 end_s=20.228
-16:00:05 [INFO    ] src.robot_systems.paint.processes.paint.execute.workpiece_path_executor.log_summary — [TIMING_SUMMARY] order=24 step=pivot_job_prepare label=job_1:preflight success=True elapsed_s=0.000 start_s=20.228 end_s=20.228
-16:00:05 [INFO    ] src.robot_systems.paint.processes.paint.execute.workpiece_path_executor.log_summary — [TIMING_SUMMARY] order=25 step=pivot_job_robot_execute label=job_1:Workpiece success=True elapsed_s=22.733 start_s=20.228 end_s=42.961
-16:00:05 [INFO    ] src.robot_systems.paint.processes.paint.execute.workpiece_path_executor.log_summary — [TIMING_SUMMARY] order=26 step=pre_release_dropoff label=- success=True elapsed_s=11.524 start_s=42.962 end_s=54.486
-16:00:05 [INFO    ] src.robot_systems.paint.processes.paint.execute.workpiece_path_executor.log_summary — [TIMING_SUMMARY] order=27 step=pickup_phase label=Returning to align pose for release success=True elapsed_s=1.670 start_s=42.962 end_s=44.632
-16:00:05 [INFO    ] src.robot_systems.paint.processes.paint.execute.workpiece_path_executor.log_summary — [TIMING_SUMMARY] order=28 step=pickup_phase label=Changing back to original pickup orientation success=True elapsed_s=9.854 start_s=44.632 end_s=54.486
-16:00:05 [INFO    ] src.robot_systems.paint.processes.paint.execute.workpiece_path_executor.log_summary — [TIMING_SUMMARY] order=29 step=vacuum_off label=- success=True elapsed_s=0.045 start_s=54.486 end_s=54.531
-16:00:05 [INFO    ] src.robot_systems.paint.processes.paint.execute.workpiece_path_executor.log_summary — [TIMING_SUMMARY] order=30 step=return_after_pickup label=- success=True elapsed_s=12.390 start_s=54.531 end_s=66.921
-16:00:05 [INFO    ] src.robot_systems.paint.processes.paint.execute.workpiece_path_executor.log_summary — [TIMING_SUMMARY] order=31 step=post_execute_return label=- success=True elapsed_s=12.390 start_s=54.531 end_s=66.921
-16:00:05 [INFO    ] src.robot_systems.paint.processes.paint.execute.workpiece_path_executor.log_summary — [TIMING_SUMMARY] order=32 step=move_to_calibration_position label=- success=True elapsed_s=12.390 start_s=54.531 end_s=66.921
-16:00:05 [INFO    ] src.robot_systems.paint.processes.paint.execute.workpiece_path_executor.log_summary — [TIMING_SUMMARY] order=33 step=unwind_joint6_before_calibration_return label=- success=True elapsed_s=5.758 start_s=54.531 end_s=60.289
-16:00:05 [INFO    ] src.robot_systems.paint.processes.paint.execute.workpiece_path_executor.log_summary — [TIMING_SUMMARY] order=34 step=move_with_z_offset label=CALIBRATION success=True elapsed_s=6.632 start_s=60.289 end_s=66.921
-16:00:05 [INFO    ] WorkpieceEditorController._on_execute_process_confirmed — [TIMING] controller execute_process_action elapsed_s=66.921
-16:00:05 [INFO    ] WorkpieceEditorController._on_execute_process_confirmed — Execute process action (paint_process): True — Pickup, alignment, and pivot paint completed for 1 path(s), 600 waypoints
-✅ Execute requested signal emitted with complete data package
-Unknown property transform
-Unknown property transform
-Unknown property transform
-MainWindow: Closing all running apps...
-Closing app widget: WorkpieceEditor
-MainWindow: All apps closed, back to folder view.
-MainWindow: Folder closed - restoring all folders
-MainWindow: Folder closed - restoring all folders
-Currently running app: None
-MainWindow: App selected - RobotSettings
-MainWindow: Creating app widget for 'RobotSettings'
-16:00:10 [DEBUG   ] WidgetApplication.register — WidgetApplication registered
-MAIN_WINDOW LEN RUNNING WIDGETS: 1
-16:00:11 [DEBUG   ] ApplicationFactory.finalize_application_build — RobotSettingsFactory built: RobotSettingsModel / RobotSettingsView / RobotSettingsController
-Unknown property transform
-Unknown property transform
-Unknown property transform
-Unknown property transform
-QPropertyAnimation::updateState (geometry): Changing state of an animation without target
-QPropertyAnimation::updateState (windowOpacity): Changing state of an animation without target
-16:00:19 [INFO    ] src.engine.robot.drivers.fairino.fairino_ros2_client.set_active_tool — Active ROS2 tool set to 1 (TOOL_1)
-16:00:19 [INFO    ] src.applications.base.robot_jog_service.jog — [JOG] mode=configured_tool tool=1 axis=RZ direction=Plus step=10.0 current=[-7.118601218333867, 366.7211170893713, 99.87622370591994, -178.87528870747602, 0.0001759594763072639, -0.00428134366358348] target=[-7.118601218333867, 366.7211170893713, 99.87622370591994, -178.87528870747602, 0.0001759594763072639, 9.995718656336416]
-16:00:19 [INFO    ] MotionService.move_ptp — [TIMING] move_ptp_safety_check elapsed_s=0.000 violations=0
-16:00:19 [DEBUG   ] MotionService.move_ptp — move_ptp → pos=[-7.118601218333867, 366.7211170893713, 99.87622370591994, -178.87528870747602, 0.0001759594763072639, 9.995718656336416] tool=1 user=0 vel=20.0 acc=10.0
-16:00:19 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_robot.move_linear — move_linear → pos=[-7.118601218333867, 366.7211170893713, 99.87622370591994, -178.87528870747602, 0.0001759594763072639, 9.995718656336416] tool=1 user=0 vel=20.0 acc=10.0 blend=0
-16:00:19 [INFO    ] src.engine.robot.drivers.fairino.fairino_ros2_client.set_active_tool — Active ROS2 tool set to 1 (TOOL_1)
-16:00:19 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_client.move_liner — move_liner → POST /move/linear payload={'position': [-7.118601218333867, 366.7211170893713, 99.87622370591994, -178.87528870747602, 0.0001759594763072639, 9.995718656336416], 'tool': 1, 'user': 0, 'vel': 20.0, 'acc': 10.0, 'blocking': True, 'trajectory_optimizer': 'TOTG'}
-16:00:19 [DEBUG   ] src.applications.base.jog_controller._on_jog_stop — Commented out jog stop: rz_plus
-16:00:20 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_client.move_liner — move_liner ← http=200 response_text='{"queued":false,"result":0,"success":true,"task_id":320}\n'
-16:00:20 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_client.move_liner — move_liner ← http=200 raw={'queued': False, 'result': 0, 'success': True, 'task_id': 320} result_code=0
-16:00:20 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_robot.move_linear — move_linear ← raw_ret=0 accepted=True
-16:00:20 [INFO    ] MotionService.move_ptp — [TIMING] move_ptp_total success=True driver_elapsed_s=1.132 wait_elapsed_s=0.003 total_elapsed_s=1.135 pos=[-7.119, 366.721, 99.876, -178.875, 0.0, 9.996] vel=20.0 acc=10.0
-16:00:20 [DEBUG   ] MotionService.move_ptp — move_ptp ← success=True
-16:00:20 [DEBUG   ] src.applications.base.jog_controller._on_jog_stop — Commented out jog stop: rz_plus
-16:00:21 [INFO    ] src.engine.robot.drivers.fairino.fairino_ros2_client.set_active_tool — Active ROS2 tool set to 1 (TOOL_1)
-16:00:21 [INFO    ] src.applications.base.robot_jog_service.jog — [JOG] mode=configured_tool tool=1 axis=RZ direction=Plus step=10.0 current=[-7.1052529336127765, 366.7328143845781, 99.90382230993141, -178.87185914355464, -0.00026568877864912953, 9.996270662656391] target=[-7.1052529336127765, 366.7328143845781, 99.90382230993141, -178.87185914355464, -0.00026568877864912953, 19.996270662656393]
-16:00:21 [INFO    ] MotionService.move_ptp — [TIMING] move_ptp_safety_check elapsed_s=0.000 violations=0
-16:00:21 [DEBUG   ] MotionService.move_ptp — move_ptp → pos=[-7.1052529336127765, 366.7328143845781, 99.90382230993141, -178.87185914355464, -0.00026568877864912953, 19.996270662656393] tool=1 user=0 vel=20.0 acc=10.0
-16:00:21 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_robot.move_linear — move_linear → pos=[-7.1052529336127765, 366.7328143845781, 99.90382230993141, -178.87185914355464, -0.00026568877864912953, 19.996270662656393] tool=1 user=0 vel=20.0 acc=10.0 blend=0
-16:00:21 [INFO    ] src.engine.robot.drivers.fairino.fairino_ros2_client.set_active_tool — Active ROS2 tool set to 1 (TOOL_1)
-16:00:21 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_client.move_liner — move_liner → POST /move/linear payload={'position': [-7.1052529336127765, 366.7328143845781, 99.90382230993141, -178.87185914355464, -0.00026568877864912953, 19.996270662656393], 'tool': 1, 'user': 0, 'vel': 20.0, 'acc': 10.0, 'blocking': True, 'trajectory_optimizer': 'TOTG'}
-16:00:21 [DEBUG   ] src.applications.base.jog_controller._on_jog_stop — Commented out jog stop: rz_plus
-16:00:22 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_client.move_liner — move_liner ← http=200 response_text='{"queued":false,"result":0,"success":true,"task_id":321}\n'
-16:00:22 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_client.move_liner — move_liner ← http=200 raw={'queued': False, 'result': 0, 'success': True, 'task_id': 321} result_code=0
-16:00:22 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_robot.move_linear — move_linear ← raw_ret=0 accepted=True
-16:00:22 [INFO    ] MotionService.move_ptp — [TIMING] move_ptp_total success=True driver_elapsed_s=1.155 wait_elapsed_s=0.006 total_elapsed_s=1.161 pos=[-7.105, 366.733, 99.904, -178.872, -0.0, 19.996] vel=20.0 acc=10.0
-16:00:22 [DEBUG   ] MotionService.move_ptp — move_ptp ← success=True
-16:00:22 [INFO    ] src.engine.robot.drivers.fairino.fairino_ros2_client.set_active_tool — Active ROS2 tool set to 1 (TOOL_1)
-16:00:22 [INFO    ] src.applications.base.robot_jog_service.jog — [JOG] mode=configured_tool tool=1 axis=RZ direction=Plus step=10.0 current=[-7.0917848724862536, 366.7369026769492, 99.91977065007652, -178.86912162108555, -8.630100059260004e-05, 19.99703991872328] target=[-7.0917848724862536, 366.7369026769492, 99.91977065007652, -178.86912162108555, -8.630100059260004e-05, 29.99703991872328]
-16:00:22 [INFO    ] MotionService.move_ptp — [TIMING] move_ptp_safety_check elapsed_s=0.000 violations=0
-16:00:22 [DEBUG   ] MotionService.move_ptp — move_ptp → pos=[-7.0917848724862536, 366.7369026769492, 99.91977065007652, -178.86912162108555, -8.630100059260004e-05, 29.99703991872328] tool=1 user=0 vel=20.0 acc=10.0
-16:00:22 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_robot.move_linear — move_linear → pos=[-7.0917848724862536, 366.7369026769492, 99.91977065007652, -178.86912162108555, -8.630100059260004e-05, 29.99703991872328] tool=1 user=0 vel=20.0 acc=10.0 blend=0
-16:00:22 [INFO    ] src.engine.robot.drivers.fairino.fairino_ros2_client.set_active_tool — Active ROS2 tool set to 1 (TOOL_1)
-16:00:22 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_client.move_liner — move_liner → POST /move/linear payload={'position': [-7.0917848724862536, 366.7369026769492, 99.91977065007652, -178.86912162108555, -8.630100059260004e-05, 29.99703991872328], 'tool': 1, 'user': 0, 'vel': 20.0, 'acc': 10.0, 'blocking': True, 'trajectory_optimizer': 'TOTG'}
-16:00:22 [DEBUG   ] src.applications.base.jog_controller._on_jog_stop — Commented out jog stop: rz_plus
-16:00:23 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_client.move_liner — move_liner ← http=200 response_text='{"queued":false,"result":0,"success":true,"task_id":322}\n'
-16:00:23 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_client.move_liner — move_liner ← http=200 raw={'queued': False, 'result': 0, 'success': True, 'task_id': 322} result_code=0
-16:00:23 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_robot.move_linear — move_linear ← raw_ret=0 accepted=True
-16:00:23 [INFO    ] MotionService.move_ptp — [TIMING] move_ptp_total success=True driver_elapsed_s=1.135 wait_elapsed_s=0.004 total_elapsed_s=1.140 pos=[-7.092, 366.737, 99.92, -178.869, -0.0, 29.997] vel=20.0 acc=10.0
-16:00:23 [DEBUG   ] MotionService.move_ptp — move_ptp ← success=True
-16:00:23 [INFO    ] src.engine.robot.drivers.fairino.fairino_ros2_client.set_active_tool — Active ROS2 tool set to 1 (TOOL_1)
-16:00:23 [INFO    ] src.applications.base.robot_jog_service.jog — [JOG] mode=configured_tool tool=1 axis=RZ direction=Plus step=10.0 current=[-7.072592739208253, 366.7381571471018, 99.91811643028298, -178.8699526784023, 0.0003350513768116386, 30.00814031685933] target=[-7.072592739208253, 366.7381571471018, 99.91811643028298, -178.8699526784023, 0.0003350513768116386, 40.008140316859325]
-16:00:23 [INFO    ] MotionService.move_ptp — [TIMING] move_ptp_safety_check elapsed_s=0.000 violations=0
-16:00:23 [DEBUG   ] MotionService.move_ptp — move_ptp → pos=[-7.072592739208253, 366.7381571471018, 99.91811643028298, -178.8699526784023, 0.0003350513768116386, 40.008140316859325] tool=1 user=0 vel=20.0 acc=10.0
-16:00:23 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_robot.move_linear — move_linear → pos=[-7.072592739208253, 366.7381571471018, 99.91811643028298, -178.8699526784023, 0.0003350513768116386, 40.008140316859325] tool=1 user=0 vel=20.0 acc=10.0 blend=0
-16:00:23 [INFO    ] src.engine.robot.drivers.fairino.fairino_ros2_client.set_active_tool — Active ROS2 tool set to 1 (TOOL_1)
-16:00:23 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_client.move_liner — move_liner → POST /move/linear payload={'position': [-7.072592739208253, 366.7381571471018, 99.91811643028298, -178.8699526784023, 0.0003350513768116386, 40.008140316859325], 'tool': 1, 'user': 0, 'vel': 20.0, 'acc': 10.0, 'blocking': True, 'trajectory_optimizer': 'TOTG'}
-16:00:23 [DEBUG   ] src.applications.base.jog_controller._on_jog_stop — Commented out jog stop: rz_plus
-16:00:24 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_client.move_liner — move_liner ← http=200 response_text='{"queued":false,"result":0,"success":true,"task_id":323}\n'
-16:00:24 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_client.move_liner — move_liner ← http=200 raw={'queued': False, 'result': 0, 'success': True, 'task_id': 323} result_code=0
-16:00:24 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_robot.move_linear — move_linear ← raw_ret=0 accepted=True
-16:00:24 [INFO    ] MotionService.move_ptp — [TIMING] move_ptp_total success=True driver_elapsed_s=1.126 wait_elapsed_s=0.002 total_elapsed_s=1.128 pos=[-7.073, 366.738, 99.918, -178.87, 0.0, 40.008] vel=20.0 acc=10.0
-16:00:24 [DEBUG   ] MotionService.move_ptp — move_ptp ← success=True
-16:00:24 [INFO    ] src.engine.robot.drivers.fairino.fairino_ros2_client.set_active_tool — Active ROS2 tool set to 1 (TOOL_1)
-16:00:24 [INFO    ] src.applications.base.robot_jog_service.jog — [JOG] mode=configured_tool tool=1 axis=RZ direction=Plus step=10.0 current=[-7.065369133123806, 366.73438149764934, 99.91999893889317, -178.86914976065708, 0.00285007030061137, 40.016521093437646] target=[-7.065369133123806, 366.73438149764934, 99.91999893889317, -178.86914976065708, 0.00285007030061137, 50.016521093437646]
-16:00:24 [INFO    ] MotionService.move_ptp — [TIMING] move_ptp_safety_check elapsed_s=0.000 violations=0
-16:00:24 [DEBUG   ] MotionService.move_ptp — move_ptp → pos=[-7.065369133123806, 366.73438149764934, 99.91999893889317, -178.86914976065708, 0.00285007030061137, 50.016521093437646] tool=1 user=0 vel=20.0 acc=10.0
-16:00:24 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_robot.move_linear — move_linear → pos=[-7.065369133123806, 366.73438149764934, 99.91999893889317, -178.86914976065708, 0.00285007030061137, 50.016521093437646] tool=1 user=0 vel=20.0 acc=10.0 blend=0
-16:00:24 [INFO    ] src.engine.robot.drivers.fairino.fairino_ros2_client.set_active_tool — Active ROS2 tool set to 1 (TOOL_1)
-16:00:24 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_client.move_liner — move_liner → POST /move/linear payload={'position': [-7.065369133123806, 366.73438149764934, 99.91999893889317, -178.86914976065708, 0.00285007030061137, 50.016521093437646], 'tool': 1, 'user': 0, 'vel': 20.0, 'acc': 10.0, 'blocking': True, 'trajectory_optimizer': 'TOTG'}
-16:00:24 [DEBUG   ] src.applications.base.jog_controller._on_jog_stop — Commented out jog stop: rz_plus
-16:00:25 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_client.move_liner — move_liner ← http=200 response_text='{"queued":false,"result":0,"success":true,"task_id":324}\n'
-16:00:25 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_client.move_liner — move_liner ← http=200 raw={'queued': False, 'result': 0, 'success': True, 'task_id': 324} result_code=0
-16:00:25 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_robot.move_linear — move_linear ← raw_ret=0 accepted=True
-16:00:25 [INFO    ] MotionService.move_ptp — [TIMING] move_ptp_total success=True driver_elapsed_s=1.156 wait_elapsed_s=0.004 total_elapsed_s=1.160 pos=[-7.065, 366.734, 99.92, -178.869, 0.003, 50.017] vel=20.0 acc=10.0
-16:00:25 [DEBUG   ] MotionService.move_ptp — move_ptp ← success=True
-16:00:25 [INFO    ] src.engine.robot.drivers.fairino.fairino_ros2_client.set_active_tool — Active ROS2 tool set to 1 (TOOL_1)
-16:00:25 [INFO    ] src.applications.base.robot_jog_service.jog — [JOG] mode=configured_tool tool=1 axis=RZ direction=Plus step=10.0 current=[-7.05127970903291, 366.72103842531004, 99.91650601222943, -178.8691915503749, 0.005598180403832827, 50.018727698446725] target=[-7.05127970903291, 366.72103842531004, 99.91650601222943, -178.8691915503749, 0.005598180403832827, 60.018727698446725]
-16:00:25 [INFO    ] MotionService.move_ptp — [TIMING] move_ptp_safety_check elapsed_s=0.000 violations=0
-16:00:25 [DEBUG   ] MotionService.move_ptp — move_ptp → pos=[-7.05127970903291, 366.72103842531004, 99.91650601222943, -178.8691915503749, 0.005598180403832827, 60.018727698446725] tool=1 user=0 vel=20.0 acc=10.0
-16:00:25 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_robot.move_linear — move_linear → pos=[-7.05127970903291, 366.72103842531004, 99.91650601222943, -178.8691915503749, 0.005598180403832827, 60.018727698446725] tool=1 user=0 vel=20.0 acc=10.0 blend=0
-16:00:25 [INFO    ] src.engine.robot.drivers.fairino.fairino_ros2_client.set_active_tool — Active ROS2 tool set to 1 (TOOL_1)
-16:00:25 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_client.move_liner — move_liner → POST /move/linear payload={'position': [-7.05127970903291, 366.72103842531004, 99.91650601222943, -178.8691915503749, 0.005598180403832827, 60.018727698446725], 'tool': 1, 'user': 0, 'vel': 20.0, 'acc': 10.0, 'blocking': True, 'trajectory_optimizer': 'TOTG'}
-16:00:25 [DEBUG   ] src.applications.base.jog_controller._on_jog_stop — Commented out jog stop: rz_plus
-16:00:27 [DEBUG   ] src.applications.base.jog_controller._on_jog_stop — Commented out jog stop: rz_plus
-16:00:27 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_client.move_liner — move_liner ← http=200 response_text='{"queued":false,"result":0,"success":true,"task_id":325}\n'
-16:00:27 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_client.move_liner — move_liner ← http=200 raw={'queued': False, 'result': 0, 'success': True, 'task_id': 325} result_code=0
-16:00:27 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_robot.move_linear — move_linear ← raw_ret=0 accepted=True
-16:00:27 [INFO    ] MotionService.move_ptp — [TIMING] move_ptp_total success=True driver_elapsed_s=1.145 wait_elapsed_s=0.004 total_elapsed_s=1.150 pos=[-7.051, 366.721, 99.917, -178.869, 0.006, 60.019] vel=20.0 acc=10.0
-16:00:27 [DEBUG   ] MotionService.move_ptp — move_ptp ← success=True
-16:00:28 [INFO    ] src.engine.robot.drivers.fairino.fairino_ros2_client.set_active_tool — Active ROS2 tool set to 1 (TOOL_1)
-16:00:28 [INFO    ] src.applications.base.robot_jog_service.jog — [JOG] mode=configured_tool tool=1 axis=RZ direction=Plus step=90.0 current=[-7.039844766781156, 366.7270602767741, 99.92528618686308, -178.86828899640977, 0.005237083808361811, 60.0190025262662] target=[-7.039844766781156, 366.7270602767741, 99.92528618686308, -178.86828899640977, 0.005237083808361811, 150.0190025262662]
-16:00:28 [INFO    ] MotionService.move_ptp — [TIMING] move_ptp_safety_check elapsed_s=0.000 violations=0
-16:00:28 [DEBUG   ] MotionService.move_ptp — move_ptp → pos=[-7.039844766781156, 366.7270602767741, 99.92528618686308, -178.86828899640977, 0.005237083808361811, 150.0190025262662] tool=1 user=0 vel=20.0 acc=10.0
-16:00:28 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_robot.move_linear — move_linear → pos=[-7.039844766781156, 366.7270602767741, 99.92528618686308, -178.86828899640977, 0.005237083808361811, 150.0190025262662] tool=1 user=0 vel=20.0 acc=10.0 blend=0
-16:00:28 [INFO    ] src.engine.robot.drivers.fairino.fairino_ros2_client.set_active_tool — Active ROS2 tool set to 1 (TOOL_1)
-16:00:28 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_client.move_liner — move_liner → POST /move/linear payload={'position': [-7.039844766781156, 366.7270602767741, 99.92528618686308, -178.86828899640977, 0.005237083808361811, 150.0190025262662], 'tool': 1, 'user': 0, 'vel': 20.0, 'acc': 10.0, 'blocking': True, 'trajectory_optimizer': 'TOTG'}
-16:00:29 [DEBUG   ] src.applications.base.jog_controller._on_jog_stop — Commented out jog stop: rz_plus
-16:00:32 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_client.move_liner — move_liner ← http=200 response_text='{"queued":false,"result":0,"success":true,"task_id":326}\n'
-16:00:32 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_client.move_liner — move_liner ← http=200 raw={'queued': False, 'result': 0, 'success': True, 'task_id': 326} result_code=0
-16:00:32 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_robot.move_linear — move_linear ← raw_ret=0 accepted=True
-16:00:32 [INFO    ] MotionService.move_ptp — [TIMING] move_ptp_total success=True driver_elapsed_s=3.640 wait_elapsed_s=0.004 total_elapsed_s=3.644 pos=[-7.04, 366.727, 99.925, -178.868, 0.005, 150.019] vel=20.0 acc=10.0
-16:00:32 [DEBUG   ] MotionService.move_ptp — move_ptp ← success=True
-16:00:33 [INFO    ] src.engine.robot.drivers.fairino.fairino_ros2_client.set_active_tool — Active ROS2 tool set to 1 (TOOL_1)
-16:00:33 [INFO    ] src.applications.base.robot_jog_service.jog — [JOG] mode=configured_tool tool=1 axis=RZ direction=Plus step=90.0 current=[-7.03541134670467, 366.730420485539, 99.92885111262406, -178.8673118115667, 0.006066448147333552, 150.02264874498934] target=[-7.03541134670467, 366.730420485539, 99.92885111262406, -178.8673118115667, 0.006066448147333552, 240.02264874498934]
-16:00:33 [INFO    ] MotionService.move_ptp — [TIMING] move_ptp_safety_check elapsed_s=0.000 violations=0
-16:00:33 [DEBUG   ] MotionService.move_ptp — move_ptp → pos=[-7.03541134670467, 366.730420485539, 99.92885111262406, -178.8673118115667, 0.006066448147333552, 240.02264874498934] tool=1 user=0 vel=20.0 acc=10.0
-16:00:33 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_robot.move_linear — move_linear → pos=[-7.03541134670467, 366.730420485539, 99.92885111262406, -178.8673118115667, 0.006066448147333552, 240.02264874498934] tool=1 user=0 vel=20.0 acc=10.0 blend=0
-16:00:33 [INFO    ] src.engine.robot.drivers.fairino.fairino_ros2_client.set_active_tool — Active ROS2 tool set to 1 (TOOL_1)
-16:00:33 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_client.move_liner — move_liner → POST /move/linear payload={'position': [-7.03541134670467, 366.730420485539, 99.92885111262406, -178.8673118115667, 0.006066448147333552, 240.02264874498934], 'tool': 1, 'user': 0, 'vel': 20.0, 'acc': 10.0, 'blocking': True, 'trajectory_optimizer': 'TOTG'}
-16:00:33 [DEBUG   ] src.applications.base.jog_controller._on_jog_stop — Commented out jog stop: rz_plus
-16:00:36 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_client.move_liner — move_liner ← http=200 response_text='{"queued":false,"result":0,"success":true,"task_id":327}\n'
-16:00:36 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_client.move_liner — move_liner ← http=200 raw={'queued': False, 'result': 0, 'success': True, 'task_id': 327} result_code=0
-16:00:36 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_robot.move_linear — move_linear ← raw_ret=0 accepted=True
-16:00:36 [INFO    ] MotionService.move_ptp — [TIMING] move_ptp_total success=True driver_elapsed_s=3.652 wait_elapsed_s=0.004 total_elapsed_s=3.656 pos=[-7.035, 366.73, 99.929, -178.867, 0.006, 240.023] vel=20.0 acc=10.0
-16:00:36 [DEBUG   ] MotionService.move_ptp — move_ptp ← success=True
-16:00:37 [INFO    ] src.engine.robot.drivers.fairino.fairino_ros2_client.set_active_tool — Active ROS2 tool set to 1 (TOOL_1)
-16:00:37 [INFO    ] src.applications.base.robot_jog_service.jog — [JOG] mode=configured_tool tool=1 axis=RZ direction=Plus step=90.0 current=[-7.027914399143132, 366.7322417286034, 99.93109914922066, -178.8682236522083, 0.007530305965445567, -119.97356233768433] target=[-7.027914399143132, 366.7322417286034, 99.93109914922066, -178.8682236522083, 0.007530305965445567, -29.973562337684328]
-16:00:37 [INFO    ] MotionService.move_ptp — [TIMING] move_ptp_safety_check elapsed_s=0.000 violations=0
-16:00:37 [DEBUG   ] MotionService.move_ptp — move_ptp → pos=[-7.027914399143132, 366.7322417286034, 99.93109914922066, -178.8682236522083, 0.007530305965445567, -29.973562337684328] tool=1 user=0 vel=20.0 acc=10.0
-16:00:37 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_robot.move_linear — move_linear → pos=[-7.027914399143132, 366.7322417286034, 99.93109914922066, -178.8682236522083, 0.007530305965445567, -29.973562337684328] tool=1 user=0 vel=20.0 acc=10.0 blend=0
-16:00:37 [INFO    ] src.engine.robot.drivers.fairino.fairino_ros2_client.set_active_tool — Active ROS2 tool set to 1 (TOOL_1)
-16:00:37 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_client.move_liner — move_liner → POST /move/linear payload={'position': [-7.027914399143132, 366.7322417286034, 99.93109914922066, -178.8682236522083, 0.007530305965445567, -29.973562337684328], 'tool': 1, 'user': 0, 'vel': 20.0, 'acc': 10.0, 'blocking': True, 'trajectory_optimizer': 'TOTG'}
-16:00:37 [DEBUG   ] src.applications.base.jog_controller._on_jog_stop — Commented out jog stop: rz_plus
-16:00:40 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_client.move_liner — move_liner ← http=200 response_text='{"queued":false,"result":0,"success":true,"task_id":328}\n'
-16:00:40 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_client.move_liner — move_liner ← http=200 raw={'queued': False, 'result': 0, 'success': True, 'task_id': 328} result_code=0
-16:00:40 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_robot.move_linear — move_linear ← raw_ret=0 accepted=True
-16:00:41 [INFO    ] MotionService.move_ptp — [TIMING] move_ptp_total success=True driver_elapsed_s=3.691 wait_elapsed_s=0.006 total_elapsed_s=3.698 pos=[-7.028, 366.732, 99.931, -178.868, 0.008, -29.974] vel=20.0 acc=10.0
-16:00:41 [DEBUG   ] MotionService.move_ptp — move_ptp ← success=True
-16:00:43 [DEBUG   ] SettingsService.save — Saving settings 'robot_config'
-16:00:43 [INFO    ] BaseJsonSettingsRepository.save — Saved 'robot_config' settings to '/home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/storage/settings/robot/config.json'.
-16:00:43 [DEBUG   ] RobotSettingsModel.save — Robot config saved
-16:00:43 [DEBUG   ] SettingsService.save — Saving settings 'movement_groups'
-16:00:43 [INFO    ] BaseJsonSettingsRepository.save — Saved 'movement_group_settings' settings to '/home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/storage/settings/robot/movement_groups.json'.
-16:00:43 [DEBUG   ] RobotSettingsModel.save — Movement groups saved
-16:00:43 [DEBUG   ] SettingsService.save — Saving settings 'robot_calibration'
-16:00:43 [INFO    ] BaseJsonSettingsRepository.save — Saved 'robot_calibration' settings to '/home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/storage/settings/robot/calibration.json'.
-16:00:43 [DEBUG   ] RobotSettingsModel.save — Robot calibration saved
-16:00:43 [DEBUG   ] SettingsService.save — Saving settings 'targeting'
-16:00:43 [INFO    ] BaseJsonSettingsRepository.save — Saved 'targeting' settings to '/home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/storage/settings/targeting/definitions.json'.
-16:00:43 [DEBUG   ] RobotSettingsModel.save — Targeting definitions saved
-16:00:43 [DEBUG   ] RobotSettingsController._auto_save — Auto-saved before motion
-16:00:43 [INFO    ] MotionService.move_ptp — [TIMING] move_ptp_safety_check elapsed_s=0.000 violations=0
-16:00:43 [DEBUG   ] MotionService.move_ptp — move_ptp → pos=[-7.132, 366.722, 99.866, -178.877, 0.001, -0.005] tool=1 user=0 vel=10 acc=10
-16:00:43 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_robot.move_linear — move_linear → pos=[-7.132, 366.722, 99.866, -178.877, 0.001, -0.005] tool=1 user=0 vel=10 acc=10 blend=0
-16:00:43 [INFO    ] src.engine.robot.drivers.fairino.fairino_ros2_client.set_active_tool — Active ROS2 tool set to 1 (TOOL_1)
-16:00:43 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_client.move_liner — move_liner → POST /move/linear payload={'position': [-7.132, 366.722, 99.866, -178.877, 0.001, -0.005], 'tool': 1, 'user': 0, 'vel': 10, 'acc': 10, 'blocking': True, 'trajectory_optimizer': 'TOTG'}
-16:00:45 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_client.move_liner — move_liner ← http=200 response_text='{"queued":false,"result":0,"success":true,"task_id":329}\n'
-16:00:45 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_client.move_liner — move_liner ← http=200 raw={'queued': False, 'result': 0, 'success': True, 'task_id': 329} result_code=0
-16:00:45 [DEBUG   ] src.engine.robot.drivers.fairino.fairino_ros2_robot.move_linear — move_linear ← raw_ret=0 accepted=True
-16:00:45 [INFO    ] MotionService.move_ptp — [TIMING] move_ptp_total success=True driver_elapsed_s=1.933 wait_elapsed_s=0.004 total_elapsed_s=1.937 pos=[-7.132, 366.722, 99.866, -178.877, 0.001, -0.005] vel=10 acc=10
-16:00:45 [DEBUG   ] MotionService.move_ptp — move_ptp ← success=True
-16:00:45 [INFO    ] RobotSettingsController._on_motion_done — Move To — CALIBRATION completed successfully

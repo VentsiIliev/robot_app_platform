@@ -6,7 +6,9 @@ from src.applications.base.i_application_model import IApplicationModel
 from src.applications.base.i_application_view import IApplicationView
 from src.robot_systems.paint.applications.dashboard.config import (
     PAINT_DASHBOARD_ACTIONS,
+    PAINT_DASHBOARD_AUXILIARY_TOGGLES,
     PAINT_DASHBOARD_CARDS,
+    PaintDashboardUiConfig,
     PaintDashboardConfig,
 )
 from src.robot_systems.paint.applications.dashboard.controller.paint_dashboard_controller import (
@@ -27,8 +29,9 @@ from src.robot_systems.paint.applications.dashboard.view.paint_dashboard_view im
 
 
 class PaintDashboardFactory(ApplicationFactory):
-    def __init__(self):
+    def __init__(self, ui_config: PaintDashboardUiConfig | None = None):
         self._messaging = None
+        self._ui_config = ui_config or PaintDashboardUiConfig()
 
     def _create_model(self, service: IPaintDashboardService) -> IApplicationModel:
         return PaintDashboardModel(service)
@@ -38,6 +41,8 @@ class PaintDashboardFactory(ApplicationFactory):
             config=PaintDashboardConfig(),
             action_buttons=PAINT_DASHBOARD_ACTIONS,
             cards=PaintCardFactory().build_cards(PAINT_DASHBOARD_CARDS),
+            auxiliary_toggles=PAINT_DASHBOARD_AUXILIARY_TOGGLES,
+            ui_config=self._ui_config,
         )
 
     def _create_controller(
@@ -50,4 +55,3 @@ class PaintDashboardFactory(ApplicationFactory):
     def build(self, service, messaging=None, jog_service=None):
         self._messaging = messaging
         return super().build(service, messaging=messaging, jog_service=jog_service)
-

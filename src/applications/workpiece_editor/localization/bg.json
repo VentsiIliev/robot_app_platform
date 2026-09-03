@@ -1,0 +1,26 @@
+{
+  "__meta__": {
+    "display_name": "Български"
+  },
+  "WorkpieceEditor": {
+    "Capture": "Заснемане",
+    "No contour detected.\nMake sure the vision service is running.": "Не е открит контур.\nУверете се, че vision услугата работи.",
+    "Cannot Save": "Запазването е невъзможно",
+    "Match Workpiece": "Съпоставяне на детайл",
+    "No contour detected.": "Не е открит контур.",
+    "Matching is not available in this editor.": "Съпоставянето не е налично в този редактор.",
+    "Matched Workpiece": "Съпоставен детайл",
+    "Matched: {workpiece_id}": "Съвпадение: {workpiece_id}",
+    "(no id)": "(няма ID)",
+    "Name: {name}": "Име: {name}",
+    "Confidence: {confidence:.2f}": "Увереност: {confidence:.2f}",
+    "Saved workpieces checked: {count}": "Проверени запазени детайли: {count}",
+    "Unmatched contours: {count}": "Несъпоставени контури: {count}",
+    "Match Workpiece Failed": "Съпоставянето е неуспешно",
+    "No Process Action": "Няма действие за процес",
+    "Prepared process has no executable action.": "Подготвеният процес няма изпълнимо действие.",
+    "Process Started": "Процесът е стартиран",
+    "Process Failed": "Процесът е неуспешен",
+    "Load Failed": "Зареждането е неуспешно"
+  }
+}

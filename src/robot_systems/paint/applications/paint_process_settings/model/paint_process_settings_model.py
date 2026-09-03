@@ -18,6 +18,24 @@ class PaintProcessSettingsModel(IApplicationModel):
         self._service.save_settings(settings)
         self._settings = settings
 
+    def is_dropoff_movement_group_configured(self) -> bool:
+        return self._service.is_dropoff_movement_group_configured()
+
+    def dropoff_movement_group_configuration_error(self) -> str:
+        return self._service.dropoff_movement_group_configuration_error()
+
+    def get_current_robot_position(self) -> list[float] | None:
+        return self._service.get_current_robot_position()
+
+    def get_current_robot_frame(self) -> tuple[int, int]:
+        return self._service.get_current_robot_frame()
+
+    def move_to_waypoint(self, waypoint: dict) -> bool:
+        return self._service.move_to_waypoint(waypoint)
+
+    def get_pickup_safety_enabled(self) -> tuple[bool, bool]:
+        return self._service.get_pickup_safety_enabled()
+
     @property
     def current_settings(self) -> PaintProcessConfig:
         if self._settings is None:

@@ -7,6 +7,7 @@ from src.applications.base.keyboard_settings_view import KeyboardSettingsView
 from src.applications.robot_settings.model.mapper import RobotSettingsMapper
 from src.applications.robot_settings.view.movement_groups_tab import MovementGroupsTab
 from src.applications.robot_settings.view.targeting_definitions_tab import TargetingDefinitionsTab
+from pl_gui.settings.settings_view.styles import TOUCH_SCROLL_AREA_STYLE
 
 from src.applications.robot_settings.view.robot_settings_schema import (
     CALIBRATION_ADAPTIVE_GROUP, CALIBRATION_AXIS_MAPPING_GROUP, CALIBRATION_CAMERA_TCP_GROUP, CALIBRATION_MARKER_GROUP,
@@ -14,6 +15,8 @@ from src.applications.robot_settings.view.robot_settings_schema import (
     SAFETY_LIMITS_GROUP, TCP_STEP_GROUP,
 )
 
+
+_SHOW_LEGACY_CALIBRATION_TAB = False
 
 
 class RobotSettingsView(IApplicationView):
@@ -54,15 +57,16 @@ class RobotSettingsView(IApplicationView):
         self._settings_view.add_tab("Safety", [SAFETY_LIMITS_GROUP])
         self._add_lazy_raw_tab("Movement Groups")
         self._add_lazy_raw_tab("Targeting")
-        self._settings_view.add_tab(
-            "Calibration",
-            [
-                CALIBRATION_ADAPTIVE_GROUP,
-                CALIBRATION_MARKER_GROUP,
-                CALIBRATION_AXIS_MAPPING_GROUP,
-                CALIBRATION_CAMERA_TCP_GROUP,
-            ],
-        )
+        if _SHOW_LEGACY_CALIBRATION_TAB:
+            self._settings_view.add_tab(
+                "Calibration",
+                [
+                    CALIBRATION_ADAPTIVE_GROUP,
+                    CALIBRATION_MARKER_GROUP,
+                    CALIBRATION_AXIS_MAPPING_GROUP,
+                    CALIBRATION_CAMERA_TCP_GROUP,
+                ],
+            )
         layout.addWidget(self._settings_view)
 
         self._settings_view.save_requested.connect(self._on_inner_save)
@@ -111,7 +115,7 @@ class RobotSettingsView(IApplicationView):
     def _replace_tab_with_widget(self, index: int, title: str, widget: QWidget) -> None:
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
-        scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
+        scroll.setStyleSheet(TOUCH_SCROLL_AREA_STYLE)
         scroll.setWidget(widget)
         self._settings_view._tabs.removeTab(index)
         self._settings_view._tabs.insertTab(index, scroll, title)
@@ -128,6 +132,11 @@ class RobotSettingsView(IApplicationView):
 
     def load_config(self, flat: dict) -> None:
         self._cached_flat_config = dict(flat)
+        self._settings_view.set_values(flat)
+
+    def update_robot_config(self, config) -> None:
+        flat = RobotSettingsMapper.to_flat_dict(config)
+        self._cached_flat_config.update(flat)
         self._settings_view.set_values(flat)
 
     def load_movement_groups(

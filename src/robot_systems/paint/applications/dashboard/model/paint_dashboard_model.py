@@ -26,6 +26,11 @@ class PaintDashboardModel(IApplicationModel):
         self._service.stop()
         return self.load()
 
+    def resume_vision_for_dashboard_exit(self) -> None:
+        resume = getattr(self._service, "resume_vision_for_dashboard_exit", None)
+        if callable(resume):
+            resume()
+
     def toggle_pause(self) -> DashboardState:
         state = self.load()
         if state.process_state == "paused":
@@ -37,6 +42,48 @@ class PaintDashboardModel(IApplicationModel):
     def reset_errors(self) -> DashboardState:
         self._service.reset_errors()
         return self.load()
+
+    def get_unmatched_paint_settings(self) -> dict:
+        return self._service.get_unmatched_paint_settings()
+
+    def save_unmatched_paint_settings(
+        self,
+        settings: dict | float,
+        acceleration_percent: float | None = None,
+        offset_mm: float | None = None,
+    ):
+        return self._service.save_unmatched_paint_settings(
+            settings,
+            acceleration_percent,
+            offset_mm,
+        )
+
+    def relieve_cable(self):
+        return self._service.relieve_cable()
+
+    def get_acceleration_scale(self) -> float:
+        return self._service.get_acceleration_scale()
+
+    def save_acceleration_scale(self, scale_percent: float):
+        return self._service.save_acceleration_scale(scale_percent)
+
+    def get_auxiliary_states(self) -> dict[str, bool]:
+        return self._service.get_auxiliary_states()
+
+    def set_auxiliary_enabled(self, device_id: str, enabled: bool):
+        return self._service.set_auxiliary_enabled(device_id, enabled)
+
+    def get_drying_mode(self) -> str:
+        return self._service.get_drying_mode()
+
+    def set_drying_mode(self, mode: str):
+        return self._service.set_drying_mode(mode)
+
+    def get_dryer_state(self) -> dict[str, object]:
+        return self._service.get_dryer_state()
+
+    def enable_dryer_and_set_auto_mode(self, mode: str = "auto"):
+        return self._service.enable_dryer_and_set_auto_mode(mode)
 
     def capture_latest_contour_transform_debug(self) -> ContourTransformDebugResult:
         return self._service.capture_latest_contour_transform_debug()

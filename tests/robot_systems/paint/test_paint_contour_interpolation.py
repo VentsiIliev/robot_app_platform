@@ -7,6 +7,7 @@ import numpy as np
 from src.robot_systems.paint.processes.paint.plan.paint_contour_interpolation import (
     PaintContourInterpolation,
     PaintContourInterpolationConfig,
+    remove_local_hairpin_reversals_xy,
     resample_contour_xy,
 )
 
@@ -42,6 +43,44 @@ def _point_to_polyline_distances(points: np.ndarray, polyline: np.ndarray) -> np
 
 
 class TestPaintContourInterpolation(unittest.TestCase):
+    def test_removes_logged_near_retrace_hairpin(self) -> None:
+        points = np.asarray(
+            [
+                [186.8, 250.2],
+                [187.7492829, 251.132285472],
+                [187.218974672, 252.115435842],
+                [187.723003726, 251.141915909],
+                [188.6, 250.3],
+            ],
+            dtype=float,
+        )
+
+        cleaned = remove_local_hairpin_reversals_xy(
+            points,
+            spacing=1.0,
+            closed=False,
+        )
+
+        self.assertEqual(len(cleaned), 4)
+        self.assertFalse(np.any(np.all(np.isclose(cleaned, points[2]), axis=1)))
+        vectors = np.diff(cleaned, axis=0)
+        unit = vectors / np.linalg.norm(vectors, axis=1)[:, None]
+        self.assertTrue(np.all(np.sum(unit[:-1] * unit[1:], axis=1) > np.cos(np.radians(170.0))))
+
+    def test_hairpin_cleanup_preserves_legitimate_sharp_corner(self) -> None:
+        points = np.asarray(
+            [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [2.0, 1.0]],
+            dtype=float,
+        )
+
+        cleaned = remove_local_hairpin_reversals_xy(
+            points,
+            spacing=1.0,
+            closed=False,
+        )
+
+        np.testing.assert_allclose(cleaned, points)
+
     def test_preserves_float_coordinates(self) -> None:
         raw = _pose_path_from_xy(
             [

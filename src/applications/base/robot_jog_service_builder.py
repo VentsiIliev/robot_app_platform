@@ -7,18 +7,32 @@ from src.engine.common_settings_ids import CommonSettingsID
 _JOG_GROUP_ID = "JOG"
 _DEFAULT_JOG_VELOCITY = 10.0
 _DEFAULT_JOG_ACCELERATION = 10.0
+_DEFAULT_SERVO_LINEAR_MM_S = 250.0
+_DEFAULT_SERVO_ANGULAR_DEG_S = 3.0
 
 
 def build_robot_system_jog_service(robot_system, reference_rz_provider=None) -> RobotJogService:
     def _robot_service():
         return getattr(robot_system, "_robot", None)
 
+    def _current_robot_config():
+        settings_service = getattr(robot_system, "_settings_service", None)
+        getter = getattr(settings_service, "get", None)
+        if callable(getter):
+            try:
+                config = getter(CommonSettingsID.ROBOT_CONFIG)
+                if config is not None:
+                    return config
+            except Exception:
+                pass
+        return getattr(robot_system, "_robot_config", None)
+
     def _tool_id() -> int:
-        robot_config = getattr(robot_system, "_robot_config", None)
+        robot_config = _current_robot_config()
         return int(getattr(robot_config, "robot_tool", 0)) if robot_config is not None else 0
 
     def _user_id() -> int:
-        robot_config = getattr(robot_system, "_robot_config", None)
+        robot_config = _current_robot_config()
         return int(getattr(robot_config, "robot_user", 0)) if robot_config is not None else 0
 
     def _jog_group():
@@ -42,6 +56,15 @@ def build_robot_system_jog_service(robot_system, reference_rz_provider=None) -> 
             return default
         return value if value > 0 else default
 
+    def _global_motion_value(name: str, default: float) -> float:
+        config = _current_robot_config()
+        motion = getattr(config, "global_motion_settings", None)
+        try:
+            value = float(getattr(motion, name))
+        except (AttributeError, TypeError, ValueError):
+            return default
+        return value if value > 0 else default
+
     return RobotJogService(
         robot_service=_robot_service(),
         tool_getter=_tool_id,
@@ -50,4 +73,20 @@ def build_robot_system_jog_service(robot_system, reference_rz_provider=None) -> 
         move_acceleration=_DEFAULT_JOG_ACCELERATION,
         move_velocity_getter=lambda: _jog_group_value("velocity", _DEFAULT_JOG_VELOCITY),
         move_acceleration_getter=lambda: _jog_group_value("acceleration", _DEFAULT_JOG_ACCELERATION),
+        servo_linear_speed_mm_s=_DEFAULT_SERVO_LINEAR_MM_S,
+        servo_angular_speed_deg_s=_DEFAULT_SERVO_ANGULAR_DEG_S,
+        servo_linear_speed_getter=lambda: _jog_group_value(
+            "servo_linear_mm_s",
+            _DEFAULT_SERVO_LINEAR_MM_S,
+        ),
+        servo_angular_speed_getter=lambda: _jog_group_value(
+            "servo_angular_deg_s",
+            _DEFAULT_SERVO_ANGULAR_DEG_S,
+        ),
+        recovery_servo_linear_speed_getter=lambda: _global_motion_value(
+            "recovery_servo_linear_mm_s", 25.0,
+        ),
+        recovery_servo_angular_speed_getter=lambda: _global_motion_value(
+            "recovery_servo_angular_deg_s", 5.0,
+        ),
     )

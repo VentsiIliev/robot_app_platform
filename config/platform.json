@@ -4,5 +4,21 @@
     "glue",
     "paint",
     "welding"
-  ]
+  ],
+  "ros_backend": {
+    "auto_launch": false,
+    "auto_stop": false,
+    "launch_script": "~/ros2_ws/launch_zeroerr.sh",
+    "stop_script": "~/ros2_ws/stop_zeroerr.sh"
+  },
+  "ui": {
+    "dev_skip_login": true,
+    "skip_splash": true,
+    "show_account_button_when_dev_skip_login": false,
+    "show_power_off_button": true,
+    "custom_virtual_keyboard_enabled": false,
+    "fullscreen": true,
+    "window_width": 1280,
+    "window_height": 1024
+  }
 }

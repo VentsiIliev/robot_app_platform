@@ -33,6 +33,9 @@ from src.applications.calibration.view.calibration_phase_tabs import (
     ToolTcpCalibrationTab,
 )
 from src.applications.calibration.view.intrinsic_auto_capture_widget import IntrinsicAutoCaptureWidget
+from src.applications.calibration_settings.view.workobject_calibration_tab import (
+    WorkObjectCalibrationTab,
+)
 
 
 class CalibrationControlsPanel(QWidget):
@@ -110,6 +113,8 @@ class CalibrationControlsPanel(QWidget):
         self._tabs.addTab(self._build_camera_tab(), "Camera")
         self._tabs.addTab(self._build_robot_tab(), "Robot")
         self._tabs.addTab(self._build_tool_tcp_tab(), "Tool TCP")
+        self.workobject_tab = WorkObjectCalibrationTab()
+        self._tabs.addTab(self.workobject_tab, "WorkObject")
         self._tabs.addTab(self._build_laser_tab(), "Laser")
         self._tabs.addTab(self._build_height_tab(), "Height Mapping")
         layout.addWidget(self._tabs, stretch=1)

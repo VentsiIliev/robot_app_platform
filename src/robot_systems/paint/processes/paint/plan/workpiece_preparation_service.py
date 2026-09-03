@@ -6,7 +6,6 @@ from typing import Callable, Optional
 
 from src.robot_systems.paint.processes.paint.align import (
     _normalize_contour_points,
-    align_raw_workpiece_to_contour,
 )
 from src.robot_systems.paint.processes.paint.plan.contour_utils import (
     contour_to_workpiece_raw,
@@ -24,6 +23,7 @@ class PaintWorkpiecePreparationService:
         can_match_fn: Callable[[], bool],
         match_workpiece_fn: Callable,
         default_settings: Optional[dict] = None,
+        default_settings_getter: Optional[Callable[[], dict]] = None,
         transformer=None,
         transformer_getter: Optional[Callable[[], object]] = None,
     ) -> None:
@@ -31,6 +31,7 @@ class PaintWorkpiecePreparationService:
         self._can_match_fn = can_match_fn
         self._match_workpiece_fn = match_workpiece_fn
         self._default_settings = dict(default_settings or {})
+        self._default_settings_getter = default_settings_getter
         self._transformer = transformer
         self._transformer_getter = transformer_getter
 
@@ -39,14 +40,22 @@ class PaintWorkpiecePreparationService:
             return self._transformer_getter()
         return self._transformer
 
-    def prepare_workpiece(self, captured_contour, frame) -> tuple[dict, str]:
+    def prepare_workpiece(
+        self,
+        captured_contour,
+        frame,
+        *,
+        enable_matching: bool = True,
+    ) -> tuple[dict, str]:
         """Choose between a matched saved workpiece and a raw captured-contour fallback."""
+        can_match = bool(enable_matching and self._can_match_fn())
         _logger.info(
-            "[PREP] start captured=%s can_match=%s",
+            "[PREP] start captured=%s matching_enabled=%s can_match=%s",
             describe_contour(_normalize_contour_points(captured_contour)),
-            bool(self._can_match_fn()),
+            bool(enable_matching),
+            can_match,
         )
-        if self._can_match_fn():
+        if can_match:
             ok, payload, _ = self._match_workpiece_fn(captured_contour)
             if ok and payload:
                 _logger.info(
@@ -58,17 +67,29 @@ class PaintWorkpiecePreparationService:
                 if raw is not None:
                     label = payload.get("workpieceId") or payload.get("name") or "matched workpiece"
                     return raw, f"Executed {label}"
+            else:
+                return None, "No matched workpiece"
+        else:
+            _logger.info("[PREP] Paint workpiece matching is disabled or not available; using captured contour")
+            default_settings = self._current_default_settings()
+            return (
+                contour_to_workpiece_raw(
+                    captured_contour,
+                    workpiece_id="captured",
+                    name="Captured contour",
+                    default_settings=default_settings,
+                ),
+                "Executed captured contour",
+            )
 
-        _logger.info("[PREP] fallback to captured contour")
-        return (
-            contour_to_workpiece_raw(
-                captured_contour,
-                workpiece_id="captured",
-                name="Captured contour",
-                default_settings=self._default_settings,
-            ),
-            "Executed captured contour",
-        )
+    def _current_default_settings(self) -> dict:
+        if self._default_settings_getter is None:
+            return dict(self._default_settings)
+        try:
+            return dict(self._default_settings_getter() or {})
+        except Exception:
+            _logger.exception("[PREP] Failed to read live default paint settings")
+            return dict(self._default_settings)
 
     def _build_matched_workpiece_raw(self, payload: dict, captured_contour, frame) -> dict | None:
         """Build an executable raw workpiece from matched storage data and the live contour."""
@@ -83,12 +104,7 @@ class PaintWorkpiecePreparationService:
                 describe_contour(extract_points_for_log(matched_raw)),
                 describe_contour(_normalize_contour_points(captured_contour)),
             )
-            return align_raw_workpiece_to_contour(
-                matched_raw,
-                captured_contour,
-                max_scale_deviation=0.0,
-                reference_scale_override=1.0,
-            )
+            return matched_raw
 
         _logger.info(
             "[PREP] matched workpiece has no saved contour; falling back to captured contour"

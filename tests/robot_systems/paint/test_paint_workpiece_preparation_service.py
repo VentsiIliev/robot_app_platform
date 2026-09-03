@@ -1,5 +1,4 @@
 import unittest
-from unittest.mock import patch
 
 import numpy as np
 
@@ -59,6 +58,65 @@ class TestContourToWorkpieceRaw(unittest.TestCase):
 
 class TestPaintWorkpiecePreparationService(unittest.TestCase):
 
+    def test_prepare_workpiece_skips_matching_when_disabled(self):
+        matching_calls = []
+        service = PaintWorkpiecePreparationService(
+            can_match_fn=lambda: True,
+            match_workpiece_fn=lambda contour: matching_calls.append(contour),
+            default_settings={"velocity": "10"},
+        )
+
+        raw, description = service.prepare_workpiece(
+            _square(2.0),
+            frame=None,
+            enable_matching=False,
+        )
+
+        self.assertEqual(matching_calls, [])
+        self.assertEqual(description, "Executed captured contour")
+        self.assertEqual(raw["workpieceId"], "captured")
+        self.assertEqual(raw["velocity"], "10")
+
+    def test_disabled_matching_uses_live_default_motion_settings(self):
+        defaults = {"velocity": 25.0, "acceleration": 35.0, "offset": -4.5}
+        service = PaintWorkpiecePreparationService(
+            can_match_fn=lambda: True,
+            match_workpiece_fn=lambda _contour: None,
+            default_settings={"velocity": 10.0, "acceleration": 10.0},
+            default_settings_getter=lambda: defaults,
+        )
+
+        raw, _description = service.prepare_workpiece(
+            _square(2.0),
+            frame=None,
+            enable_matching=False,
+        )
+
+        self.assertEqual(25.0, raw["velocity"])
+        self.assertEqual(35.0, raw["acceleration"])
+        self.assertEqual(-4.5, raw["offset"])
+
+    def test_matched_workpiece_keeps_its_own_motion_settings(self):
+        payload = _matched_payload()
+        payload["raw"]["velocity"] = 91.0
+        payload["raw"]["acceleration"] = 42.0
+        payload["raw"]["offset"] = 7.5
+        service = PaintWorkpiecePreparationService(
+            can_match_fn=lambda: True,
+            match_workpiece_fn=lambda _contour: (True, payload, "matched"),
+            default_settings_getter=lambda: {
+                "velocity": 25.0,
+                "acceleration": 35.0,
+                "offset": -4.5,
+            },
+        )
+
+        raw, _description = service.prepare_workpiece(_square(2.0), frame=None)
+
+        self.assertEqual(91.0, raw["velocity"])
+        self.assertEqual(42.0, raw["acceleration"])
+        self.assertEqual(7.5, raw["offset"])
+
     def test_prepare_workpiece_falls_back_to_captured_contour_when_matching_unavailable(self):
         service = PaintWorkpiecePreparationService(
             can_match_fn=lambda: False,
@@ -92,20 +150,13 @@ class TestPaintWorkpiecePreparationService(unittest.TestCase):
             can_match_fn=lambda: True,
             match_workpiece_fn=lambda contour: (True, payload, "matched"),
         )
-        contour = _square(3.0)
-        aligned = {"workpieceId": "saved-1", "name": "Aligned", "sprayPattern": {"Contour": [], "Fill": []}}
 
-        with patch(
-            "src.robot_systems.paint.processes.paint.plan.workpiece_preparation_service.align_raw_workpiece_to_contour",
-            return_value=aligned,
-        ) as align:
-            raw, description = service.prepare_workpiece(contour, frame=None)
+        raw, description = service.prepare_workpiece(_square(3.0), frame=None)
 
-        self.assertIs(raw, aligned)
+        self.assertEqual(raw["workpieceId"], "saved-1")
+        self.assertEqual(raw["name"], "Saved Workpiece")
+        self.assertEqual(raw["contour"], {"contour": [[0.0, 0.0], [10.0, 0.0], [10.0, 10.0], [0.0, 10.0]]})
         self.assertEqual(description, "Executed saved-1")
-        align.assert_called_once()
-        self.assertEqual(align.call_args.kwargs["max_scale_deviation"], 0.0)
-        self.assertEqual(align.call_args.kwargs["reference_scale_override"], 1.0)
 
     def test_prepare_workpiece_falls_back_when_matched_raw_has_no_contour(self):
         payload = _matched_payload()

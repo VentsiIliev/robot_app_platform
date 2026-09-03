@@ -13,6 +13,14 @@ class ContourTransformDebugResult:
     image_path: str | None = None
 
 
+@dataclass(frozen=True)
+class DashboardCommandResult:
+    success: bool
+    message: str
+    device_id: str | None = None
+    enabled: bool | None = None
+
+
 class IPaintDashboardService(ABC):
 
     @abstractmethod
@@ -35,6 +43,42 @@ class IPaintDashboardService(ABC):
 
     @abstractmethod
     def reset_errors(self) -> None: ...
+
+    @abstractmethod
+    def get_unmatched_paint_settings(self) -> dict: ...
+
+    @abstractmethod
+    def save_unmatched_paint_settings(
+        self,
+        settings: dict,
+    ) -> DashboardCommandResult: ...
+
+    @abstractmethod
+    def get_acceleration_scale(self) -> float: ...
+
+    @abstractmethod
+    def save_acceleration_scale(self, scale_percent: float) -> DashboardCommandResult: ...
+
+    @abstractmethod
+    def relieve_cable(self) -> DashboardCommandResult: ...
+
+    @abstractmethod
+    def get_auxiliary_states(self) -> dict[str, bool]: ...
+
+    @abstractmethod
+    def set_auxiliary_enabled(self, device_id: str, enabled: bool) -> DashboardCommandResult: ...
+
+    @abstractmethod
+    def get_drying_mode(self) -> str: ...
+
+    @abstractmethod
+    def set_drying_mode(self, mode: str) -> DashboardCommandResult: ...
+
+    @abstractmethod
+    def get_dryer_state(self) -> dict[str, object]: ...
+
+    @abstractmethod
+    def enable_dryer_and_set_auto_mode(self, mode: str = "auto") -> DashboardCommandResult: ...
 
     @abstractmethod
     def capture_latest_contour_transform_debug(self) -> ContourTransformDebugResult: ...

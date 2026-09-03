@@ -8,7 +8,7 @@ This audit covers:
 
 - shared applications under `src/applications/`
 - robot-system-specific applications under `src/robot_systems/*/applications/`
-- the active runtime wiring through `src/bootstrap/main.py`
+- the active runtime wiring through `../../../src/bootstrap/run_main.py`
 
 It distinguishes between:
 
@@ -19,26 +19,31 @@ It distinguishes between:
 
 ## Runtime Summary
 
-Localization is always bootstrapped in `src/bootstrap/main.py`. Catalogs are now loaded from:
+Localization is always bootstrapped in `../../../src/bootstrap/run_main.py`. Catalogs are now loaded from:
 
-- shared application catalogs under `src/applications/localization/`
+- shell/shared catalogs under `src/applications/localization/`
+- app-local shared catalogs under `src/applications/<app>/localization/`
 - the active robot system's `metadata.translations_root`
 
 Current bootstrap:
 
-- `PaintBootstrapProvider` is active in `src/bootstrap/main.py`
+- `PaintBootstrapProvider` is active in `../../../src/bootstrap/run_main.py`
 
 Catalog inventory relevant to runtime today:
 
 - `src/applications/localization/en.json`
 - `src/applications/localization/bg.json`
+- `src/applications/login/localization/en.json`
+- `src/applications/login/localization/bg.json`
+- `src/applications/user_management/localization/en.json`
+- `src/applications/user_management/localization/bg.json`
 - `src/robot_systems/glue/storage/translations/en.json`
 - `src/robot_systems/glue/storage/translations/bg.json`
 - `src/robot_systems/ROBOT_SYSTEM_BLUEPRINT/storage/translations/en.json`
 
 Important consequence:
 
-- with the current `paint` bootstrap, shared shell and shared application strings can now be translated through `src/applications/localization/`
+- with the current `paint` bootstrap, shared shell strings can be translated through `src/applications/localization/`, and shared app strings can be translated through each app's local `localization/` directory
 - `paint` still has no robot-specific translation catalog, so robot-system-specific screens remain untranslated unless they use only shared contexts
 - `glue` remains the only robot system with broader robot-specific catalog coverage
 
@@ -82,7 +87,7 @@ In many views, `on_language_changed()` is inherited from `AppWidget` and only pr
 
 ### 4. Shared applications no longer have to depend on per-robot-system catalogs
 
-The runtime now supports a shared catalog root. Shared application strings can live once under `src/applications/localization/`, while robot systems keep only their system-specific overrides.
+The runtime now supports layered shared catalog roots. Shared shell strings live under `src/applications/localization/`; shared application strings can live beside each app under `src/applications/<app>/localization/`; robot systems keep only their system-specific overrides.
 
 ### 5. Shell folder names are partially ready, app names are not
 
@@ -96,8 +101,8 @@ The runtime now supports a shared catalog root. Shared application strings can l
 
 | Application | Status | Evidence | Catalog Coverage | Notes |
 |---|---|---|---|---|
-| `login` | `actual` in `glue`, `none` in current `paint` runtime | `LoginView.retranslateUi()`, `LoginController._t()` | `glue/en.json`, `glue/bg.json` | Still catalog-backed only in `glue` |
-| `user_management` | `actual` in `glue` and current `paint` runtime | `UserManagementView.retranslateUi()`, `PermissionsView.retranslateUi()`, controllers refresh on language change | `src/applications/localization/*.json`, `glue/en.json`, `glue/bg.json` | Shared reference app; covered by selector regression test |
+| `login` | `actual` in shared app runtime, overridable by robot systems | `LoginView.retranslateUi()`, `LoginController._t()` | `src/applications/login/localization/*.json`, robot-system catalogs | Shared app catalog now covers Paint/Glue/Welding defaults |
+| `user_management` | `actual` in shared app runtime, overridable by robot systems | `UserManagementView.retranslateUi()`, `PermissionsView.retranslateUi()`, controllers refresh on language change | `src/applications/user_management/localization/*.json`, robot-system catalogs | Shared reference app; covered by selector regression test |
 | `modbus_settings` | `partial` | `changeEvent(LanguageChange)` only | none | No real retranslation implementation |
 | `device_control` | `partial` | `changeEvent(LanguageChange)` only | none | Static labels/buttons still hard-coded |
 | `glue_cell_settings` | `partial` | `changeEvent(LanguageChange)` only | none | Tab titles and child labels are not catalog-backed |
@@ -152,7 +157,7 @@ Strengths:
 Weak points:
 
 - coverage is still hard to audit automatically
-- shared catalogs are currently centralized in one file rather than app-owned files
+- shared shell catalogs are centralized, while shared application catalogs can be app-owned
 - the service does not help application authors with context naming or missing key discovery
 
 ### Current Application Usage Pattern

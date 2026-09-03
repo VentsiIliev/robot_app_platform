@@ -534,7 +534,7 @@ python src/robot_systems/paint/applications/paint_process_settings/example_usage
 3. Start full application and verify:
 
 ```bash
-python src/bootstrap/main.py
+python src/bootstrap/run_main.py
 ```
 
 4. Confirm the screen appears in the Service folder.

@@ -69,7 +69,17 @@ class BaseRobotSystem(ABC):
         self._system_manager:    Optional[Any] = None
         self._health_registry:   Optional[Any] = None
         self._managed_resources: List[tuple[str, Any]] = []
+        self._development_mode = False
         self._running = False
+
+    @property
+    def development_mode(self) -> bool:
+        return self._development_mode
+
+    def set_development_mode(self, enabled: bool) -> None:
+        if self._running:
+            raise RuntimeError("Development mode must be configured before system startup")
+        self._development_mode = bool(enabled)
 
     @property
     def system_manager(self):

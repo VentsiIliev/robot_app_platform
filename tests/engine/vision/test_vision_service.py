@@ -34,6 +34,10 @@ def _make_vision_system():
     system.state_manager = None
     system.correctedImage = None
     system.rawImage = None
+    system.camera = MagicMock()
+    system.camera.isOpened.return_value = True
+    system.frame_grabber = MagicMock()
+    system.frame_grabber.get_latest_snapshot.return_value = object()
     system._latest_contours = None
     system.camera_to_robot_matrix_path = "/tmp/camera_to_robot.npy"
     return system
@@ -67,10 +71,53 @@ class TestVisionServiceHealth(unittest.TestCase):
         service = VisionService(_make_vision_system())
         self.assertFalse(service.is_healthy())
 
-    def test_running_without_state_manager_uses_running_flag(self):
+    def test_running_without_state_manager_uses_running_camera_and_fresh_frame(self):
         service = VisionService(_make_vision_system())
         service._running = True
         self.assertTrue(service.is_healthy())
+
+    def test_running_without_fresh_frame_is_unhealthy(self):
+        system = _make_vision_system()
+        system.frame_grabber.get_latest_snapshot.return_value = None
+        service = VisionService(system)
+        service._running = True
+
+        self.assertFalse(service.is_healthy())
+        self.assertEqual(service.get_health_details()["message"], "No fresh camera frame available")
+
+    def test_intentionally_paused_processing_remains_healthy_without_fresh_frame(self):
+        system = _make_vision_system()
+        system.frame_grabber.get_latest_snapshot.return_value = None
+        service = VisionService(system)
+        service._running = True
+
+        service.pause_processing()
+
+        details = service.get_health_details()
+        self.assertTrue(service.is_healthy())
+        self.assertTrue(details["processing_paused"])
+        self.assertEqual(details["message"], "Vision processing paused by paint process")
+        system.pause_processing.assert_called_once_with()
+
+    def test_pause_does_not_mask_a_closed_camera(self):
+        system = _make_vision_system()
+        system.camera.isOpened.return_value = False
+        service = VisionService(system)
+        service._running = True
+
+        service.pause_processing()
+
+        self.assertFalse(service.is_healthy())
+        self.assertEqual(service.get_health_details()["message"], "Camera is not open")
+
+    def test_running_without_open_camera_is_unhealthy(self):
+        system = _make_vision_system()
+        system.camera.isOpened.return_value = False
+        service = VisionService(system)
+        service._running = True
+
+        self.assertFalse(service.is_healthy())
+        self.assertEqual(service.get_health_details()["message"], "Camera is not open")
 
     def test_running_with_started_state_is_healthy(self):
         system = _make_vision_system()

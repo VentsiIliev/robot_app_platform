@@ -15,10 +15,10 @@ from src.engine.vision.implementation.VisionSystem.core.external_communication.s
 from src.engine.vision.implementation.VisionSystem.core.service.internal_service import Service
 from src.engine.vision.implementation.plvision.PLVision.Camera import Camera
 from src.engine.vision.implementation.VisionSystem.camera_initialization import CameraInitializer
-from src.engine.vision.implementation.plvision.PLVision import ImageProcessing
 from src.engine.vision.implementation.VisionSystem.services import (
     ContourDetectionService, CalibrationService, ArucoDetectionService, BrightnessService, QrDetectionService,
 )
+from src.engine.vision.i_vision_service import VisionFrameUnavailableError
 from src.engine.work_areas.i_work_area_service import IWorkAreaService
 
 
@@ -33,6 +33,12 @@ class VisionSystem:
                  work_area_service: IWorkAreaService | None = None):
         self._configure_opencv_threads()
         self.optimal_camera_matrix = None
+        self.roi = None
+        self.cameraMatrix = None
+        self.cameraDist = None
+        self._undistort_map1 = None
+        self._undistort_map2 = None
+        self._undistort_map_size = None
 
         self.storage_path      = storage_path or DEFAULT_STORAGE_PATH
         self.service           = service or Service(data_storage_path=self.storage_path)
@@ -42,7 +48,7 @@ class VisionSystem:
         self.service_id        = "vision_service"
 
         self.camera_settings = self.service.loadSettings()
-        self.setup_camera()
+        self.camera = None
         self.load_calibration_data()
 
         # ── Services (no back-references to VisionSystem) ─────────────────────
@@ -71,13 +77,6 @@ class VisionSystem:
             messaging_service = self.messaging_service,
         )
 
-        if self.service.cameraData is not None:
-            self.cameraMatrix = self.service.get_camera_matrix()
-            self.cameraDist   = self.service.get_distortion_coefficients()
-        else:
-            self.cameraMatrix = None
-            self.cameraDist   = None
-
         # ── Frame state ───────────────────────────────────────────────────────────
         self.image          = None
         self.rawImage       = None
@@ -91,9 +90,18 @@ class VisionSystem:
         self._last_processed_frame_sequence = 0
         self._latest_frame_timestamp_s = 0.0
         self._latest_contour_frame_sequence = 0
+        self._latest_contour_area_id = ""
 
         self.stop_signal  = False
         self.cameraThread = None
+        self._processing_resume_event = threading.Event()
+        self._processing_resume_event.set()
+        self._camera_init_thread = threading.Thread(
+            target=self._init_camera_in_background,
+            name="camera-init",
+            daemon=True,
+        )
+        self._camera_init_thread.start()
 
     @staticmethod
     def _configure_opencv_threads() -> None:
@@ -134,26 +142,56 @@ class VisionSystem:
         )
         SubscriptionManager(self, self.messaging_service).subscribe_all()
 
-    def setup_camera(self) -> None:
+    def setup_camera(self, should_cancel=None) -> None:
         camera_index       = self.camera_settings.get_camera_index()
         camera_initializer = CameraInitializer(
             width  = self.camera_settings.get_camera_width(),
             height = self.camera_settings.get_camera_height(),
         )
-        # self.camera, camera_index = camera_initializer.initializeCameraWithRetry(camera_index)
+        self.camera, camera_index = camera_initializer.initializeCameraWithRetry(
+            camera_index,
+            should_cancel=should_cancel,
+        )
+        if self.camera is None:
+            return
         # TODO -- CHANGE CAMERA SOURCE HERE IF NEEDED (e.g. for remote camera)
         # self.camera = RemoteCamera(url = "http://192.168.222.178:5000/video_feed", width=self.camera_settings.get_camera_width(), height=self.camera_settings.get_camera_height())
         # self.camera = RemoteCamera(url = "http://127.0.0.1:5000/video_feed", width=self.camera_settings.get_camera_width(), height=self.camera_settings.get_camera_height())
         # self.camera = RemoteCamera(url = "http://192.168.222.110:5000/video_feed", width=self.camera_settings.get_camera_width(), height=self.camera_settings.get_camera_height())
-        # self.camera = RemoteCamera(url = "http://192.168.222.11:5005/video_feed", width=self.camera_settings.get_camera_width(), height=self.camera_settings.get_camera_height())
-        self.camera = RemoteCamera(url = "http://localhost:5005/video_feed", width=self.camera_settings.get_camera_width(), height=self.camera_settings.get_camera_height())
+        # self.camera = RemoteCamera(url = "http://192.168.222.44:5005/video_feed", width=self.camera_settings.get_camera_width(), height=self.camera_settings.get_camera_height())
+        # self.camera = RemoteCamera(url = "http://localhost:5005/video_feed", width=self.camera_settings.get_camera_width(), height=self.camera_settings.get_camera_height())
         # self.camera.set_auto_exposure(True)
         self.camera_settings.set_camera_index(camera_index)
+
+    def _init_camera_in_background(self) -> None:
+        try:
+            self.setup_camera(should_cancel=lambda: self.stop_signal)
+        except Exception:
+            _logger.exception("Background camera initialization failed")
+            return
+        if self.stop_signal or self.camera is None:
+            return
+        if self.frame_grabber is not None:
+            self.frame_grabber.set_camera(self.camera)
 
     def load_calibration_data(self) -> None:
         self.service.loadPerspectiveMatrix()
         self.service.loadCameraCalibrationData()
         self.service.loadCameraToRobotMatrix()
+        if self.service.cameraData is not None:
+            self.cameraMatrix = self.service.get_camera_matrix()
+            self.cameraDist = self.service.get_distortion_coefficients()
+        else:
+            self.cameraMatrix = None
+            self.cameraDist = None
+        self._clear_undistortion_cache()
+
+    def _clear_undistortion_cache(self) -> None:
+        self.optimal_camera_matrix = None
+        self.roi = None
+        self._undistort_map1 = None
+        self._undistort_map2 = None
+        self._undistort_map_size = None
 
     # ── Properties ────────────────────────────────────────────────────────────
 
@@ -238,6 +276,7 @@ class VisionSystem:
             # Guard here so get_latest_contours() never returns None to callers.
             self._latest_contours = contours or []
             self._latest_contour_frame_sequence = snapshot.sequence
+            self._latest_contour_area_id = active_area
             return contours, self.correctedImage, None
 
         self._latest_contours = []
@@ -255,20 +294,21 @@ class VisionSystem:
     def compute_contours_for_latest_frame(self) -> tuple[np.ndarray | None, list]:
         snapshot = self.frame_grabber.get_latest_snapshot()
         if snapshot is None or snapshot.frame is None:
-            return self.get_latest_frame_for_snapshot(), list(self._latest_contours or [])
+            raise VisionFrameUnavailableError(
+                "No fresh camera frame is available. Check the camera stream before capturing."
+            )
 
-        if (
-            self.camera_settings.get_contour_detection()
-            and snapshot.sequence == self._latest_contour_frame_sequence
-        ):
-            return self.get_latest_frame_for_snapshot(), list(self._latest_contours or [])
+        active_area = self._get_active_area_id()
+        if self.camera_settings.get_contour_detection():
+            cached_area = getattr(self, "_latest_contour_area_id", "")
+            if snapshot.sequence == self._latest_contour_frame_sequence and active_area == cached_area:
+                return self.get_latest_frame_for_snapshot(), list(self._latest_contours or [])
 
         image = snapshot.frame
         if self.camera_settings.get_brightness_auto():
             image = self._brightness_service.adjust(image)
 
         self.rawImage = image.copy()
-        active_area = self._get_active_area_id()
         contours, corrected, _ = self._contour_service.detect(
             image=image,
             threshold=self._get_thresh_by_area(active_area),
@@ -280,6 +320,7 @@ class VisionSystem:
         self.correctedImage = corrected
         self._latest_contours = contours or []
         self._latest_contour_frame_sequence = snapshot.sequence
+        self._latest_contour_area_id = active_area
 
         frame = corrected if corrected is not None else self.rawImage
         return frame, list(self._latest_contours)
@@ -287,21 +328,9 @@ class VisionSystem:
     # ── Image correction ──────────────────────────────────────────────────────
 
     def correctImage(self, image):
-        if self.optimal_camera_matrix is None:
-            self.optimal_camera_matrix, self.roi = cv2.getOptimalNewCameraMatrix(
-                self.cameraMatrix, self.cameraDist,
-                (self.camera_settings.get_camera_width(), self.camera_settings.get_camera_height()),
-                0.5,
-                (self.camera_settings.get_camera_width(), self.camera_settings.get_camera_height()),
-            )
-        image = ImageProcessing.undistortImage(
-            image, self.cameraMatrix, self.cameraDist,
-            self.camera_settings.get_camera_width(),
-            self.camera_settings.get_camera_height(),
-            crop=False,
-            optimal_camera_matrix=self.optimal_camera_matrix,
-            roi=self.roi,
-        )
+        height, width = image.shape[:2]
+        self._ensure_undistortion_maps(width, height)
+        image = cv2.remap(image, self._undistort_map1, self._undistort_map2, cv2.INTER_LINEAR)
         # if self.perspectiveMatrix is not None:
         #     # _logger.debug(f"Perspective Matrix: {self.perspectiveMatrix}")
         #     image = cv2.warpPerspective(
@@ -313,6 +342,26 @@ class VisionSystem:
         #     _logger.debug(f"Perspective Matrix: Not applied (None)")
 
         return image
+
+    def _ensure_undistortion_maps(self, width: int, height: int) -> None:
+        image_size = (width, height)
+        if self.optimal_camera_matrix is None or self._undistort_map_size != image_size:
+            self.optimal_camera_matrix, self.roi = cv2.getOptimalNewCameraMatrix(
+                self.cameraMatrix,
+                self.cameraDist,
+                image_size,
+                0.5,
+                image_size,
+            )
+            self._undistort_map1, self._undistort_map2 = cv2.initUndistortRectifyMap(
+                self.cameraMatrix,
+                self.cameraDist,
+                None,
+                self.optimal_camera_matrix,
+                image_size,
+                cv2.CV_16SC2,
+            )
+            self._undistort_map_size = image_size
 
     def get_latest_frame_for_snapshot(self):
         return self.correctedImage if self.correctedImage is not None else self.rawImage
@@ -328,7 +377,7 @@ class VisionSystem:
             self.cameraMatrix          = outcome.camera_matrix
             self.cameraDist            = outcome.distortion_coefficients
             self.perspectiveMatrix     = outcome.perspective_matrix
-            self.optimal_camera_matrix = None
+            self._clear_undistortion_cache()
             self.service.loadCameraCalibrationData()
             # Note: do NOT reload perspectiveMatrix from disk here — the outcome
             # already provides the correct value and the file may not exist yet.
@@ -405,6 +454,7 @@ class VisionSystem:
 
     def on_threshold_update(self, message) -> None:
         self._active_area_id = str(message.get("region", "") or "")
+        self._latest_contour_area_id = ""
         if self._work_area_service is None:
             return
         try:
@@ -433,19 +483,41 @@ class VisionSystem:
         self.cameraThread = threading.Thread(target=self._loop, name="_loop", daemon=True)
         self.cameraThread.start()
 
+    def pause_processing(self) -> None:
+        """Suspend capture and image processing while keeping the camera open."""
+        self._processing_resume_event.clear()
+        if self.frame_grabber is not None:
+            self.frame_grabber.pause()
+        _logger.info("VisionSystem acquisition and processing paused")
+
+    def resume_processing(self) -> None:
+        """Resume capture and processing from fresh frames."""
+        if self.frame_grabber is not None:
+            self.frame_grabber.resume()
+        self._processing_resume_event.set()
+        _logger.info("VisionSystem acquisition and processing resumed")
+
     def stop_system(self) -> None:
         _logger.info("Stopping VisionSystem...")
         self.stop_signal = True
+        self._processing_resume_event.set()
         if self.frame_grabber is not None:
             self.frame_grabber.stop()
+        if getattr(self, "_camera_init_thread", None) is not None:
+            self._camera_init_thread.join()
+            self._camera_init_thread = None
         if self.cameraThread is not None:
             self.cameraThread.join()
             self.cameraThread = None
-        self.camera.stop_stream()
-        self.camera.stopCapture()
+        if self.camera is not None:
+            self.camera.stop_stream()
+            self.camera.stopCapture()
 
     def _loop(self) -> None:
         while not self.stop_signal:
+            self._processing_resume_event.wait()
+            if self.stop_signal:
+                break
             self.run()
 
     def _get_area_points_by_region(self, area: str):
