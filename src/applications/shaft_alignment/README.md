@@ -52,6 +52,10 @@ in memory without restarting the application. A completed reference
 capture saves the averaged TCP X/Y, orientation, and measured marker width/height;
 it also saves the median normalized marker corners and restores their dotted
 outline on the camera preview as a placement guide.
+The configured POI offset is defined in the aligned marker's image axes
+(`+X` right, `+Y` down). During reference capture it is converted through each
+accepted marker's pixel basis; the median POI is persisted and drawn as a circle
+at the aligned target location rather than following the live marker.
 The Alignment tab also shows the saved reference TCP X/Y, orientation, and marker
 dimensions between the live measurements and the threshold controls.
 Alignment controls are placed to the left of the central camera preview. In the

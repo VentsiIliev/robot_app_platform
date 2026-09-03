@@ -57,6 +57,7 @@ class _CameraCanvas(QLabel):
         self._source: QImage | None = None
         self._corners: tuple[tuple[float, float], ...] = ()
         self._reference_corners: tuple[tuple[float, float], ...] = ()
+        self._point_of_interest: tuple[float, float] | None = None
         self._detection_region: tuple[float, float, float, float] | None = None
         self._misaligned = False
         self._correction: tuple[float, float, float] | None = None
@@ -66,6 +67,7 @@ class _CameraCanvas(QLabel):
         frame,
         corners,
         reference_corners,
+        point_of_interest,
         misaligned: bool,
         detection_region=None,
         correction=None,
@@ -73,6 +75,7 @@ class _CameraCanvas(QLabel):
         self._source = self._to_image(frame)
         self._corners = tuple(corners)
         self._reference_corners = tuple(reference_corners)
+        self._point_of_interest = point_of_interest
         self._misaligned = bool(misaligned)
         self._detection_region = detection_region
         self._correction = correction
@@ -124,6 +127,15 @@ class _CameraCanvas(QLabel):
             ]
             for start, end in zip(points, points[1:] + points[:1]):
                 painter.drawLine(start, end)
+        if self._point_of_interest is not None:
+            x, y = self._point_of_interest
+            center = QPoint(
+                round(image_rect.left() + x * image_rect.width()),
+                round(image_rect.top() + y * image_rect.height()),
+            )
+            painter.setPen(QPen(QColor(PRIMARY), 3))
+            painter.drawEllipse(center, 7, 7)
+            painter.drawText(center + QPoint(11, -8), self.tr("POI"))
         if self._correction is not None:
             self._draw_correction_guide(painter, image_rect)
 
@@ -378,6 +390,7 @@ class ShaftAlignmentView(IApplicationView):
             snapshot.frame,
             snapshot.marker_corners_normalized,
             snapshot.reference_marker_corners_normalized,
+            snapshot.point_of_interest_normalized,
             snapshot.misaligned,
             snapshot.detection_region_normalized,
             (
@@ -511,6 +524,8 @@ class ShaftAlignmentView(IApplicationView):
         }
         double_specs = {
             "marker_size_mm": (0.01, 1000.0, 3), "minimum_area_px2": (0.0, 10000000.0, 1),
+            "point_of_interest_x_offset_mm": (-1000.0, 1000.0, 3),
+            "point_of_interest_y_offset_mm": (-1000.0, 1000.0, 3),
             "tracking_position_filter_alpha": (0.01, 1.0, 2),
             "tracking_prediction_gain": (0.0, 1.0, 2),
             "tracking_maximum_center_jump_px": (0.01, 10000.0, 2),
@@ -528,6 +543,7 @@ class ShaftAlignmentView(IApplicationView):
             "reference_tcp_x_mm", "reference_tcp_y_mm", "reference_orientation_deg",
             "reference_marker_width_mm", "reference_marker_height_mm",
             "reference_marker_corners_normalized",
+            "reference_point_of_interest_normalized",
         }
         ordered_names = tuple(
             name for name in ShaftAlignmentSettings.__dataclass_fields__

@@ -1,6 +1,8 @@
 {
   "marker_id": 0,
   "marker_size_mm": 11.0,
+  "point_of_interest_x_offset_mm": 2.12,
+  "point_of_interest_y_offset_mm": 11.44,
   "minimum_area_px2": 0.0,
   "active_work_area": "vertical_shaft_alignment",
   "raw_mode": false,
@@ -69,5 +71,6 @@
       0.4987468495965004,
       0.5810919178856744
     ]
-  ]
+  ],
+  "reference_point_of_interest_normalized": null
 }

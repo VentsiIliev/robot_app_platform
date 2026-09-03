@@ -7,6 +7,8 @@ from dataclasses import asdict, dataclass
 class ShaftAlignmentSettings:
     marker_id: int = 2
     marker_size_mm: float = 11.0
+    point_of_interest_x_offset_mm: float = 2.12
+    point_of_interest_y_offset_mm: float = 11.44
     minimum_area_px2: float = 0.0
     active_work_area: str = "vertical_shaft_alignment"
     raw_mode: bool = False
@@ -45,6 +47,7 @@ class ShaftAlignmentSettings:
     reference_marker_width_mm: float | None = None
     reference_marker_height_mm: float | None = None
     reference_marker_corners_normalized: tuple[tuple[float, float], ...] | None = None
+    reference_point_of_interest_normalized: tuple[float, float] | None = None
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -63,6 +66,11 @@ class ShaftAlignmentSettings:
             values["reference_marker_corners_normalized"] = tuple(
                 tuple(float(coordinate) for coordinate in point)
                 for point in values["reference_marker_corners_normalized"]
+            )
+        if values.get("reference_point_of_interest_normalized") is not None:
+            values["reference_point_of_interest_normalized"] = tuple(
+                float(coordinate)
+                for coordinate in values["reference_point_of_interest_normalized"]
             )
         settings = cls(**values)
         settings.validate()
@@ -127,3 +135,7 @@ class ShaftAlignmentSettings:
                 for coordinate in point
             ):
                 raise ValueError("Reference marker guide coordinates must be normalized")
+        if self.reference_point_of_interest_normalized is not None:
+            point = self.reference_point_of_interest_normalized
+            if len(point) != 2 or any(not 0.0 <= coordinate <= 1.0 for coordinate in point):
+                raise ValueError("Reference point of interest must be normalized")

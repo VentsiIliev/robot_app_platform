@@ -168,6 +168,7 @@ class PaintVisionShaftAlignmentService(IShaftAlignmentService):
         with self._lock:
             self._reference_capture.start(sample_count)
             self._reference_corner_samples.clear()
+            self._reference_point_samples.clear()
             self._check_samples.clear()
             self._persist_runtime_state(
                 reference_tcp_x_mm=None,
@@ -176,10 +177,12 @@ class PaintVisionShaftAlignmentService(IShaftAlignmentService):
                 reference_marker_width_mm=None,
                 reference_marker_height_mm=None,
                 reference_marker_corners_normalized=None,
+                reference_point_of_interest_normalized=None,
             )
             self._snapshot = replace(
                 self._snapshot,
                 reference_marker_corners_normalized=(),
+                point_of_interest_normalized=None,
                 reference_capturing=True,
                 reference_samples=0,
                 reference_samples_required=self._reference_capture.required_samples,
@@ -329,6 +332,11 @@ class PaintVisionShaftAlignmentService(IShaftAlignmentService):
                     self._reference_corner_samples.append(
                         tuple((x / width, y / height) for x, y in target.corners_px)
                     )
+                    self._reference_point_samples.append(
+                        self._point_of_interest_for_corners(
+                            target.corners_px, width, height
+                        )
+                    )
                     completed = self._reference_capture.record(
                         sample_position.x_mm,
                         sample_position.y_mm,
@@ -340,6 +348,7 @@ class PaintVisionShaftAlignmentService(IShaftAlignmentService):
                         self._persist_reference(
                             self._reference_capture.reference,
                             self._median_reference_corners(),
+                            self._median_reference_point(),
                         )
                 elif accepted and sample_position.available and planar_size.available:
                     sample_misalignment = self._reference_capture.compare(
@@ -472,6 +481,7 @@ class PaintVisionShaftAlignmentService(IShaftAlignmentService):
         self._reference_corner_samples: list[
             tuple[tuple[float, float], ...]
         ] = []
+        self._reference_point_samples: list[tuple[float, float]] = []
         self._check_samples = deque(maxlen=config.alignment_check_samples)
         if config.reference_tcp_x_mm is not None:
             self._reference_capture.restore(
@@ -536,6 +546,7 @@ class PaintVisionShaftAlignmentService(IShaftAlignmentService):
         self,
         reference: AlignmentReference | None,
         corners: tuple[tuple[float, float], ...] | None,
+        point_of_interest: tuple[float, float] | None,
     ) -> None:
         if reference is None:
             return
@@ -546,6 +557,7 @@ class PaintVisionShaftAlignmentService(IShaftAlignmentService):
             reference_marker_width_mm=reference.marker_width_mm,
             reference_marker_height_mm=reference.marker_height_mm,
             reference_marker_corners_normalized=corners,
+            reference_point_of_interest_normalized=point_of_interest,
         )
 
     def _median_reference_corners(self) -> tuple[tuple[float, float], ...] | None:
@@ -559,13 +571,43 @@ class PaintVisionShaftAlignmentService(IShaftAlignmentService):
             for index in range(4)
         )
 
-    def _reference_snapshot_values(self) -> dict[str, float | None]:
+    def _median_reference_point(self) -> tuple[float, float] | None:
+        if not self._reference_point_samples:
+            return None
+        return (
+            statistics.median(point[0] for point in self._reference_point_samples),
+            statistics.median(point[1] for point in self._reference_point_samples),
+        )
+
+    def _point_of_interest_for_corners(
+        self,
+        corners: tuple[tuple[float, float], ...],
+        image_width: int,
+        image_height: int,
+    ) -> tuple[float, float]:
+        points = np.asarray(corners, dtype=float)
+        center = points.mean(axis=0)
+        horizontal = ((points[1] - points[0]) + (points[2] - points[3])) / 2.0
+        vertical = ((points[3] - points[0]) + (points[2] - points[1])) / 2.0
+        point = (
+            center
+            + horizontal
+            * (self._config.point_of_interest_x_offset_mm / self._config.marker_size_mm)
+            + vertical
+            * (self._config.point_of_interest_y_offset_mm / self._config.marker_size_mm)
+        )
+        return float(point[0] / image_width), float(point[1] / image_height)
+
+    def _reference_snapshot_values(self) -> dict[str, object]:
         return {
             "reference_tcp_x_mm": self._config.reference_tcp_x_mm,
             "reference_tcp_y_mm": self._config.reference_tcp_y_mm,
             "reference_orientation_deg": self._config.reference_orientation_deg,
             "reference_marker_width_mm": self._config.reference_marker_width_mm,
             "reference_marker_height_mm": self._config.reference_marker_height_mm,
+            "point_of_interest_normalized": (
+                self._config.reference_point_of_interest_normalized
+            ),
         }
 
     def _update_capture_pose(self) -> None:

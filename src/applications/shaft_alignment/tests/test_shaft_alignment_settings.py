@@ -32,6 +32,7 @@ class ShaftAlignmentSettingsTests(unittest.TestCase):
             reference_marker_corners_normalized=(
                 (0.1, 0.2), (0.3, 0.2), (0.3, 0.4), (0.1, 0.4),
             ),
+            reference_point_of_interest_normalized=(0.34, 0.62),
         )
 
         restored = serializer.from_dict(serializer.to_dict(settings))
@@ -60,6 +61,7 @@ class ShaftAlignmentSettingsTests(unittest.TestCase):
                         (0.1, 0.2), (0.3, 0.2),
                         (0.3, 0.4), (0.1, 0.4),
                     ),
+                    reference_point_of_interest_normalized=(0.34, 0.62),
                 )
 
             payload = json.loads(service._settings_path.read_text(encoding="utf-8"))
@@ -68,6 +70,9 @@ class ShaftAlignmentSettingsTests(unittest.TestCase):
             self.assertEqual(
                 [0.1, 0.2], payload["reference_marker_corners_normalized"][0]
             )
+            self.assertEqual(
+                [0.34, 0.62], payload["reference_point_of_interest_normalized"]
+            )
 
             service.set_thresholds(AlignmentThresholds(1.2, 1.3, 1.4, 0.6, 0.7))
 
@@ -75,6 +80,25 @@ class ShaftAlignmentSettingsTests(unittest.TestCase):
             self.assertEqual(1.2, payload["misalignment_dx_threshold_mm"])
             self.assertEqual(1.4, service._stored_settings.misalignment_drz_threshold_deg)
             self.assertEqual(0.7, service._config.misalignment_dh_threshold_mm)
+
+    def test_point_of_interest_uses_aligned_marker_image_axes(self):
+        service = PaintVisionShaftAlignmentService.__new__(
+            PaintVisionShaftAlignmentService
+        )
+        service._config = ShaftAlignmentSettings(
+            marker_size_mm=10.0,
+            point_of_interest_x_offset_mm=2.0,
+            point_of_interest_y_offset_mm=5.0,
+        )
+
+        point = service._point_of_interest_for_corners(
+            ((40.0, 40.0), (60.0, 40.0), (60.0, 60.0), (40.0, 60.0)),
+            100,
+            100,
+        )
+
+        self.assertAlmostEqual(0.54, point[0])
+        self.assertAlmostEqual(0.60, point[1])
 
     def test_alignment_check_uses_configured_median_sample_batch(self):
         service = PaintVisionShaftAlignmentService.__new__(

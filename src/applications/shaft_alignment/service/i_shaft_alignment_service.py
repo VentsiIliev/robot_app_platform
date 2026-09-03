@@ -22,6 +22,7 @@ class AlignmentSnapshot:
     detected: bool = False
     marker_id: int | None = None
     marker_corners_normalized: tuple[tuple[float, float], ...] = ()
+    point_of_interest_normalized: tuple[float, float] | None = None
     reference_marker_corners_normalized: tuple[tuple[float, float], ...] = ()
     detection_region_normalized: tuple[float, float, float, float] | None = None
     configuration_warning: bool = False
