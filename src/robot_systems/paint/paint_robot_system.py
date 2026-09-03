@@ -122,7 +122,7 @@ def _build_application_specs():
          ApplicationSpec(name="DeviceControl", folder_id=2, icon="fa5s.sliders-h",
                          factory=application_wiring._build_device_control_application)),
         (paint_system_config.WORK_AREA_SETTINGS_APP,
-         ApplicationSpec(name="WorkAreaSettings", folder_id=2, icon="fa5s-vector-square",
+         ApplicationSpec(name="WorkAreaSettings", folder_id=2, icon="fa5s.vector-square",
                          factory=application_wiring._build_work_area_settings_application)),
         (paint_system_config.CAMERA_SETTINGS_APP,
          ApplicationSpec(name="CameraSettings", folder_id=2, icon="fa5s.camera",
