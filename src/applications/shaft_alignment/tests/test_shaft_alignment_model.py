@@ -17,11 +17,10 @@ class ShaftAlignmentModelTests(unittest.TestCase):
         self.assertIsInstance(model.check_alignment(), bool)
         model.close()
 
-    def test_delegates_lifecycle_reference_region_and_thresholds(self):
+    def test_delegates_lifecycle_reference_and_thresholds(self):
         service = StubShaftAlignmentService()
         model = ShaftAlignmentModel(service)
         model.start()
-        model.set_detection_region((0.1, 0.2, 0.8, 0.9))
         model.set_thresholds(AlignmentThresholds(1.0, 1.0, 1.0, 0.5, 0.5))
         model.capture_reference(2)
 
@@ -29,10 +28,7 @@ class ShaftAlignmentModelTests(unittest.TestCase):
 
         self.assertTrue(snapshot.running)
         self.assertTrue(snapshot.reference_capturing)
-        self.assertEqual((0.1, 0.2, 0.8, 0.9), service.get_settings().detection_region_normalized)
         self.assertEqual(1.0, service.get_settings().misalignment_dx_threshold_mm)
-        model.clear_detection_region()
-        self.assertIsNone(service.get_settings().detection_region_normalized)
         model.close()
         self.assertFalse(model.refresh().running)
 

@@ -844,13 +844,17 @@ def _build_shaft_alignment_application(robot_system):
 
     vision_service = robot_system.get_optional_service(CommonServiceID.VISION)
     robot_service = robot_system.get_optional_service(CommonServiceID.ROBOT)
+    work_area_service = robot_system.get_optional_service(CommonServiceID.WORK_AREAS)
     if vision_service is None:
         raise RuntimeError("Shaft Alignment requires the Paint vision service")
     if robot_service is None:
         raise RuntimeError("Shaft Alignment requires the robot service")
+    if work_area_service is None:
+        raise RuntimeError("Shaft Alignment requires the work-area service")
     service = PaintVisionShaftAlignmentService(
         vision_service=vision_service,
         robot_pose_provider=robot_service.get_current_position,
+        work_area_region_provider=work_area_service.get_work_area,
     )
     jog_service = build_robot_system_jog_service(robot_system)
     factory = ShaftAlignmentFactory()

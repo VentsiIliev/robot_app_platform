@@ -21,8 +21,6 @@ class ShaftAlignmentController(IApplicationController):
         self._stopped = False
 
         self._view.capture_reference_requested.connect(self._on_capture_reference)
-        self._view.region_selected.connect(self._on_region_selected)
-        self._view.clear_region_requested.connect(self._on_clear_region)
         self._view.thresholds_changed.connect(self._on_thresholds_changed)
         self._view.save_settings_requested.connect(self._on_save_settings)
         self._view.check_alignment_requested.connect(self._on_check_alignment)
@@ -52,12 +50,6 @@ class ShaftAlignmentController(IApplicationController):
 
     def _on_capture_reference(self, sample_count: int) -> None:
         self._model.capture_reference(sample_count)
-
-    def _on_region_selected(self, left, top, right, bottom) -> None:
-        self._model.set_detection_region((left, top, right, bottom))
-
-    def _on_clear_region(self) -> None:
-        self._model.clear_detection_region()
 
     def _on_thresholds_changed(self, dx, dy, drz, dw, dh) -> None:
         self._model.set_thresholds(AlignmentThresholds(dx, dy, drz, dw, dh))

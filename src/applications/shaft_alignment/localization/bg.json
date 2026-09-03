@@ -2,6 +2,7 @@
   "__meta__": {"display_name": "Български"},
   "ShaftAlignmentView": {
     "No camera frame": "Няма изображение от камерата",
+    "Detection region is not defined for work area '{area}'. Configure it in Work Area Settings.": "Зоната за откриване не е зададена за работна зона „{area}“. Конфигурирайте я в Настройки на работните зони.",
     "Tool correction": "Корекция в инструменталната система",
     "Reference": "Еталон",
     "MISALIGNMENT DETECTED": "ОТКРИТО Е РАЗЦЕНТРОВАНЕ",
@@ -20,7 +21,6 @@
     "Saved reference": "Запазен еталон",
     "Misalignment thresholds": "Прагове за разцентроване",
     "Capture reference": "Заснеми еталон",
-    "Clear region": "Изчисти зоната",
     " samples": " проби",
     "Alignment": "Подравняване",
     "Settings": "Настройки",

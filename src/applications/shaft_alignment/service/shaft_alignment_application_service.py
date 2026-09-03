@@ -23,12 +23,6 @@ class ShaftAlignmentApplicationService(IShaftAlignmentService):
     def get_snapshot(self) -> AlignmentSnapshot:
         return self._backend.get_snapshot()
 
-    def set_detection_region(self, left, top, right, bottom) -> None:
-        self._backend.set_detection_region(left, top, right, bottom)
-
-    def clear_detection_region(self) -> None:
-        self._backend.clear_detection_region()
-
     def capture_reference(self, sample_count: int) -> None:
         self._backend.capture_reference(sample_count)
 

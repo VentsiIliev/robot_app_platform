@@ -4,7 +4,7 @@ from dataclasses import replace
 
 import numpy as np
 from PyQt6.QtCore import QPoint, QRect, Qt, pyqtSignal
-from PyQt6.QtGui import QColor, QImage, QMouseEvent, QPainter, QPen, QPixmap
+from PyQt6.QtGui import QColor, QImage, QPainter, QPen
 from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -29,7 +29,6 @@ from pl_gui.settings.settings_view.styles import (
     BG_COLOR,
     BORDER,
     ERROR_COLOR,
-    GHOST_BTN_STYLE,
     GROUP_STYLE,
     LABEL_STYLE,
     PRIMARY,
@@ -49,8 +48,6 @@ _OK_COLOR = "#2E7D32"
 
 
 class _CameraCanvas(QLabel):
-    region_selected = pyqtSignal(float, float, float, float)
-
     def __init__(self) -> None:
         super().__init__()
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -63,8 +60,6 @@ class _CameraCanvas(QLabel):
         self._detection_region: tuple[float, float, float, float] | None = None
         self._misaligned = False
         self._correction: tuple[float, float, float] | None = None
-        self._drag_start: QPoint | None = None
-        self._drag_end: QPoint | None = None
 
     def set_frame(
         self,
@@ -81,34 +76,6 @@ class _CameraCanvas(QLabel):
         self._misaligned = bool(misaligned)
         self._detection_region = detection_region
         self._correction = correction
-        self.update()
-
-    def mousePressEvent(self, event: QMouseEvent) -> None:
-        if event.button() == Qt.MouseButton.LeftButton and self._image_rect().contains(event.position().toPoint()):
-            self._drag_start = event.position().toPoint()
-            self._drag_end = self._drag_start
-            self.update()
-
-    def mouseMoveEvent(self, event: QMouseEvent) -> None:
-        if self._drag_start is not None:
-            self._drag_end = event.position().toPoint()
-            self.update()
-
-    def mouseReleaseEvent(self, event: QMouseEvent) -> None:
-        if event.button() != Qt.MouseButton.LeftButton or self._drag_start is None:
-            return
-        self._drag_end = event.position().toPoint()
-        image_rect = self._image_rect()
-        selection = QRect(self._drag_start, self._drag_end).normalized().intersected(image_rect)
-        self._drag_start = None
-        self._drag_end = None
-        if selection.width() >= 2 and selection.height() >= 2:
-            self.region_selected.emit(
-                (selection.left() - image_rect.left()) / image_rect.width(),
-                (selection.top() - image_rect.top()) / image_rect.height(),
-                (selection.right() - image_rect.left()) / image_rect.width(),
-                (selection.bottom() - image_rect.top()) / image_rect.height(),
-            )
         self.update()
 
     def paintEvent(self, event) -> None:
@@ -157,9 +124,6 @@ class _CameraCanvas(QLabel):
             ]
             for start, end in zip(points, points[1:] + points[:1]):
                 painter.drawLine(start, end)
-        if self._drag_start is not None and self._drag_end is not None:
-            painter.setPen(QPen(QColor(PRIMARY), 3, Qt.PenStyle.DashLine))
-            painter.drawRect(QRect(self._drag_start, self._drag_end).normalized())
         if self._correction is not None:
             self._draw_correction_guide(painter, image_rect)
 
@@ -234,8 +198,6 @@ class ShaftAlignmentView(IApplicationView):
     SHOW_JOG_WIDGET = True
 
     capture_reference_requested = pyqtSignal(int)
-    clear_region_requested = pyqtSignal()
-    region_selected = pyqtSignal(float, float, float, float)
     thresholds_changed = pyqtSignal(float, float, float, float, float)
     save_settings_requested = pyqtSignal(object)
     check_alignment_requested = pyqtSignal()
@@ -255,7 +217,6 @@ class ShaftAlignmentView(IApplicationView):
         alignment_layout.setContentsMargins(0, 0, 0, 0)
         splitter = QSplitter(Qt.Orientation.Horizontal)
         self._camera = _CameraCanvas()
-        self._camera.region_selected.connect(self._on_region_selected)
         splitter.addWidget(self._camera)
 
         controls = QWidget()
@@ -348,14 +309,6 @@ class ShaftAlignmentView(IApplicationView):
         reference_row.addWidget(self._sample_count)
         reference_row.addWidget(self._capture, stretch=1)
         controls_layout.addLayout(reference_row)
-
-        action_row = QHBoxLayout()
-        self._clear_region = QPushButton()
-        self._clear_region.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._clear_region.setStyleSheet(GHOST_BTN_STYLE)
-        self._clear_region.clicked.connect(self._on_clear_region)
-        action_row.addWidget(self._clear_region)
-        controls_layout.addLayout(action_row)
 
         self._reference_progress = QLabel()
         self._misalignment = QLabel()
@@ -450,7 +403,13 @@ class ShaftAlignmentView(IApplicationView):
             "Marker height", snapshot.reference_marker_height_mm, "mm"
         )
         if self._continuous_mode:
-            if snapshot.reference_available and snapshot.dx_mm is not None:
+            if snapshot.configuration_warning:
+                status_color = ERROR_COLOR
+                status_text = self.tr(
+                    "Detection region is not defined for work area '{area}'. "
+                    "Configure it in Work Area Settings."
+                ).format(area=self._loaded_settings.active_work_area)
+            elif snapshot.reference_available and snapshot.dx_mm is not None:
                 status_color = ERROR_COLOR if snapshot.misaligned else _OK_COLOR
                 status_text = (
                     self.tr("MISALIGNMENT DETECTED")
@@ -499,7 +458,6 @@ class ShaftAlignmentView(IApplicationView):
         self._reference_box.setTitle(self.tr("Saved reference"))
         self._threshold_box.setTitle(self.tr("Misalignment thresholds"))
         self._capture.setText(self.tr("Capture reference"))
-        self._clear_region.setText(self.tr("Clear region"))
         self._sample_count.setSuffix(self.tr(" samples"))
         self._mode_label.setText(self.tr("Check mode"))
         self._mode.setItemText(0, self.tr("Continuous"))
@@ -567,7 +525,6 @@ class ShaftAlignmentView(IApplicationView):
             "detection_interval_s": (0.0, 10.0, 3),
         }
         persisted_state_fields = {
-            "detection_region_normalized",
             "reference_tcp_x_mm", "reference_tcp_y_mm", "reference_orientation_deg",
             "reference_marker_width_mm", "reference_marker_height_mm",
             "reference_marker_corners_normalized",
@@ -633,12 +590,6 @@ class ShaftAlignmentView(IApplicationView):
 
     def _on_capture_reference(self) -> None:
         self.capture_reference_requested.emit(self._sample_count.value())
-
-    def _on_clear_region(self) -> None:
-        self.clear_region_requested.emit()
-
-    def _on_region_selected(self, left, top, right, bottom) -> None:
-        self.region_selected.emit(left, top, right, bottom)
 
     def _on_save_settings(self) -> None:
         try:

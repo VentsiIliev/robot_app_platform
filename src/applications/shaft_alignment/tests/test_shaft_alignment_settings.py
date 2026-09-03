@@ -24,7 +24,6 @@ class ShaftAlignmentSettingsTests(unittest.TestCase):
         settings = ShaftAlignmentSettings(
             marker_id=7,
             marker_size_mm=12.5,
-            detection_region_normalized=(0.1, 0.2, 0.8, 0.9),
             reference_tcp_x_mm=257.75,
             reference_tcp_y_mm=215.7,
             reference_orientation_deg=0.4,
@@ -52,7 +51,6 @@ class ShaftAlignmentSettingsTests(unittest.TestCase):
 
             with service._lock:
                 service._persist_runtime_state(
-                    detection_region_normalized=(0.1, 0.2, 0.8, 0.9),
                     reference_tcp_x_mm=257.75,
                     reference_tcp_y_mm=215.7,
                     reference_orientation_deg=0.4,
@@ -65,7 +63,6 @@ class ShaftAlignmentSettingsTests(unittest.TestCase):
                 )
 
             payload = json.loads(service._settings_path.read_text(encoding="utf-8"))
-            self.assertEqual([0.1, 0.2, 0.8, 0.9], payload["detection_region_normalized"])
             self.assertEqual(257.75, service._stored_settings.reference_tcp_x_mm)
             self.assertEqual(10.9, service._config.reference_marker_height_mm)
             self.assertEqual(
