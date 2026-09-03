@@ -6,7 +6,11 @@ import time
 import cv2
 import numpy as np
 
-from .alignment_reference import AlignmentMisalignment, AlignmentReferenceCapture
+from .alignment_reference import (
+    AlignmentMisalignment,
+    AlignmentReferenceCapture,
+    MisalignmentThresholds,
+)
 from .detector import ShaftMarkerDetector
 from .config import CONFIG, StandaloneShaftDetectionConfig
 from .coordinate_mapper import (
@@ -26,6 +30,36 @@ from .region import (
 )
 from .stabilizer import MarkerSampleStabilizer, StableMarkerEstimate
 from .tracker import MarkerRegionTracker
+
+
+class _MisalignmentThresholdControls:
+    """OpenCV trackbars backed by thresholds with 0.1-unit resolution."""
+
+    _SCALE = 10
+    _TRACKBARS = (
+        ("dX limit mm x10", "dx_mm", 1000),
+        ("dY limit mm x10", "dy_mm", 1000),
+        ("dRZ limit deg x10", "orientation_deg", 1800),
+        ("dW limit mm x10", "marker_width_mm", 1000),
+        ("dH limit mm x10", "marker_height_mm", 1000),
+    )
+
+    def __init__(self, window_title: str, initial: MisalignmentThresholds) -> None:
+        self._window_title = window_title
+        for name, attribute, maximum in self._TRACKBARS:
+            initial_value = round(getattr(initial, attribute) * self._SCALE)
+            cv2.createTrackbar(name, window_title, initial_value, maximum, self._on_change)
+
+    def thresholds(self) -> MisalignmentThresholds:
+        values = {
+            attribute: cv2.getTrackbarPos(name, self._window_title) / self._SCALE
+            for name, attribute, _maximum in self._TRACKBARS
+        }
+        return MisalignmentThresholds(**values)
+
+    @staticmethod
+    def _on_change(_value: int) -> None:
+        pass
 
 
 class _DetectionRegionMouseHandler:
@@ -91,10 +125,13 @@ def _draw_detection(
     reference_capture: AlignmentReferenceCapture,
     misalignment: AlignmentMisalignment,
     reference_button_region: PixelRegion,
+    thresholds: MisalignmentThresholds,
+    exceeded_limits: tuple[str, ...],
     selection_preview: PixelRegion | None = None,
 ):
     display = frame.copy()
-    color = (40, 200, 40) if result.detected else (30, 80, 230)
+    misaligned = bool(exceeded_limits)
+    color = (0, 0, 255) if misaligned else ((40, 200, 40) if result.detected else (30, 80, 230))
     if draw_detection_region and debug_region is not None:
         region = debug_region
         cv2.rectangle(
@@ -115,7 +152,7 @@ def _draw_detection(
     if draw_all_markers:
         for marker in result.detected_markers:
             marker_color = (
-                (40, 200, 40)
+                ((0, 0, 255) if misaligned else (40, 200, 40))
                 if marker.marker_id == result.marker_id
                 else (0, 210, 255)
             )
@@ -230,6 +267,13 @@ def _draw_detection(
             f"size misalignment: dW={misalignment.marker_width_difference_mm:+.2f}mm "
             f"dH={misalignment.marker_height_difference_mm:+.2f}mm"
         )
+        lines.append(
+            f"limits: dX={thresholds.dx_mm:.1f} dY={thresholds.dy_mm:.1f}mm "
+            f"dRZ={thresholds.orientation_deg:.1f}deg "
+            f"dW={thresholds.marker_width_mm:.1f} dH={thresholds.marker_height_mm:.1f}mm"
+        )
+    if misaligned:
+        lines.append(f"MISALIGNMENT DETECTED: {', '.join(exceeded_limits)}")
     for index, line in enumerate(lines):
         cv2.putText(
             display,
@@ -362,10 +406,22 @@ def main(config: StandaloneShaftDetectionConfig = CONFIG) -> int:
         reset_region_consumers,
     )
     mouse_handler.set_button(PixelRegion(0, 0, 1, 1), reference_capture.start)
+    thresholds = MisalignmentThresholds(
+        dx_mm=runtime_config.misalignment_dx_threshold_mm,
+        dy_mm=runtime_config.misalignment_dy_threshold_mm,
+        orientation_deg=runtime_config.misalignment_drz_threshold_deg,
+        marker_width_mm=runtime_config.misalignment_dw_threshold_mm,
+        marker_height_mm=runtime_config.misalignment_dh_threshold_mm,
+    )
+    threshold_controls = None
 
     if not runtime_config.headless:
         cv2.namedWindow(runtime_config.window_title)
         cv2.setMouseCallback(runtime_config.window_title, mouse_handler)
+        threshold_controls = _MisalignmentThresholdControls(
+            runtime_config.window_title,
+            thresholds,
+        )
 
     print(
         "[shaft-marker] started "
@@ -417,6 +473,7 @@ def main(config: StandaloneShaftDetectionConfig = CONFIG) -> int:
             stable_estimate = stabilizer.estimate()
             planar_size = MarkerPlanarSize(False, runtime_config.marker_size_mm)
             misalignment = AlignmentMisalignment(False, message="Reference not captured.")
+            exceeded_limits: tuple[str, ...] = ()
             if result.detected:
                 target = next(
                     marker
@@ -464,6 +521,9 @@ def main(config: StandaloneShaftDetectionConfig = CONFIG) -> int:
                     planar_size.width_mm,
                     planar_size.height_mm,
                 )
+            if threshold_controls is not None:
+                thresholds = threshold_controls.thresholds()
+            exceeded_limits = thresholds.exceeded_by(misalignment)
 
             next_region = (
                 tracker.region_for_frame(frame_width, frame_height)
@@ -506,6 +566,8 @@ def main(config: StandaloneShaftDetectionConfig = CONFIG) -> int:
                         reference_capture=reference_capture,
                         misalignment=misalignment,
                         reference_button_region=reference_button_region,
+                        thresholds=thresholds,
+                        exceeded_limits=exceeded_limits,
                         selection_preview=mouse_handler.preview_region,
                     ),
                 )

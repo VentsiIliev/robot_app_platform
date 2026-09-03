@@ -25,6 +25,31 @@ class AlignmentMisalignment:
     message: str = ""
 
 
+@dataclass(frozen=True)
+class MisalignmentThresholds:
+    dx_mm: float
+    dy_mm: float
+    orientation_deg: float
+    marker_width_mm: float
+    marker_height_mm: float
+
+    def exceeded_by(self, value: AlignmentMisalignment) -> tuple[str, ...]:
+        if not value.available:
+            return ()
+        checks = (
+            ("dX", value.dx_mm, self.dx_mm),
+            ("dY", value.dy_mm, self.dy_mm),
+            ("dRZ", value.orientation_difference_deg, self.orientation_deg),
+            ("dW", value.marker_width_difference_mm, self.marker_width_mm),
+            ("dH", value.marker_height_difference_mm, self.marker_height_mm),
+        )
+        return tuple(
+            name
+            for name, measured, threshold in checks
+            if measured is not None and abs(measured) > threshold
+        )
+
+
 class AlignmentReferenceCapture:
     """Collect a robust reference and compare subsequent marker observations."""
 
