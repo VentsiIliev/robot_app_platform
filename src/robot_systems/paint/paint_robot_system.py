@@ -206,6 +206,12 @@ class PaintRobotSystem(BaseRobotSystem):
             has_trajectory_execution=True,
         ),
         MovementGroupDefinition(
+            id="Vertical Shaft Alignment",
+            label="Vertical Shaft Alignment",
+            group_type=MovementGroupType.SINGLE_POSITION,
+            has_trajectory_execution=True,
+        ),
+        MovementGroupDefinition(
             id="Clean",
             label="Clean",
             group_type=MovementGroupType.SINGLE_POSITION,

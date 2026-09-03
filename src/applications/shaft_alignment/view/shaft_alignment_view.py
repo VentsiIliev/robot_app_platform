@@ -231,6 +231,8 @@ class _CameraCanvas(QLabel):
 
 
 class ShaftAlignmentView(IApplicationView):
+    SHOW_JOG_WIDGET = True
+
     capture_reference_requested = pyqtSignal(int)
     clear_region_requested = pyqtSignal()
     region_selected = pyqtSignal(float, float, float, float)
@@ -361,9 +363,9 @@ class ShaftAlignmentView(IApplicationView):
         controls_layout.addWidget(self._reference_progress)
         controls_layout.addWidget(self._misalignment)
         controls_layout.addStretch(1)
-        splitter.addWidget(controls)
-        splitter.setStretchFactor(0, 3)
-        splitter.setStretchFactor(1, 2)
+        splitter.insertWidget(0, controls)
+        splitter.setStretchFactor(0, 2)
+        splitter.setStretchFactor(1, 3)
         alignment_layout.addWidget(splitter)
         self._tabs.addTab(alignment_page, "")
         self._tabs.addTab(self._build_settings_tab(), "")

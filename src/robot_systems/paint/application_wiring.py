@@ -831,6 +831,9 @@ def _build_camera_settings_application(robot_system):
 
 
 def _build_shaft_alignment_application(robot_system):
+    from src.applications.base.robot_jog_service_builder import (
+        build_robot_system_jog_service,
+    )
     from src.applications.base.widget_application import WidgetApplication
     from src.applications.shaft_alignment.service.paint_vision_shaft_alignment_service import (
         PaintVisionShaftAlignmentService,
@@ -849,8 +852,15 @@ def _build_shaft_alignment_application(robot_system):
         vision_service=vision_service,
         robot_pose_provider=robot_service.get_current_position,
     )
+    jog_service = build_robot_system_jog_service(robot_system)
     factory = ShaftAlignmentFactory()
-    return WidgetApplication(widget_factory=lambda _ms: factory.build(service))
+    return WidgetApplication(
+        widget_factory=lambda ms: factory.build(
+            service,
+            messaging=ms,
+            jog_service=jog_service,
+        )
+    )
 
 
 def _build_calibration_settings_application(robot_system):

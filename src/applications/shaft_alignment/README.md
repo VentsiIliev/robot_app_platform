@@ -55,6 +55,9 @@ it also saves the median normalized marker corners and restores their dotted
 outline on the camera preview as a placement guide.
 The Alignment tab also shows the saved reference TCP X/Y, orientation, and marker
 dimensions between the live measurements and the threshold controls.
+Alignment controls are placed to the left of the central camera preview. In the
+Paint composition, the platform's shared robot jog drawer is available on the
+right-hand side and is wired through the standard jog service/controller path.
 changing any misalignment threshold slider also saves and applies all five
 thresholds immediately. The region, reference, and thresholds are restored on
 the next launch. Starting a new
