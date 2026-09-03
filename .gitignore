@@ -45,3 +45,5 @@ src/robot_systems/glue/storage/settings/height_measuring/
 src/robot_systems/glue/storage/settings/tools/
 src/robot_systems/glue/storage/settings/vision/data/*.npz
 src/robot_systems/glue/storage/settings/vision/data/*.npy
+
+/scripts/recording.avi
