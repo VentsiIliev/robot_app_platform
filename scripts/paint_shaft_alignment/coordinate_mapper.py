@@ -32,6 +32,31 @@ class TcpCoordinateTransformer:
         return self._transformer.transform_to_tcp(x, y)
 
 
+class CapturePoseCompensatedTransformer:
+    """Shift calibrated coordinates by the capture-pose translation."""
+
+    def __init__(
+        self,
+        transformer: PixelToRobotTransformer,
+        calibration_pose: tuple[float, float, float, float, float, float],
+        capture_pose: tuple[float, float, float, float, float, float],
+    ) -> None:
+        self._transformer = transformer
+        self._dx = float(capture_pose[0]) - float(calibration_pose[0])
+        self._dy = float(capture_pose[1]) - float(calibration_pose[1])
+
+    @property
+    def translation_xy_mm(self) -> tuple[float, float]:
+        return self._dx, self._dy
+
+    def is_available(self) -> bool:
+        return self._transformer.is_available()
+
+    def transform(self, x: float, y: float) -> tuple[float, float]:
+        transformed_x, transformed_y = self._transformer.transform(x, y)
+        return transformed_x + self._dx, transformed_y + self._dy
+
+
 @dataclass(frozen=True)
 class MarkerRobotPosition:
     available: bool
