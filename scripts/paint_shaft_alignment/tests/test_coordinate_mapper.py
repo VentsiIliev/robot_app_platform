@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 
 from scripts.paint_shaft_alignment.coordinate_mapper import (
+    CapturePoseCompensatedTransformer,
     MarkerCenterRobotMapper,
     TcpCoordinateTransformer,
 )
@@ -41,6 +42,16 @@ class _FakeTcpTransformer:
 
 
 class MarkerCenterRobotMapperTests(unittest.TestCase):
+    def test_compensates_transform_for_capture_pose_translation(self):
+        transformer = CapturePoseCompensatedTransformer(
+            _FakeTransformer(),
+            (10.0, 20.0, 30.0, -180.0, 0.0, 0.0),
+            (14.0, 17.0, 50.0, -179.0, 0.0, 0.0),
+        )
+
+        self.assertEqual((4.0, -3.0), transformer.translation_xy_mm)
+        self.assertEqual((9.0, -5.0), transformer.transform(10.0, 8.0))
+
     def test_measures_marker_edges_after_transforming_all_corners(self):
         transformer = _FakeTransformer()
         mapper = MarkerCenterRobotMapper(transformer)

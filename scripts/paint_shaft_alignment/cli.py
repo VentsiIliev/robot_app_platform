@@ -9,6 +9,7 @@ import numpy as np
 from .detector import ShaftMarkerDetector
 from .config import CONFIG, StandaloneShaftDetectionConfig
 from .coordinate_mapper import (
+    CapturePoseCompensatedTransformer,
     MarkerCenterRobotMapper,
     MarkerPlanarSize,
     MarkerRobotPosition,
@@ -244,9 +245,12 @@ def main(config: StandaloneShaftDetectionConfig = CONFIG) -> int:
         minimum_area_px2=config.minimum_area_px2,
     )
     vision = build_paint_vision_service(runtime_config.active_work_area)
-    coordinate_mapper = MarkerCenterRobotMapper(
-        TcpCoordinateTransformer(build_paint_tcp_transformer(vision))
+    pose_compensated_transformer = CapturePoseCompensatedTransformer(
+        TcpCoordinateTransformer(build_paint_tcp_transformer(vision)),
+        runtime_config.calibration_pose,
+        runtime_config.capture_pose,
     )
+    coordinate_mapper = MarkerCenterRobotMapper(pose_compensated_transformer)
     work_area_region_provider = SelectableDetectionRegionProvider(
         CenteredDetectionRegionProvider(
             width=runtime_config.base_region_width_px,
@@ -301,6 +305,12 @@ def main(config: StandaloneShaftDetectionConfig = CONFIG) -> int:
         "[shaft-marker] started "
         f"marker_id={marker_config.marker_id} area={runtime_config.active_work_area!r} "
         f"raw={runtime_config.raw_mode}"
+    )
+    print(
+        "[shaft-marker] capture pose compensation "
+        f"calibration_pose={runtime_config.calibration_pose} "
+        f"capture_pose={runtime_config.capture_pose} "
+        f"delta_xy_mm={pose_compensated_transformer.translation_xy_mm}"
     )
     if not runtime_config.headless:
         print("[shaft-marker] drag with the left mouse button to select the ROI; press r to reset it")

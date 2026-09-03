@@ -38,6 +38,9 @@ Available configuration fields include:
 - `orientation_strategy` switches between `compare`, `solve_pnp`, and `corner_edge`;
 - `orientation_primary_strategy` chooses which comparison result feeds stabilization;
 - `marker_size_mm` is the measured black marker square size (currently 11 mm);
+- `calibration_pose` is the robot TCP pose at which the homography was captured;
+- `capture_pose` is the robot TCP pose used for the current image. Its XY delta
+  from `calibration_pose` is applied to marker-center and size transforms;
 - `base_region_width_px` and `base_region_height_px` define the temporary base ROI;
 - `tracking_region_padding_px` controls the margin around a tracked marker;
 - `tracking_region_minimum_width_px` and `tracking_region_minimum_height_px`
