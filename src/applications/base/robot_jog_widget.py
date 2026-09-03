@@ -14,6 +14,7 @@ from pl_gui.settings.settings_view.styles import (
 )
 
 _LINEAR_STEPS:   list[float] = [0.1,0.2, 0.5, 1.0, 5.0, 10.0, 50.0,100,250]
+_LINEAR_SERVO_SPEEDS: list[float] = [0.1, 0.2, 0.5, 1.0, 5.0, 10.0, 50.0, 100, 200]
 _ROTATION_STEPS: list[float] = [0.1,0.2, 0.5, 1.0, 5.0, 10.0, 45.0, 90.0,180,360]
 _JOINT_STEPS:    list[float] = [0.1, 0.5, 1.0, 5.0, 10.0, 45.0, 90.0]
 _LINEAR_AXES  = {"X", "Y", "Z"}
@@ -781,7 +782,12 @@ class RobotJogWidget(QFrame):
     def _perform_jog(self, key: str) -> None:
         axis, direction = self._axis_map[key]
         if axis in _LINEAR_AXES:
-            step = _LINEAR_STEPS[self._linear_slider.value()]
+            values = (
+                _LINEAR_SERVO_SPEEDS
+                if self._current_jog_command() == "SERVO_JOG"
+                else _LINEAR_STEPS
+            )
+            step = values[self._linear_slider.value()]
         else:
             step = _ROTATION_STEPS[self._rotation_slider.value()]
 
@@ -810,7 +816,8 @@ class RobotJogWidget(QFrame):
         if self._rotation_title_label is not None:
             source = "Rotation Speed" if servo_mode else "Rotation Step"
             self._rotation_title_label.setText(f"{self._t(source)}:")
-        self._on_slider_changed(_LINEAR_STEPS, "mm", self._linear_label, self._linear_slider.value())
+        linear_values = _LINEAR_SERVO_SPEEDS if servo_mode else _LINEAR_STEPS
+        self._on_slider_changed(linear_values, "mm", self._linear_label, self._linear_slider.value())
         self._on_slider_changed(_ROTATION_STEPS, "°", self._rotation_label, self._rotation_slider.value())
 
     def _on_joint_jog_press(self, key: str) -> None:
