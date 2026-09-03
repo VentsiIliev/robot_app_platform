@@ -5,7 +5,7 @@ from dataclasses import dataclass
 class StandaloneShaftDetectionConfig:
     """Editable settings for the standalone development runner."""
 
-    marker_id: int = 2
+    marker_id: int = 0
     minimum_area_px2: float = 0.0
     active_work_area: str | None = "paint"
     raw_mode: bool = False
@@ -16,7 +16,9 @@ class StandaloneShaftDetectionConfig:
     draw_initial_detection_region: bool = True
 
     orientation_strategy: str = "compare"  # "compare", "solve_pnp" or "corner_edge"
-    orientation_primary_strategy: str = "solve_pnp"
+    # Image-plane shaft alignment is more stable from the refined marker edge.
+    # SolvePnP remains enabled by "compare" for tilt/depth diagnostics.
+    orientation_primary_strategy: str = "corner_edge"
     marker_size_mm: float = 11.0
 
     # Pose at which the homography was calibrated and the pose used to capture
@@ -67,14 +69,15 @@ class StandaloneShaftDetectionConfig:
             raise ValueError("Calibration and capture poses must contain six values")
         if self.reference_capture_samples <= 0:
             raise ValueError("Reference capture sample count must be positive")
-        if min(
+        threshold_values = (
             self.misalignment_dx_threshold_mm,
             self.misalignment_dy_threshold_mm,
             self.misalignment_drz_threshold_deg,
             self.misalignment_dw_threshold_mm,
             self.misalignment_dh_threshold_mm,
-        ) < 0.0:
-            raise ValueError("Misalignment thresholds must be non-negative")
+        )
+        if min(threshold_values) < 0.1 or max(threshold_values) > 5.0:
+            raise ValueError("Misalignment thresholds must be in [0.1, 5.0]")
         if self.orientation_strategy.strip().lower() not in {"compare", "solve_pnp", "corner_edge"}:
             raise ValueError("Unsupported orientation strategy")
         if self.orientation_primary_strategy.strip().lower() not in {"solve_pnp", "corner_edge"}:

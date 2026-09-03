@@ -84,6 +84,11 @@ In `compare` mode both algorithms receive the same four detected corners. The
 overlay shows edge angle, PnP angle, and their shortest signed angular delta.
 PnP diagnostics also show RX, RY, total tilt, camera-frame Z, reprojection RMS,
 candidate count, and the selected positive-Z IPPE candidate.
+The default primary angle is `corner_edge`; it converts all four refined marker
+edges to their canonical rotation and circular-averages them, reducing sensitivity
+to noise at any single corner. SolvePnP remains
+available in the comparison diagnostics but does not drive baseline `RZ` or
+misalignment unless explicitly selected in `config.py`.
 
 The overlay also transforms all four detected corners onto the calibrated
 homography plane. It shows the real marker size, the measured width and height,
@@ -97,11 +102,14 @@ collection, the overlay continuously reports signed `dX`, `dY`, shortest-angle
 `dRZ`, `dW`, and `dH` misalignment. Clicking the button again replaces the
 previous reference.
 
-Five preview-window trackbars set the absolute misalignment limits for `dX`,
-`dY`, `dRZ`, `dW`, and `dH`. Their displayed integer values use 0.1-unit
-resolution (`x10`). If any current error exceeds its limit, the marker is drawn
-red and the overlay reports which limits were exceeded. Initial limits are
-configured by the `misalignment_*_threshold_*` fields in `config.py`.
+Five trackbars in the separate **Alignment Controls** window set the absolute
+misalignment limits for `dX`, `dY`, `dRZ`, `dW`, and `dH`. Each ranges from
+`0.1` through `5.0`, and the panel prints the current decimal values explicitly.
+The sliders and matching descriptions are numbered 1–6 so each native trackbar
+can be identified even when the window manager shortens its label.
+If any current error exceeds its limit, the marker is drawn red and the overlay
+reports which limits were exceeded. Initial limits are configured by the
+`misalignment_*_threshold_*` fields in `config.py`.
 The `Baseline samples` trackbar selects how many valid observations the next
 **Capture reference** operation will collect (1–200). Its value is read when the
 button is clicked and remains fixed for that capture cycle.
