@@ -24,6 +24,7 @@ class AlignmentSnapshot:
     marker_corners_normalized: tuple[tuple[float, float], ...] = ()
     reference_marker_corners_normalized: tuple[tuple[float, float], ...] = ()
     detection_region_normalized: tuple[float, float, float, float] | None = None
+    configuration_warning: bool = False
     tcp_x_mm: float | None = None
     tcp_y_mm: float | None = None
     orientation_deg: float | None = None
@@ -59,14 +60,6 @@ class IShaftAlignmentService(ABC):
 
     @abstractmethod
     def get_snapshot(self) -> AlignmentSnapshot: ...
-
-    @abstractmethod
-    def set_detection_region(
-        self, left: float, top: float, right: float, bottom: float
-    ) -> None: ...
-
-    @abstractmethod
-    def clear_detection_region(self) -> None: ...
 
     @abstractmethod
     def capture_reference(self, sample_count: int) -> None: ...

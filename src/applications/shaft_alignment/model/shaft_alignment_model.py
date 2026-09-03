@@ -34,12 +34,6 @@ class ShaftAlignmentModel(IApplicationModel):
         self._snapshot = self._service.get_snapshot()
         return self._snapshot
 
-    def set_detection_region(self, region: tuple[float, float, float, float]) -> None:
-        self._service.set_detection_region(*region)
-
-    def clear_detection_region(self) -> None:
-        self._service.clear_detection_region()
-
     def capture_reference(self, sample_count: int) -> None:
         self._service.capture_reference(sample_count)
 

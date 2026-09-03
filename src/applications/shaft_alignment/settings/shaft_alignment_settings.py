@@ -8,7 +8,7 @@ class ShaftAlignmentSettings:
     marker_id: int = 2
     marker_size_mm: float = 11.0
     minimum_area_px2: float = 0.0
-    active_work_area: str = "paint"
+    active_work_area: str = "vertical_shaft_alignment"
     raw_mode: bool = False
     orientation_strategy: str = "compare"
     orientation_primary_strategy: str = "corner_edge"
@@ -39,7 +39,6 @@ class ShaftAlignmentSettings:
     misalignment_dw_threshold_mm: float = 0.5
     misalignment_dh_threshold_mm: float = 0.5
     detection_interval_s: float = 0.1
-    detection_region_normalized: tuple[float, ...] | None = None
     reference_tcp_x_mm: float | None = None
     reference_tcp_y_mm: float | None = None
     reference_orientation_deg: float | None = None
@@ -53,7 +52,7 @@ class ShaftAlignmentSettings:
     @classmethod
     def from_dict(cls, data: dict) -> "ShaftAlignmentSettings":
         values = {key: value for key, value in data.items() if key in cls.__dataclass_fields__}
-        for key in ("calibration_pose", "capture_pose", "detection_region_normalized"):
+        for key in ("calibration_pose", "capture_pose"):
             if key in values:
                 values[key] = (
                     None
@@ -109,12 +108,6 @@ class ShaftAlignmentSettings:
             raise ValueError("Misalignment thresholds must be in [0.1, 5.0]")
         if self.detection_interval_s < 0.0:
             raise ValueError("Detection interval must be non-negative")
-        if self.detection_region_normalized is not None:
-            if len(self.detection_region_normalized) != 4:
-                raise ValueError("Detection region must contain four normalized values")
-            left, top, right, bottom = self.detection_region_normalized
-            if not (0.0 <= left < right <= 1.0 and 0.0 <= top < bottom <= 1.0):
-                raise ValueError("Detection region must be normalized and have positive area")
         reference_values = (
             self.reference_tcp_x_mm, self.reference_tcp_y_mm,
             self.reference_orientation_deg, self.reference_marker_width_mm,

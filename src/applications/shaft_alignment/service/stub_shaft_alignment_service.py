@@ -23,7 +23,6 @@ class StubShaftAlignmentService(IShaftAlignmentService):
         self._capture_required = 0
         self._capture_started = 0.0
         self._reference_available = False
-        self._region = None
         self._settings = ShaftAlignmentSettings()
         self._check_sample_count = 0
         self._restore_settings_state()
@@ -33,14 +32,6 @@ class StubShaftAlignmentService(IShaftAlignmentService):
 
     def stop(self) -> None:
         self._running = False
-
-    def set_detection_region(self, left, top, right, bottom) -> None:
-        self._region = (float(left), float(top), float(right), float(bottom))
-        self._settings = replace(self._settings, detection_region_normalized=self._region)
-
-    def clear_detection_region(self) -> None:
-        self._region = None
-        self._settings = replace(self._settings, detection_region_normalized=None)
 
     def capture_reference(self, sample_count: int) -> None:
         self._capture_required = max(1, int(sample_count))
@@ -139,7 +130,7 @@ class StubShaftAlignmentService(IShaftAlignmentService):
             reference_marker_corners_normalized=(
                 self._settings.reference_marker_corners_normalized or ()
             ),
-            detection_region_normalized=self._region,
+            detection_region_normalized=(0.2, 0.2, 0.8, 0.8),
             tcp_x_mm=257.75 + dx,
             tcp_y_mm=215.7 + dy,
             orientation_deg=drz,
@@ -165,5 +156,4 @@ class StubShaftAlignmentService(IShaftAlignmentService):
         )
 
     def _restore_settings_state(self) -> None:
-        self._region = self._settings.detection_region_normalized
         self._reference_available = self._settings.reference_tcp_x_mm is not None

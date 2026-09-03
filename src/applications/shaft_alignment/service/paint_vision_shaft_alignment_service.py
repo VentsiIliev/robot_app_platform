@@ -93,6 +93,7 @@ class PaintVisionShaftAlignmentService(IShaftAlignmentService):
         robot_pose_provider: Callable[
             [], list[float] | tuple[float, ...] | None
         ] | None = None,
+        work_area_region_provider: Callable[[str], object] | None = None,
     ) -> None:
         self._settings_path = Path(settings_path) if settings_path is not None else (
             Path(__file__).resolve().parents[1] / "settings" / "config.json"
@@ -106,6 +107,7 @@ class PaintVisionShaftAlignmentService(IShaftAlignmentService):
         self._thread: threading.Thread | None = None
         self._pending_settings: ShaftAlignmentSettings | None = None
         self._robot_pose_provider = robot_pose_provider
+        self._work_area_region_provider = work_area_region_provider
         self._last_pose_error_log_s = 0.0
         self._owns_vision_service = vision_service is None
         self._snapshot = AlignmentSnapshot(message="Detection stopped")
@@ -161,28 +163,6 @@ class PaintVisionShaftAlignmentService(IShaftAlignmentService):
     def get_snapshot(self) -> AlignmentSnapshot:
         with self._lock:
             return self._snapshot
-
-    def set_detection_region(self, left, top, right, bottom) -> None:
-        self._base_region.set(left, top, right, bottom)
-        with self._lock:
-            self._reset_tracking()
-            self._persist_runtime_state(
-                detection_region_normalized=self._base_region.normalized
-            )
-            self._snapshot = replace(
-                self._snapshot,
-                detection_region_normalized=self._base_region.normalized,
-            )
-
-    def clear_detection_region(self) -> None:
-        self._base_region.clear()
-        with self._lock:
-            self._reset_tracking()
-            self._persist_runtime_state(detection_region_normalized=None)
-            self._snapshot = replace(
-                self._snapshot,
-                detection_region_normalized=None,
-            )
 
     def capture_reference(self, sample_count: int) -> None:
         with self._lock:
@@ -304,8 +284,29 @@ class PaintVisionShaftAlignmentService(IShaftAlignmentService):
                 )
             return
         height, width = frame.shape[:2]
+        detection_region = self._load_work_area_detection_region(width, height)
+        if detection_region is None:
+            with self._lock:
+                self._reset_tracking()
+                self._check_samples.clear()
+                self._snapshot = AlignmentSnapshot(
+                    frame=frame.copy(),
+                    running=True,
+                    detection_region_normalized=None,
+                    configuration_warning=True,
+                    reference_available=self._reference_capture.reference is not None,
+                    reference_marker_corners_normalized=(
+                        self._config.reference_marker_corners_normalized or ()
+                    ),
+                    message=(
+                        "Detection region is not defined for work area "
+                        f"'{self._config.active_work_area}'. Configure it in Work Area Settings."
+                    ),
+                    **self._reference_snapshot_values(),
+                )
+            return
         with self._lock:
-            region = self._tracker.region_for_frame(width, height)
+            region = self._base_region.resolve(width, height)
         result = self._detector.detect(frame, detection_region=region)
         planar_size = MarkerPlanarSize(False, self._config.marker_size_mm)
         stable = self._stabilizer.estimate()
@@ -458,7 +459,8 @@ class PaintVisionShaftAlignmentService(IShaftAlignmentService):
     def _configure_runtime(self, config: ShaftAlignmentSettings) -> None:
         self._config = config
         self._vision.set_raw_mode(config.raw_mode)
-        self._vision.set_active_work_area(config.active_work_area or None)
+        if self._owns_vision_service:
+            self._vision.set_active_work_area(config.active_work_area or None)
         self._thresholds = AlignmentThresholds(
             config.misalignment_dx_threshold_mm,
             config.misalignment_dy_threshold_mm,
@@ -502,8 +504,6 @@ class PaintVisionShaftAlignmentService(IShaftAlignmentService):
                 config.base_region_height_px,
             )
         )
-        if config.detection_region_normalized is not None:
-            self._base_region.set(*config.detection_region_normalized)
         self._tracker = MarkerRegionTracker(
             self._base_region,
             padding_px=config.tracking_region_padding_px,
@@ -582,6 +582,40 @@ class PaintVisionShaftAlignmentService(IShaftAlignmentService):
             if now - self._last_pose_error_log_s >= 5.0:
                 self._last_pose_error_log_s = now
                 self._logger.exception("Could not read current robot TCP pose")
+
+    def _load_work_area_detection_region(
+        self, image_width: int, image_height: int
+    ) -> tuple[float, float, float, float] | None:
+        try:
+            if self._work_area_region_provider is not None:
+                points = self._work_area_region_provider(self._config.active_work_area)
+            else:
+                ok, _message, pixel_points = self._vision.get_work_area(
+                    self._config.active_work_area
+                )
+                if not ok or pixel_points is None:
+                    points = None
+                else:
+                    points = [
+                        (float(x) / image_width, float(y) / image_height)
+                        for x, y in pixel_points
+                    ]
+            normalized_points = tuple(
+                (float(point[0]), float(point[1])) for point in (points or ())
+            )
+            if len(normalized_points) < 3:
+                self._base_region.clear()
+                return None
+            left = min(point[0] for point in normalized_points)
+            top = min(point[1] for point in normalized_points)
+            right = max(point[0] for point in normalized_points)
+            bottom = max(point[1] for point in normalized_points)
+            self._base_region.set(left, top, right, bottom)
+            return self._base_region.normalized
+        except Exception:
+            self._base_region.clear()
+            self._logger.exception("Could not load shaft alignment work-area region")
+            return None
 
     def _persist_runtime_state(self, **changes) -> None:
         settings = replace(self._stored_settings, **changes)

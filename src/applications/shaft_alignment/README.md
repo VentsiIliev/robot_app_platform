@@ -40,16 +40,15 @@ The original hardware proving runner remains available separately:
 
 To integrate later, provide a non-blocking service whose `get_snapshot()`
 returns the latest immutable `AlignmentSnapshot`. Long-running acquisition
-belongs in the service/backend, not the Qt thread. Detection regions are passed
-as normalized image coordinates, so the service can convert them against the
-actual source frame without depending on the displayed widget size.
+belongs in the service/backend, not the Qt thread. The backend reads the selected
+work area's normalized detection region and converts its bounding rectangle
+against the actual source-frame size.
 
 Application-owned defaults and persisted standalone values live in
 `settings/config.json`. The Settings tab exposes the editable configuration and saves changes
 through the service boundary. The real backend atomically rebuilds its detector,
 mapper, tracker, and stabilizer on the acquisition thread, so saved values update
-in memory without restarting the application. Drawing or clearing a detection
-region saves it immediately as normalized coordinates. A completed reference
+in memory without restarting the application. A completed reference
 capture saves the averaged TCP X/Y, orientation, and measured marker width/height;
 it also saves the median normalized marker corners and restores their dotted
 outline on the camera preview as a placement guide.
@@ -58,9 +57,12 @@ dimensions between the live measurements and the threshold controls.
 Alignment controls are placed to the left of the central camera preview. In the
 Paint composition, the platform's shared robot jog drawer is available on the
 right-hand side and is wired through the standard jog service/controller path.
+The Paint system declares a dedicated `vertical_shaft_alignment` work area. It
+is activated when navigating to the `Vertical Shaft Alignment` movement group
+and has its own configurable detection, brightness, and height-mapping regions.
 changing any misalignment threshold slider also saves and applies all five
-thresholds immediately. The region, reference, and thresholds are restored on
-the next launch. Starting a new
+thresholds immediately. The reference and thresholds are restored on the next
+launch. Starting a new
 reference capture clears the previous baseline immediately, then updates memory
 and disk together when all requested samples have been accepted. The included
 serializer can be registered later by a robot system without changing the

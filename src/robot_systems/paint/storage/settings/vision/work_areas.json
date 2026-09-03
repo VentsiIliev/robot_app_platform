@@ -77,6 +77,11 @@
         ]
       ],
       "height_mapping_roi": []
+    },
+    "vertical_shaft_alignment": {
+      "detection_roi": [],
+      "brightness_roi": [],
+      "height_mapping_roi": []
     }
   }
 }

@@ -2,7 +2,7 @@
   "marker_id": 0,
   "marker_size_mm": 11.0,
   "minimum_area_px2": 0.0,
-  "active_work_area": "paint",
+  "active_work_area": "vertical_shaft_alignment",
   "raw_mode": false,
   "orientation_strategy": "corner_edge",
   "orientation_primary_strategy": "corner_edge",
@@ -47,12 +47,6 @@
   "misalignment_dw_threshold_mm": 0.5,
   "misalignment_dh_threshold_mm": 0.5,
   "detection_interval_s": 0.1,
-  "detection_region_normalized": [
-    0.4409871244635193,
-    0.3893129770992366,
-    0.5879828326180258,
-    0.7061068702290076
-  ],
   "reference_tcp_x_mm": 186.14848645134066,
   "reference_tcp_y_mm": 625.8760311882962,
   "reference_orientation_deg": 8.262717782846039,

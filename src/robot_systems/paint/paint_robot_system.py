@@ -265,6 +265,13 @@ class PaintRobotSystem(BaseRobotSystem):
             target_navigation_group="Magazine",
             use_height_correction=True,
         ),
+        TargetFrameDefinition(
+            name="vertical_shaft_alignment",
+            work_area_id="vertical_shaft_alignment",
+            source_navigation_group="CALIBRATION",
+            target_navigation_group="Vertical Shaft Alignment",
+            use_height_correction=True,
+        ),
 
     ]
 
@@ -288,10 +295,23 @@ class PaintRobotSystem(BaseRobotSystem):
             supports_brightness_roi=True,
             supports_height_mapping=True,
         ),
+        WorkAreaDefinition(
+            id="vertical_shaft_alignment",
+            label="Vertical Shaft Alignment",
+            color="#905BA9",
+            threshold_profile="default",
+            supports_detection_roi=True,
+            supports_brightness_roi=True,
+            supports_height_mapping=True,
+        ),
     ]
     work_area_observers = [
         WorkAreaObserverBinding(area_id="paint", movement_group_id="CALIBRATION"),
         WorkAreaObserverBinding(area_id="magazine", movement_group_id="Magazine"),
+        WorkAreaObserverBinding(
+            area_id="vertical_shaft_alignment",
+            movement_group_id="Vertical Shaft Alignment",
+        ),
     ]
 
     default_active_work_area_id = ""

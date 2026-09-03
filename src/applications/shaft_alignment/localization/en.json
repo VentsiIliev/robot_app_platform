@@ -2,6 +2,7 @@
   "__meta__": {"display_name": "English"},
   "ShaftAlignmentView": {
     "No camera frame": "No camera frame",
+    "Detection region is not defined for work area '{area}'. Configure it in Work Area Settings.": "Detection region is not defined for work area '{area}'. Configure it in Work Area Settings.",
     "Tool correction": "Tool correction",
     "Reference": "Reference",
     "MISALIGNMENT DETECTED": "MISALIGNMENT DETECTED",
@@ -20,7 +21,6 @@
     "Saved reference": "Saved reference",
     "Misalignment thresholds": "Misalignment thresholds",
     "Capture reference": "Capture reference",
-    "Clear region": "Clear region",
     " samples": " samples",
     "Alignment": "Alignment",
     "Settings": "Settings",
