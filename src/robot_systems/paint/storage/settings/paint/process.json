@@ -16,10 +16,10 @@
   "run_while_workpiece_found": true,
   "enable_workpiece_matching": false,
   "default_paint_velocity_percent": 100.0,
-  "default_paint_acceleration_percent": 10.0,
-  "paint_process_acceleration_scale_percent": 100.0,
+  "default_paint_acceleration_percent": 100.0,
+  "paint_process_acceleration_scale_percent": 70.0,
   "default_paint_offset_mm": 2.0,
-  "unmatched_paint_pass_count": 2,
+  "unmatched_paint_pass_count": 1,
   "unmatched_second_pass": {
     "use_pass_1_settings": true,
     "velocity_percent": 10.0,
@@ -31,19 +31,19 @@
   "pause_dashboard_live_view_after_capture": true,
   "apply_camera_to_tcp_for_pickup": true,
   "pickup_motion": {
-    "approach_offset_mm": 15.0,
+    "approach_offset_mm": 10.0,
     "contact_offset_mm": 20.0,
-    "initial_lift_clearance_mm": 50.0,
-    "approach_vel_percent": 80.0,
-    "approach_acc_percent": 60.0,
+    "initial_lift_clearance_mm": 10.0,
+    "approach_vel_percent": 100.0,
+    "approach_acc_percent": 80.0,
     "approach_motion_type": "ptp",
     "approach_blendR": 20.0,
-    "descend_vel_percent": 60.0,
-    "descend_acc_percent": 40.0,
+    "descend_vel_percent": 100.0,
+    "descend_acc_percent": 80.0,
     "descend_motion_type": "linear",
     "descend_blendR": 0.0,
-    "lift_align_vel_percent": 80.0,
-    "lift_align_acc_percent": 60.0,
+    "lift_align_vel_percent": 100.0,
+    "lift_align_acc_percent": 80.0,
     "lift_align_motion_type": "ptp",
     "lift_align_blendR": 20.0,
     "change_plane_vel_percent": 10.0,
@@ -51,22 +51,22 @@
     "change_plane_motion_type": "ptp",
     "change_plane_blendR": 20.0,
     "combine_change_plane_with_first_contact": true,
-    "stage_transition_vel_percent": 80.0,
-    "stage_transition_acc_percent": 60.0,
+    "stage_transition_vel_percent": 100.0,
+    "stage_transition_acc_percent": 80.0,
     "stage_transition_motion_type": "ptp",
     "stage_transition_blendR": 20.0,
-    "first_contact_vel_percent": 80.0,
-    "first_contact_acc_percent": 60.0,
+    "first_contact_vel_percent": 100.0,
+    "first_contact_acc_percent": 80.0,
     "first_contact_motion_type": "linear",
     "first_contact_blendR": 0.0,
     "pickup_contact_mode": "sensor_controlled_fast_lin",
-    "servo_contact_linear_mm_s": 10.0,
+    "servo_contact_linear_mm_s": 100.0,
     "servo_contact_min_z_mm": 0.0,
-    "servo_contact_fast_lin_velocity_percent": 10.0,
-    "servo_contact_fast_lin_acceleration_percent": 30.0,
+    "servo_contact_fast_lin_velocity_percent": 20.0,
+    "servo_contact_fast_lin_acceleration_percent": 40.0,
     "servo_contact_timeout_s": 7.0,
     "servo_contact_poll_interval_s": 0.01,
-    "servo_contact_controlled_stop_duration_s": 0.2,
+    "servo_contact_controlled_stop_duration_s": 0.15,
     "servo_contact_preflight_read_attempts": 2,
     "servo_contact_read_failure_limit": 3,
     "servo_contact_fallback_to_planned_descend": false,
@@ -75,7 +75,7 @@
   },
   "contact_staging": {
     "attach_vel_percent": 100.0,
-    "attach_acc_percent": 20.0,
+    "attach_acc_percent": 30.0,
     "attach_z_offset_mm": 0.0,
     "attach_paint_axis_offset_mm": 30.0,
     "attach_perpendicular_axis_offset_mm": -30.0,
@@ -97,7 +97,8 @@
     "second_pass_pivot_z_offset_mm": -25.0
   },
   "dropoff": {
-    "strategy": "plate_layout",
+    "strategy": "movement_group",
+    "alternate_drying_demo": false,
     "allow_sub_zero_dropoff": true,
     "corridor_x_margin_mm": 70.0,
     "corridor_y_margin_mm": 70.0,
@@ -110,62 +111,102 @@
     "release_align_acc_percent": 50.0,
     "release_align_motion_type": "ptp",
     "release_align_blendR": 0.0,
-    "plate_corners": [],
+    "plate_corners": [
+      [
+        347.862,
+        -387.433,
+        40.414,
+        -179.856,
+        -0.009,
+        -0.066
+      ],
+      [
+        647.882,
+        -387.438,
+        40.434,
+        -179.845,
+        -0.006,
+        -0.086
+      ],
+      [
+        647.915,
+        152.52,
+        40.511,
+        -179.85,
+        -0.007,
+        -0.116
+      ],
+      [
+        357.943,
+        152.512,
+        40.726,
+        -179.833,
+        -0.033,
+        -0.13
+      ]
+    ],
     "plate_release_z_offset_mm": 0.0,
     "plate_approach_clearance_mm": 50.0,
     "plate_margin_left_mm": 10.0,
     "plate_margin_right_mm": 10.0,
     "plate_margin_bottom_mm": 10.0,
     "plate_margin_top_mm": 10.0,
-    "plate_spacing_x_mm": 10.0,
-    "plate_spacing_y_mm": 10.0,
-    "plate_robot_tool": -1,
-    "plate_robot_user": -1,
-    "plate_passage_gate_pose": [],
-    "plate_use_center_waypoint": true,
-    "plate_distribute_unwind": false,
+    "plate_spacing_x_mm": 20.0,
+    "plate_spacing_y_mm": 20.0,
+    "plate_robot_tool": 1,
+    "plate_robot_user": 1,
+    "plate_passage_gate_pose": [
+      295.734,
+      -15.114,
+      200.251,
+      -179.968,
+      0.003,
+      -0.011
+    ],
+    "plate_use_center_waypoint": false,
+    "plate_distribute_unwind": true,
     "plate_motion_profiles": [
       {
-        "key": "entry_gate",
-        "vel_percent": 70.0,
-        "acc_percent": 50.0,
-        "motion_type": "ptp",
-        "blendR": 20.0
-      },
-      {
-        "key": "entry_center",
-        "vel_percent": 70.0,
-        "acc_percent": 50.0,
-        "motion_type": "ptp",
-        "blendR": 20.0
-      },
-      {
-        "key": "center_to_dropoff",
-        "vel_percent": 70.0,
-        "acc_percent": 50.0,
-        "motion_type": "ptp",
-        "blendR": 0.0
-      },
-      {
-        "key": "exit_center",
-        "vel_percent": 70.0,
-        "acc_percent": 50.0,
-        "motion_type": "ptp",
-        "blendR": 20.0
-      },
-      {
-        "key": "exit_gate",
-        "vel_percent": 70.0,
-        "acc_percent": 50.0,
-        "motion_type": "ptp",
-        "blendR": 20.0
-      },
-      {
-        "key": "gate_to_next_start",
-        "vel_percent": 60.0,
+        "vel_percent": 100.0,
         "acc_percent": 40.0,
         "motion_type": "ptp",
-        "blendR": 0.0
+        "blendR": 20.0,
+        "key": "entry_gate"
+      },
+      {
+        "vel_percent": 100.0,
+        "acc_percent": 60.0,
+        "motion_type": "ptp",
+        "blendR": 20.0,
+        "key": "entry_center"
+      },
+      {
+        "vel_percent": 100.0,
+        "acc_percent": 60.0,
+        "motion_type": "linear",
+        "blendR": 0.0,
+        "key": "center_to_dropoff"
+      },
+      {
+        "vel_percent": 100.0,
+        "acc_percent": 60.0,
+        "motion_type": "ptp",
+        "blendR": 20.0,
+        "key": "exit_center"
+      },
+      {
+        "vel_percent": 100.0,
+        "acc_percent": 60.0,
+        "motion_type": "ptp",
+        "blendR": 20.0,
+        "key": "exit_gate"
+      },
+      {
+        "vel_percent": 100.0,
+        "acc_percent": 60.0,
+        "motion_type": "linear",
+        "blendR": 0.0,
+        "key": "gate_to_next_start"
       }
     ]
   },
@@ -175,16 +216,16 @@
     "fixed_pickup_group_id": "Magazine Fixed Pickup",
     "fixed_pickup_position_tolerance_mm": 1.0,
     "fixed_pickup_orientation_tolerance_deg": 0.5,
-    "full_retract_before_release": true,
-    "short_retract_distance_mm": 10.0,
+    "full_retract_before_release": false,
+    "short_retract_distance_mm": 20.0,
     "magazine_group_id": "Magazine",
     "calibration_group_id": "CALIBRATION",
-    "move_to_magazine_vel_percent": 60.0,
-    "move_to_magazine_acc_percent": 40.0,
+    "move_to_magazine_vel_percent": 100.0,
+    "move_to_magazine_acc_percent": 80.0,
     "move_to_magazine_motion_type": "ptp",
     "move_to_magazine_blendR": 0.0,
-    "transfer_to_calibration_vel_percent": 80.0,
-    "transfer_to_calibration_acc_percent": 60.0,
+    "transfer_to_calibration_vel_percent": 100.0,
+    "transfer_to_calibration_acc_percent": 80.0,
     "transfer_to_calibration_motion_type": "ptp",
     "transfer_to_calibration_blendR": 0.0,
     "release_z_mm": 50.0,
@@ -194,24 +235,24 @@
   "safe_travel": {
     "enabled": true,
     "position": [
-      -29.024,
-      126.781,
-      200.047,
-      -178.166,
-      -0.028,
-      0.099
+      171.03,
+      126.774,
+      200.046,
+      -178.168,
+      -0.023,
+      0.089
     ],
     "positions": [
       {
         "position": [
-          -29.024,
-          126.781,
-          200.047,
-          -178.166,
-          -0.028,
-          0.099
+          171.03,
+          126.774,
+          200.046,
+          -178.168,
+          -0.023,
+          0.089
         ],
-        "vel_percent": 80.0,
+        "vel_percent": 100.0,
         "acc_percent": 60.0,
         "motion_type": "ptp",
         "blendR": 20.0
@@ -348,8 +389,8 @@
     "unwind_vel_percent": 50.0,
     "unwind_acc_percent": 20.0,
     "unwind_queue_if_busy": true,
-    "calibration_move_vel_percent": 80.0,
-    "calibration_move_acc_percent": 60.0,
+    "calibration_move_vel_percent": 100.0,
+    "calibration_move_acc_percent": 80.0,
     "calibration_move_motion_type": "ptp",
     "calibration_move_blendR": 0.0
   },
