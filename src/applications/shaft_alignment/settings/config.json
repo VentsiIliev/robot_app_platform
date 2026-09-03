@@ -1,6 +1,8 @@
 {
   "marker_id": 0,
-  "marker_size_mm": 10.0,
+  "marker_size_mm": 11.0,
+  "point_of_interest_x_offset_mm": 2.12,
+  "point_of_interest_y_offset_mm": 11.44,
   "minimum_area_px2": 0.0,
   "active_work_area": "vertical_shaft_alignment",
   "raw_mode": false,
@@ -47,27 +49,28 @@
   "misalignment_dw_threshold_mm": 0.5,
   "misalignment_dh_threshold_mm": 0.5,
   "detection_interval_s": 0.1,
-  "reference_tcp_x_mm": 245.63172923393336,
-  "reference_tcp_y_mm": 297.3836566577364,
-  "reference_orientation_deg": 8.403535759937114,
-  "reference_marker_width_mm": 26.22131468317547,
-  "reference_marker_height_mm": 25.437016975327932,
+  "reference_tcp_x_mm": 186.14848645134066,
+  "reference_tcp_y_mm": 625.8760311882962,
+  "reference_orientation_deg": 8.262717782846039,
+  "reference_marker_width_mm": 7.92305000566739,
+  "reference_marker_height_mm": 7.481821617171436,
   "reference_marker_corners_normalized": [
     [
-      0.48046875,
-      0.4513888888888889
+      0.50234375,
+      0.5415871487723456
     ],
     [
-      0.52890625,
-      0.4652777777777778
+      0.5242962747812272,
+      0.5472134855058459
     ],
     [
-      0.521875,
-      0.55
+      0.52109375,
+      0.5861111111111111
     ],
     [
-      0.4734375,
-      0.5375
+      0.4987468495965004,
+      0.5810919178856744
     ]
-  ]
+  ],
+  "reference_point_of_interest_normalized": null
 }

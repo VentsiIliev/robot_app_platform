@@ -47,6 +47,10 @@ class ShaftAlignmentModelTests(unittest.TestCase):
         self.assertEqual(
             4, len(service.get_settings().reference_marker_corners_normalized)
         )
+        self.assertEqual(
+            (0.56, 0.70),
+            service.get_settings().reference_point_of_interest_normalized,
+        )
 
 
 if __name__ == "__main__":

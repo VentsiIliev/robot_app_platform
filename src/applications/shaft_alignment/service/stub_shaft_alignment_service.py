@@ -46,6 +46,7 @@ class StubShaftAlignmentService(IShaftAlignmentService):
             reference_marker_width_mm=None,
             reference_marker_height_mm=None,
             reference_marker_corners_normalized=None,
+            reference_point_of_interest_normalized=None,
         )
 
     def set_thresholds(self, thresholds: AlignmentThresholds) -> None:
@@ -106,6 +107,7 @@ class StubShaftAlignmentService(IShaftAlignmentService):
                         (0.46, 0.42), (0.54, 0.42),
                         (0.54, 0.56), (0.46, 0.56),
                     ),
+                    reference_point_of_interest_normalized=(0.56, 0.70),
                 )
         if self._reference_available and not capturing:
             self._check_sample_count = min(
@@ -129,6 +131,9 @@ class StubShaftAlignmentService(IShaftAlignmentService):
             marker_corners_normalized=((0.46, 0.42), (0.54, 0.42), (0.54, 0.56), (0.46, 0.56)),
             reference_marker_corners_normalized=(
                 self._settings.reference_marker_corners_normalized or ()
+            ),
+            point_of_interest_normalized=(
+                self._settings.reference_point_of_interest_normalized
             ),
             detection_region_normalized=(0.2, 0.2, 0.8, 0.8),
             tcp_x_mm=257.75 + dx,
