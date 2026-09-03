@@ -9,6 +9,8 @@ from src.applications.device_control.controller.device_control_controller import
     DeviceControlController,
 )
 from src.applications.device_control.view.device_control_view import DeviceControlView
+from src.applications.device_control.dryer.view import DryerControlPanel
+from src.engine.hardware.dryer.models.dryer_config import DryerConfig
 from pl_gui.settings.settings_view.styles import TOUCH_SCROLL_AREA_STYLE
 
 
@@ -152,6 +154,19 @@ class TestDeviceControlView(unittest.TestCase):
             Qt.ScrollBarPolicy.ScrollBarAsNeeded,
         )
         self.assertEqual(panel.parentWidget(), view._device_tabs["dryer"])
+
+    def test_dryer_settings_use_editable_parameter_tables(self) -> None:
+        panel = DryerControlPanel()
+        config = DryerConfig(pwm_open_vrytka=725, acceleration=0.4)
+
+        panel.load_config(config)
+
+        self.assertEqual(panel._register_table.columnCount(), 2)
+        self.assertEqual(panel._timing_table.columnCount(), 2)
+        self.assertEqual(panel._register_table.horizontalHeaderItem(0).text(), "Parameter")
+        self.assertEqual(panel._register_table.horizontalHeaderItem(1).text(), "Value")
+        self.assertEqual(panel.get_values()["pwm_open_vrytka"], 725)
+        self.assertAlmostEqual(panel.get_values()["acceleration"], 0.4)
 
 
 if __name__ == "__main__":

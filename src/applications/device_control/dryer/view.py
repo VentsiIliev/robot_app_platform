@@ -5,16 +5,18 @@ import logging
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import (
     QGridLayout,
+    QHeaderView,
     QHBoxLayout,
     QLabel,
     QPushButton,
     QScrollArea,
+    QTableWidget,
+    QTableWidgetItem,
     QTabWidget,
     QVBoxLayout,
     QWidget,
 )
 
-from pl_gui.settings.settings_view.group_widget import GenericSettingGroup
 from pl_gui.settings.settings_view.styles import (
     ACTION_BTN_STYLE,
     BG_COLOR,
@@ -32,6 +34,10 @@ from pl_gui.settings.settings_view.styles import (
 )
 from src.applications.base.i_application_view import IApplicationView
 from src.applications.base.keyboard_settings_view import build_with_keyboard_setting_handlers
+from src.applications.base.widgets.custom_virtual_keyboard import (
+    KeyboardDoubleSpinBox,
+    KeyboardSpinBox,
+)
 from src.applications.device_control.dryer.mapper import DryerConfigMapper
 from src.applications.device_control.dryer.schema import REGISTER_GROUP, TIMING_GROUP
 from src.engine.hardware.dryer.models.dryer_state import DryerState
@@ -119,7 +125,8 @@ class DryerControlPanel(IApplicationView):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        build_with_keyboard_setting_handlers(self._build_setting_groups)
+        self._setting_inputs: dict[str, KeyboardSpinBox | KeyboardDoubleSpinBox] = {}
+        build_with_keyboard_setting_handlers(self._build_setting_tables)
 
         self._tabs = QTabWidget()
         self._tabs.setStyleSheet(TAB_WIDGET_STYLE)
@@ -142,9 +149,71 @@ class DryerControlPanel(IApplicationView):
         layout.addWidget(content)
         layout.addWidget(self._build_status_bar())
 
-    def _build_setting_groups(self) -> None:
-        self._register_group = GenericSettingGroup(REGISTER_GROUP)
-        self._timing_group = GenericSettingGroup(TIMING_GROUP)
+    def _build_setting_tables(self) -> None:
+        self._register_table = self._make_settings_table(REGISTER_GROUP)
+        self._timing_table = self._make_settings_table(TIMING_GROUP)
+
+    def _make_settings_table(self, group) -> QTableWidget:
+        table = QTableWidget(len(group.fields), 2)
+        table.setHorizontalHeaderLabels([self.tr("Parameter"), self.tr("Value")])
+        table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        table.verticalHeader().setVisible(False)
+        table.setAlternatingRowColors(True)
+        table.setShowGrid(True)
+        table.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
+        table.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        table.setStyleSheet(self._settings_table_style())
+        table.setMinimumHeight(44 + (52 * len(group.fields)))
+
+        for row, field in enumerate(group.fields):
+            label = QTableWidgetItem(field.label)
+            label.setFlags(label.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            table.setItem(row, 0, label)
+
+            if field.widget_type == "double_spinbox":
+                editor = KeyboardDoubleSpinBox()
+                editor.setDecimals(field.decimals)
+            else:
+                editor = KeyboardSpinBox()
+            editor.setRange(field.min_val, field.max_val)
+            editor.setSingleStep(field.step)
+            if field.suffix:
+                editor.setSuffix(field.suffix)
+            editor.setValue(field.default)
+            editor.setMinimumHeight(42)
+            table.setCellWidget(row, 1, editor)
+            table.setRowHeight(row, 52)
+            self._setting_inputs[field.key] = editor
+        return table
+
+    @staticmethod
+    def _settings_table_style() -> str:
+        return f"""
+        QTableWidget {{
+            background: white;
+            alternate-background-color: {BG_COLOR};
+            color: {TEXT_COLOR};
+            border: 2px solid {BORDER};
+            border-radius: 8px;
+            gridline-color: {BORDER};
+        }}
+        QTableWidget::item {{
+            border-bottom: 1px solid {BORDER};
+            border-right: 1px solid {BORDER};
+            padding: 8px 10px;
+        }}
+        QHeaderView::section {{
+            background: {BG_COLOR};
+            color: {TEXT_COLOR};
+            border: none;
+            border-right: 1px solid {BORDER};
+            border-bottom: 2px solid {BORDER};
+            padding: 8px 10px;
+            font-size: 10pt;
+            font-weight: bold;
+        }}
+        """
 
     def _build_settings_tab(self) -> QWidget:
         widget = QWidget()
@@ -152,10 +221,25 @@ class DryerControlPanel(IApplicationView):
         layout = QVBoxLayout(widget)
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(16)
-        layout.addWidget(self._register_group)
-        layout.addWidget(self._timing_group)
+        tables = QHBoxLayout()
+        tables.setSpacing(16)
+        tables.addWidget(self._wrap_settings_table(REGISTER_GROUP.title, self._register_table))
+        tables.addWidget(self._wrap_settings_table(TIMING_GROUP.title, self._timing_table))
+        layout.addLayout(tables)
         layout.addStretch()
         return widget
+
+    @staticmethod
+    def _wrap_settings_table(title: str, table: QTableWidget) -> QWidget:
+        wrapper = QWidget()
+        wrapper.setStyleSheet("background: transparent;")
+        layout = QVBoxLayout(wrapper)
+        layout.setContentsMargins(0, 0, 0, 0)
+        heading = QLabel(title)
+        heading.setStyleSheet(LABEL_STYLE)
+        layout.addWidget(heading)
+        layout.addWidget(table)
+        return wrapper
 
     def _build_test_tab(self) -> QWidget:
         widget = QWidget()
@@ -268,14 +352,12 @@ class DryerControlPanel(IApplicationView):
 
     def load_config(self, config) -> None:
         flat = DryerConfigMapper.to_flat_dict(config)
-        self._register_group.set_values(flat)
-        self._timing_group.set_values(flat)
+        for key, editor in self._setting_inputs.items():
+            if key in flat:
+                editor.setValue(flat[key])
 
     def get_values(self) -> dict:
-        values = {}
-        values.update(self._register_group.get_values())
-        values.update(self._timing_group.get_values())
-        return values
+        return {key: editor.value() for key, editor in self._setting_inputs.items()}
 
     def set_state(self, state: DryerState) -> None:
         self._raw_status.setText(str(state.raw_status))
