@@ -41,6 +41,19 @@ class _FakeTcpTransformer:
 
 
 class MarkerCenterRobotMapperTests(unittest.TestCase):
+    def test_measures_marker_edges_after_transforming_all_corners(self):
+        transformer = _FakeTransformer()
+        mapper = MarkerCenterRobotMapper(transformer)
+
+        result = mapper.measure_planar_size(
+            ((0.0, 0.0), (20.0, 0.0), (20.0, 40.0), (0.0, 40.0)),
+            real_size_mm=11.0,
+        )
+
+        self.assertTrue(result.available)
+        self.assertEqual((10.0, 10.0), (result.width_mm, result.height_mm))
+        self.assertEqual((-1.0, -1.0), (result.width_difference_mm, result.height_difference_mm))
+
     def test_tcp_adapter_uses_camera_to_tcp_conversion(self):
         transformer = _FakeTcpTransformer()
         mapper = MarkerCenterRobotMapper(TcpCoordinateTransformer(transformer))

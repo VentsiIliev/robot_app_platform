@@ -37,7 +37,7 @@ Available configuration fields include:
   ROI can be drawn with the mouse (Enter accepts the configured centered ROI);
 - `orientation_strategy` switches between `compare`, `solve_pnp`, and `corner_edge`;
 - `orientation_primary_strategy` chooses which comparison result feeds stabilization;
-- `marker_size_mm` is the measured black marker square size (currently 10 mm);
+- `marker_size_mm` is the measured black marker square size (currently 11 mm);
 - `base_region_width_px` and `base_region_height_px` define the temporary base ROI;
 - `tracking_region_padding_px` controls the margin around a tracked marker;
 - `tracking_region_minimum_width_px` and `tracking_region_minimum_height_px`
@@ -79,3 +79,9 @@ In `compare` mode both algorithms receive the same four detected corners. The
 overlay shows edge angle, PnP angle, and their shortest signed angular delta.
 PnP diagnostics also show RX, RY, total tilt, camera-frame Z, reprojection RMS,
 candidate count, and the selected positive-Z IPPE candidate.
+
+The overlay also transforms all four detected corners onto the calibrated
+homography plane. It shows the real marker size, the measured width and height,
+and their signed differences. A positive difference means the marker appears
+larger on that plane; this is a height-discrepancy indicator, not a robot-Z
+measurement.

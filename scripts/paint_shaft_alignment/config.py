@@ -17,7 +17,7 @@ class StandaloneShaftDetectionConfig:
 
     orientation_strategy: str = "compare"  # "compare", "solve_pnp" or "corner_edge"
     orientation_primary_strategy: str = "solve_pnp"
-    marker_size_mm: float = 10.0
+    marker_size_mm: float = 11.0
 
     # Temporary base ROI until it is supplied by the paint_shaft work area.
     base_region_width_px: int = 100

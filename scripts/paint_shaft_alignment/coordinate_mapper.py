@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 from typing import Protocol
 
 from .models import MarkerDetection
@@ -39,6 +40,17 @@ class MarkerRobotPosition:
     message: str = ""
 
 
+@dataclass(frozen=True)
+class MarkerPlanarSize:
+    available: bool
+    real_size_mm: float
+    width_mm: float | None = None
+    height_mm: float | None = None
+    width_difference_mm: float | None = None
+    height_difference_mm: float | None = None
+    message: str = ""
+
+
 class MarkerCenterRobotMapper:
     """Map a marker center through an injected robot-coordinate transform."""
 
@@ -62,4 +74,33 @@ class MarkerCenterRobotMapper:
             x_mm=float(x_mm),
             y_mm=float(y_mm),
             message="Marker center mapped to robot coordinates.",
+        )
+
+    def measure_planar_size(
+        self,
+        corners_px: tuple[tuple[float, float], ...],
+        real_size_mm: float,
+    ) -> MarkerPlanarSize:
+        if len(corners_px) != 4:
+            return MarkerPlanarSize(False, real_size_mm, message="Four marker corners are required.")
+        if not self._transformer.is_available():
+            return MarkerPlanarSize(False, real_size_mm, message="Paint vision calibration is unavailable.")
+        try:
+            corners_mm = [self._transformer.transform(*corner) for corner in corners_px]
+        except Exception as exc:
+            return MarkerPlanarSize(False, real_size_mm, message=f"Marker-size conversion failed: {exc}")
+
+        def distance(first, second) -> float:
+            return math.hypot(second[0] - first[0], second[1] - first[1])
+
+        width = (distance(corners_mm[0], corners_mm[1]) + distance(corners_mm[3], corners_mm[2])) / 2.0
+        height = (distance(corners_mm[1], corners_mm[2]) + distance(corners_mm[0], corners_mm[3])) / 2.0
+        return MarkerPlanarSize(
+            True,
+            real_size_mm=float(real_size_mm),
+            width_mm=width,
+            height_mm=height,
+            width_difference_mm=width - real_size_mm,
+            height_difference_mm=height - real_size_mm,
+            message="Marker size measured on the calibrated homography plane.",
         )
