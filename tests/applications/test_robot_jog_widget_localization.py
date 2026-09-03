@@ -58,6 +58,37 @@ class TestRobotJogWidgetLocalization(unittest.TestCase):
         self.assertEqual(widget._linear_title_label.text(), "Линейна скорост:")
         self.assertEqual(widget._rotation_title_label.text(), "Скорост на въртене:")
 
+    def test_maximum_linear_servo_speed_is_labeled_and_requested_as_200_mm_s(self) -> None:
+        widget = RobotJogWidget()
+        requests = []
+        widget.jog_requested.connect(
+            lambda command, axis, direction, value: requests.append(
+                (command, axis, direction, value)
+            )
+        )
+
+        widget._linear_slider.setValue(widget._linear_slider.maximum())
+        widget._servo_mode_btn.click()
+        widget._perform_jog("x_plus")
+
+        self.assertEqual("200 mm/s", widget._linear_label.text())
+        self.assertEqual(("SERVO_JOG", "X", "Plus", 200), requests[-1])
+
+    def test_maximum_linear_step_remains_250_mm(self) -> None:
+        widget = RobotJogWidget()
+        requests = []
+        widget.jog_requested.connect(
+            lambda command, axis, direction, value: requests.append(
+                (command, axis, direction, value)
+            )
+        )
+
+        widget._linear_slider.setValue(widget._linear_slider.maximum())
+        widget._perform_jog("x_plus")
+
+        self.assertEqual("250 mm", widget._linear_label.text())
+        self.assertEqual(("JOG_ROBOT", "X", "Plus", 250), requests[-1])
+
 
 if __name__ == "__main__":
     unittest.main()
