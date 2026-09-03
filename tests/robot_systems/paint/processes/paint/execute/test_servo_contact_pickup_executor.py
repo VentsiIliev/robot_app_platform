@@ -243,7 +243,7 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
         self.assertEqual(
             [
                 "Magazine pickup approach before servo contact",
-                "Magazine pickup timeout recovery to fixed pose",
+                "Magazine pickup recovery to fixed pose",
             ],
             [label for label, _ in motion.sequences],
         )
@@ -290,7 +290,7 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
         self.assertEqual(NO_WORKPIECE_AT_MAGAZINE, message)
         self.assertEqual(2, len(motion.sequences))
         recovery_label, recovery_segments = motion.sequences[1]
-        self.assertEqual("Magazine pickup timeout recovery to fixed pose", recovery_label)
+        self.assertEqual("Magazine pickup recovery to fixed pose", recovery_label)
         self.assertEqual(fixed_pose, recovery_segments[0]["position"])
 
     def test_magazine_servo_handoff_executes_clearance_and_release_as_one_chain(self):
@@ -494,14 +494,17 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
         ok, message = _execute_magazine_servo_contact_pickup_release(
             owner,
             waypoints,
-            retract_reference_pose=[0, 0, 100, 0, 0, 0],
+            retract_reference_pose=[9, 8, 120, 180, 0, 0],
             release_label="calibration",
         )
 
         self.assertFalse(ok)
-        self.assertEqual("Magazine workpiece is no longer detected after Fast LIN retract", message)
+        self.assertEqual(NO_WORKPIECE_AT_MAGAZINE, message)
         self.assertEqual(1, motion.vacuum_off)
         self.assertEqual(["prepared-1"], robot.discarded_prepared)
+        recovery_label, recovery_segments = motion.sequences[-1]
+        self.assertEqual("Magazine pickup recovery to fixed pose", recovery_label)
+        self.assertEqual([9, 8, 120, 180, 0, 0], recovery_segments[0]["position"])
 
     def test_planned_pickup_keeps_full_existing_waypoint_sequence(self):
         motion = _FakeMotion()
