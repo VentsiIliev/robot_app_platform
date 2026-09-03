@@ -1,13 +1,14 @@
 # Shaft Alignment application
 
 This is a shared, self-contained platform application. It is deliberately not
-registered in Paint or any other robot system.
+coupled to Paint through its MVC layers. It is currently registered as an enabled
+test application in `PaintRobotSystem` through Paint's composition module.
 
 The application owns the Qt presentation and MVC interaction flow. All camera,
 robot-pose, calibration, detection, reference-capture, and misalignment work is
-behind `IShaftAlignmentService`. A future robot-system composition should inject
-an implementation of that interface through `ShaftAlignmentFactory`; the view,
-model, and controller must not import the robot system.
+behind `IShaftAlignmentService`. Robot-system composition injects an implementation
+of that interface through `ShaftAlignmentFactory`; the view, model, and controller
+do not import the robot system.
 
 Run the platform-style UI with the real Paint vision composition:
 
@@ -18,7 +19,11 @@ python src/applications/shaft_alignment/example_usage.py
 This example creates the same Paint `VisionService`, detector, homography/TCP
 transformer, tracker, stabilizer, and pose compensation used by the hardware
 runner. Acquisition runs in the service's background thread. The shared
-application package itself remains absent from `PaintRobotSystem.shell`.
+application package remains independent of `PaintRobotSystem`.
+When launched inside Paint, it borrows the system-owned vision service and reads
+the current robot TCP pose for every processed frame. The planar compensation
+uses current X/Y and RZ relative to the calibration pose; the standalone runner
+uses its configured fallback capture pose.
 Camera acquisition starts when the application loads and stops during application
 cleanup, so the alignment screen does not expose redundant Start/Stop controls.
 When a reference comparison is available, the preview shows the required signed

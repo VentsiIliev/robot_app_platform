@@ -42,19 +42,47 @@ class CapturePoseCompensatedTransformer:
         capture_pose: tuple[float, float, float, float, float, float],
     ) -> None:
         self._transformer = transformer
-        self._dx = float(capture_pose[0]) - float(calibration_pose[0])
-        self._dy = float(capture_pose[1]) - float(calibration_pose[1])
+        self._calibration_pose = tuple(float(value) for value in calibration_pose)
+        self._capture_pose: tuple[float, ...] | None = None
+        self.set_capture_pose(capture_pose)
+
+    def set_capture_pose(self, capture_pose) -> None:
+        if capture_pose is None or len(capture_pose) < 6:
+            self._capture_pose = None
+            return
+        self._capture_pose = tuple(float(value) for value in capture_pose[:6])
+
+    def clear_capture_pose(self) -> None:
+        self._capture_pose = None
 
     @property
     def translation_xy_mm(self) -> tuple[float, float]:
-        return self._dx, self._dy
+        if self._capture_pose is None:
+            raise RuntimeError("Capture pose is unavailable")
+        return (
+            self._capture_pose[0] - self._calibration_pose[0],
+            self._capture_pose[1] - self._calibration_pose[1],
+        )
 
     def is_available(self) -> bool:
-        return self._transformer.is_available()
+        return self._capture_pose is not None and self._transformer.is_available()
 
     def transform(self, x: float, y: float) -> tuple[float, float]:
         transformed_x, transformed_y = self._transformer.transform(x, y)
-        return transformed_x + self._dx, transformed_y + self._dy
+        if self._capture_pose is None:
+            raise RuntimeError("Capture pose is unavailable")
+        relative_x = transformed_x - self._calibration_pose[0]
+        relative_y = transformed_y - self._calibration_pose[1]
+        delta_rz = math.radians(
+            (self._capture_pose[5] - self._calibration_pose[5] + 180.0) % 360.0
+            - 180.0
+        )
+        cosine = math.cos(delta_rz)
+        sine = math.sin(delta_rz)
+        return (
+            self._capture_pose[0] + cosine * relative_x - sine * relative_y,
+            self._capture_pose[1] + sine * relative_x + cosine * relative_y,
+        )
 
 
 @dataclass(frozen=True)

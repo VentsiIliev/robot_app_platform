@@ -71,3 +71,6 @@ PAINT_MOTION_PLANE_SETUP_APP = False
 
 # Developer editor for configuring and testing paint motion recipes.
 PAINT_MOTION_RECIPE_APP = False
+
+# Test application for marker-based shaft alignment and robot-pose compensation.
+SHAFT_ALIGNMENT_APP = True

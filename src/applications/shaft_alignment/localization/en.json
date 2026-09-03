@@ -34,7 +34,7 @@
     "Orientation Strategy": "Orientation strategy",
     "Orientation Primary Strategy": "Primary orientation strategy",
     "Calibration Pose": "Calibration pose [X,Y,Z,RX,RY,RZ]",
-    "Capture Pose": "Capture pose [X,Y,Z,RX,RY,RZ]",
+    "Capture Pose": "Standalone capture pose [X,Y,Z,RX,RY,RZ]",
     "Base Region Width Px": "Base region width (px)",
     "Base Region Height Px": "Base region height (px)",
     "Tracking Region Padding Px": "Tracking region padding (px)",
