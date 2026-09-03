@@ -8,7 +8,7 @@ class ShaftAlignmentSettings:
     marker_id: int = 2
     marker_size_mm: float = 11.0
     minimum_area_px2: float = 0.0
-    active_work_area: str = "paint"
+    active_work_area: str = "vertical_shaft_alignment"
     raw_mode: bool = False
     orientation_strategy: str = "compare"
     orientation_primary_strategy: str = "corner_edge"

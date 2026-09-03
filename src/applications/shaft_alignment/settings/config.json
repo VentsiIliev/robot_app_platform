@@ -2,7 +2,7 @@
   "marker_id": 0,
   "marker_size_mm": 11.0,
   "minimum_area_px2": 0.0,
-  "active_work_area": "paint",
+  "active_work_area": "vertical_shaft_alignment",
   "raw_mode": false,
   "orientation_strategy": "corner_edge",
   "orientation_primary_strategy": "corner_edge",

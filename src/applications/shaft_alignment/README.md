@@ -58,6 +58,9 @@ dimensions between the live measurements and the threshold controls.
 Alignment controls are placed to the left of the central camera preview. In the
 Paint composition, the platform's shared robot jog drawer is available on the
 right-hand side and is wired through the standard jog service/controller path.
+The Paint system declares a dedicated `vertical_shaft_alignment` work area. It
+is activated when navigating to the `Vertical Shaft Alignment` movement group
+and has its own configurable detection, brightness, and height-mapping regions.
 changing any misalignment threshold slider also saves and applies all five
 thresholds immediately. The region, reference, and thresholds are restored on
 the next launch. Starting a new

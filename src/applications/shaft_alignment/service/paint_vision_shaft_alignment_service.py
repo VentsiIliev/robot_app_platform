@@ -458,7 +458,8 @@ class PaintVisionShaftAlignmentService(IShaftAlignmentService):
     def _configure_runtime(self, config: ShaftAlignmentSettings) -> None:
         self._config = config
         self._vision.set_raw_mode(config.raw_mode)
-        self._vision.set_active_work_area(config.active_work_area or None)
+        if self._owns_vision_service:
+            self._vision.set_active_work_area(config.active_work_area or None)
         self._thresholds = AlignmentThresholds(
             config.misalignment_dx_threshold_mm,
             config.misalignment_dy_threshold_mm,
