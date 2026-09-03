@@ -167,6 +167,7 @@ class TestDeviceControlView(unittest.TestCase):
         self.assertEqual(panel._register_table.horizontalHeaderItem(1).text(), "Value")
         self.assertEqual(panel.get_values()["pwm_open_vrytka"], 725)
         self.assertAlmostEqual(panel.get_values()["acceleration"], 0.4)
+        self.assertFalse(hasattr(panel, "_tabs"))
 
 
 if __name__ == "__main__":

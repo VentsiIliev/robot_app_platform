@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from src.engine.hardware.dryer.models.dryer_config import DryerConfig
-from src.engine.hardware.dryer.models.dryer_write_data import DryerWriteData
 
 
 class DryerConfigMapper:
@@ -14,7 +13,3 @@ class DryerConfigMapper:
         data = base.to_dict()
         data.update(flat)
         return DryerConfig.from_dict(data)
-
-    @staticmethod
-    def write_data_from_flat(flat: dict) -> DryerWriteData:
-        return DryerWriteData.from_config(DryerConfig.from_dict(flat))

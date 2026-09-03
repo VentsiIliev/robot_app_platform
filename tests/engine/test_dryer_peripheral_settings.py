@@ -35,8 +35,6 @@ class TestDeviceControlDryerPersistence(unittest.TestCase):
         service = DryerControlService(
             settings_service=settings,
             dryer_config_key="dryer",
-            modbus_config_key="modbus",
-            peripherals_config_key="peripherals",
             live_controller=live_controller,
         )
 

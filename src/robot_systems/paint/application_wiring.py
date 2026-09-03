@@ -1147,8 +1147,6 @@ def _build_device_control_application(robot_system):
         DryerControlService(
             settings_service=robot_system._settings_service,
             dryer_config_key=SettingsID.DRYER_CONFIG,
-            modbus_config_key=CommonSettingsID.MODBUS_CONFIG,
-            peripherals_config_key=SettingsID.PERIPHERALS,
             live_controller=robot_system.get_optional_service(ServiceID.DRYER),
         )
         if any(device.key == "dryer" for device in devices)
