@@ -8,8 +8,9 @@ four corners, pixel center, pixel area, and image-plane orientation. Orientation
 is clockwise in degrees from the image's horizontal axis. It deliberately does not claim a
 full robot pose: the current `IVisionService` marker API does not provide a
 capture timestamp or a synchronized robot pose. Marker center XY is mapped to
-paint calibration/base robot millimetres using the existing
-`HomographyResidualTransformer`. Tool/TCP offsets are intentionally not applied.
+robot TCP millimetres using the existing `HomographyResidualTransformer`. The
+pixel-to-base calibration is followed by the calibrated camera-to-TCP XY offsets
+from the paint robot configuration.
 
 The runtime factory reads the real paint-system `settings_specs`, camera JSON,
 work-area definitions, and vision data paths. It does not copy camera or ArUco
@@ -31,7 +32,7 @@ Available configuration fields include:
 - `headless` disables the OpenCV window;
 - `debug_draw_detected_markers` outlines every visible marker and prints its ID;
 - `debug_draw_detection_region` draws that ROI in the viewer;
-- `debug_draw_robot_coordinates` shows mapped paint calibration/base XY in mm;
+- `debug_draw_robot_coordinates` shows mapped robot TCP XY in mm;
 - `draw_initial_detection_region` pauses detection on the first frame so the base
   ROI can be drawn with the mouse (Enter accepts the configured centered ROI);
 - `orientation_strategy` switches between `compare`, `solve_pnp`, and `corner_edge`;

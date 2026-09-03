@@ -12,6 +12,25 @@ class PixelToRobotTransformer(Protocol):
     def transform(self, x: float, y: float) -> tuple[float, float]: ...
 
 
+class CameraToTcpTransformer(Protocol):
+    def is_available(self) -> bool: ...
+
+    def transform_to_tcp(self, x: float, y: float) -> tuple[float, float]: ...
+
+
+class TcpCoordinateTransformer:
+    """Expose camera-to-TCP conversion through the mapper's transform contract."""
+
+    def __init__(self, transformer: CameraToTcpTransformer) -> None:
+        self._transformer = transformer
+
+    def is_available(self) -> bool:
+        return self._transformer.is_available()
+
+    def transform(self, x: float, y: float) -> tuple[float, float]:
+        return self._transformer.transform_to_tcp(x, y)
+
+
 @dataclass(frozen=True)
 class MarkerRobotPosition:
     available: bool
@@ -21,7 +40,7 @@ class MarkerRobotPosition:
 
 
 class MarkerCenterRobotMapper:
-    """Map a detected marker center to paint calibration/base robot XY."""
+    """Map a marker center through an injected robot-coordinate transform."""
 
     def __init__(self, transformer: PixelToRobotTransformer) -> None:
         self._transformer = transformer
@@ -42,5 +61,5 @@ class MarkerCenterRobotMapper:
             True,
             x_mm=float(x_mm),
             y_mm=float(y_mm),
-            message="Marker center mapped to paint calibration coordinates.",
+            message="Marker center mapped to robot coordinates.",
         )

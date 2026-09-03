@@ -50,3 +50,21 @@ def build_paint_base_transformer(
     """Build the same base pixel-to-robot transformer used by paint targeting."""
 
     return HomographyResidualTransformer(vision_service.camera_to_robot_matrix_path)
+
+
+def build_paint_tcp_transformer(
+    vision_service: VisionService,
+) -> HomographyResidualTransformer:
+    """Build pixel-to-TCP conversion using the paint robot's calibrated offsets."""
+
+    settings_service = build_from_specs(
+        PaintRobotSystem.settings_specs,
+        PaintRobotSystem.metadata.settings_root,
+        PaintRobotSystem,
+    )
+    robot_config = settings_service.get(CommonSettingsID.ROBOT_CONFIG)
+    return HomographyResidualTransformer(
+        vision_service.camera_to_robot_matrix_path,
+        camera_to_tcp_x_offset=robot_config.camera_to_tcp_x_offset,
+        camera_to_tcp_y_offset=robot_config.camera_to_tcp_y_offset,
+    )

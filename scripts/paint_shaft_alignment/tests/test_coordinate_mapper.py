@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import unittest
 
-from scripts.paint_shaft_alignment.coordinate_mapper import MarkerCenterRobotMapper
+from scripts.paint_shaft_alignment.coordinate_mapper import (
+    MarkerCenterRobotMapper,
+    TcpCoordinateTransformer,
+)
 from scripts.paint_shaft_alignment.models import (
     MarkerDetection,
     MarkerDetectionStatus,
@@ -25,7 +28,29 @@ class _FakeTransformer:
         return x / 2.0, -y / 4.0
 
 
+class _FakeTcpTransformer:
+    def __init__(self):
+        self.received = None
+
+    def is_available(self):
+        return True
+
+    def transform_to_tcp(self, x, y):
+        self.received = (x, y)
+        return x + 10.0, y - 20.0
+
+
 class MarkerCenterRobotMapperTests(unittest.TestCase):
+    def test_tcp_adapter_uses_camera_to_tcp_conversion(self):
+        transformer = _FakeTcpTransformer()
+        mapper = MarkerCenterRobotMapper(TcpCoordinateTransformer(transformer))
+
+        result = mapper.map_center((12.0, 34.0))
+
+        self.assertTrue(result.available)
+        self.assertEqual((12.0, 34.0), transformer.received)
+        self.assertEqual((22.0, 14.0), (result.x_mm, result.y_mm))
+
     def test_maps_detected_center_through_paint_transformer(self):
         transformer = _FakeTransformer()
         detection = MarkerDetection(

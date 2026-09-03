@@ -8,9 +8,13 @@ import numpy as np
 
 from .detector import ShaftMarkerDetector
 from .config import CONFIG, StandaloneShaftDetectionConfig
-from .coordinate_mapper import MarkerCenterRobotMapper, MarkerRobotPosition
+from .coordinate_mapper import (
+    MarkerCenterRobotMapper,
+    MarkerRobotPosition,
+    TcpCoordinateTransformer,
+)
 from .models import MarkerDetection, MarkerDetectionStatus, ShaftMarkerConfig
-from .paint_vision_factory import build_paint_base_transformer, build_paint_vision_service
+from .paint_vision_factory import build_paint_tcp_transformer, build_paint_vision_service
 from .orientation_factory import build_orientation_strategy
 from .region import (
     CenteredDetectionRegionProvider,
@@ -167,9 +171,9 @@ def _draw_detection(
         )
     if draw_robot_coordinates:
         robot_text = (
-            f"robot XY: ({robot_position.x_mm:+.3f}, {robot_position.y_mm:+.3f}) mm"
+            f"robot TCP XY: ({robot_position.x_mm:+.3f}, {robot_position.y_mm:+.3f}) mm"
             if robot_position.available
-            else f"robot XY: unavailable ({robot_position.message})"
+            else f"robot TCP XY: unavailable ({robot_position.message})"
         )
         lines.append(robot_text)
     for index, line in enumerate(lines):
@@ -230,7 +234,9 @@ def main(config: StandaloneShaftDetectionConfig = CONFIG) -> int:
         minimum_area_px2=config.minimum_area_px2,
     )
     vision = build_paint_vision_service(runtime_config.active_work_area)
-    coordinate_mapper = MarkerCenterRobotMapper(build_paint_base_transformer(vision))
+    coordinate_mapper = MarkerCenterRobotMapper(
+        TcpCoordinateTransformer(build_paint_tcp_transformer(vision))
+    )
     work_area_region_provider = SelectableDetectionRegionProvider(
         CenteredDetectionRegionProvider(
             width=runtime_config.base_region_width_px,
@@ -354,7 +360,7 @@ def main(config: StandaloneShaftDetectionConfig = CONFIG) -> int:
                     f"orientation_deg={result.orientation_deg} "
                     f"orientation_samples={target.orientation_samples if result.detected else ()} "
                     f"orientation_diagnostics={target.orientation_diagnostics if result.detected else ()} "
-                    f"robot_xy_mm=({robot_position.x_mm}, {robot_position.y_mm}) "
+                    f"robot_tcp_xy_mm=({robot_position.x_mm}, {robot_position.y_mm}) "
                     f"visible_ids={result.detected_ids}"
                 )
                 previous_status = result.status
