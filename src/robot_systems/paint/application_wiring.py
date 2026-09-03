@@ -1100,23 +1100,6 @@ def _build_modbus_settings_application(robot_app):
     )
 
 
-def _build_dryer_settings_application(robot_app):
-    from src.applications.base.widget_application import WidgetApplication
-    from src.applications.dryer_settings import DryerSettingsApplicationService, DryerSettingsFactory
-    from src.robot_systems.paint.component_ids import ServiceID, SettingsID
-
-    service = DryerSettingsApplicationService(
-        settings_service=robot_app._settings_service,
-        dryer_config_key=SettingsID.DRYER_CONFIG,
-        modbus_config_key=CommonSettingsID.MODBUS_CONFIG,
-        peripherals_config_key=SettingsID.PERIPHERALS,
-        live_controller=robot_app.get_optional_service(ServiceID.DRYER),
-    )
-    return WidgetApplication(
-        widget_factory=lambda _ms: DryerSettingsFactory().build(service)
-    )
-
-
 def _build_device_control_application(robot_system):
     """Build the shared dynamic device-control app from configured peripherals."""
     from src.applications.base.widget_application import WidgetApplication
@@ -1124,6 +1107,7 @@ def _build_device_control_application(robot_system):
     from src.applications.device_control.service.device_control_application_service import (
         DeviceControlApplicationService,
     )
+    from src.applications.device_control.dryer import DryerControlService
     from src.engine.hardware.peripherals.device_control_adapters import (
         build_device_control_adapters,
     )
@@ -1159,8 +1143,21 @@ def _build_device_control_application(robot_system):
     }
     devices = build_device_control_adapters(peripheral_config, services, persist_enabled)
     service = DeviceControlApplicationService(motors=[], devices=devices)
+    dryer_control_service = (
+        DryerControlService(
+            settings_service=robot_system._settings_service,
+            dryer_config_key=SettingsID.DRYER_CONFIG,
+            modbus_config_key=CommonSettingsID.MODBUS_CONFIG,
+            peripherals_config_key=SettingsID.PERIPHERALS,
+            live_controller=robot_system.get_optional_service(ServiceID.DRYER),
+        )
+        if any(device.key == "dryer" for device in devices)
+        else None
+    )
     return WidgetApplication(
-        widget_factory=lambda _ms: DeviceControlFactory().build(service)
+        widget_factory=lambda _ms: DeviceControlFactory(
+            dryer_control_service=dryer_control_service,
+        ).build(service)
     )
 
 

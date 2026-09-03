@@ -7,7 +7,6 @@ def _int_field(name: str, label: str, default: int) -> SettingField:
 
 
 REGISTER_GROUP = SettingGroup("Servo and Plate Values", [
-    SettingField("enabled", "Enabled", "toggle", default=False),
     _int_field("pwm_open_vrytka", "Gate Open PWM", 600),
     _int_field("pwm_close_vrytka", "Gate Close PWM", 150),
     _int_field("pwm_open_izbutvatel", "Ejector Open PWM", 600),

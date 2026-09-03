@@ -31,8 +31,8 @@ from pl_gui.settings.settings_view.styles import (
 )
 from src.applications.base.i_application_view import IApplicationView
 from src.applications.base.keyboard_settings_view import build_with_keyboard_setting_handlers
-from src.applications.dryer_settings.model.mapper import DryerSettingsMapper
-from src.applications.dryer_settings.view.dryer_settings_schema import REGISTER_GROUP, TIMING_GROUP
+from src.applications.device_control.dryer.mapper import DryerConfigMapper
+from src.applications.device_control.dryer.schema import REGISTER_GROUP, TIMING_GROUP
 from src.engine.hardware.dryer.models.dryer_state import DryerState
 
 
@@ -102,9 +102,8 @@ def _make_scroll(widget: QWidget) -> QScrollArea:
     return scroll
 
 
-class DryerSettingsView(IApplicationView):
+class DryerControlPanel(IApplicationView):
     save_requested = pyqtSignal(dict)
-    enabled_changed = pyqtSignal(bool)
     refresh_status_requested = pyqtSignal()
     move_servos_requested = pyqtSignal()
     open_plate_requested = pyqtSignal()
@@ -112,7 +111,7 @@ class DryerSettingsView(IApplicationView):
     next_position_requested = pyqtSignal()
 
     def __init__(self, parent=None):
-        super().__init__("DryerSettings", parent)
+        super().__init__("DryerControlPanel", parent)
 
     def setup_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -145,12 +144,6 @@ class DryerSettingsView(IApplicationView):
     def _build_setting_groups(self) -> None:
         self._register_group = GenericSettingGroup(REGISTER_GROUP)
         self._timing_group = GenericSettingGroup(TIMING_GROUP)
-        self._register_group.value_changed.connect(self._on_setting_changed)
-
-    def _on_setting_changed(self, key: str, value: object) -> None:
-        if key == "enabled":
-            _logger.info("Dryer enabled toggle changed by user: checked=%s", bool(value))
-            self.enabled_changed.emit(bool(value))
 
     def _build_settings_tab(self) -> QWidget:
         widget = QWidget()
@@ -273,20 +266,9 @@ class DryerSettingsView(IApplicationView):
         self.next_position_requested.emit()
 
     def load_config(self, config) -> None:
-        flat = DryerSettingsMapper.to_flat_dict(config)
+        flat = DryerConfigMapper.to_flat_dict(config)
         self._register_group.set_values(flat)
         self._timing_group.set_values(flat)
-
-    def set_enabled(self, enabled: bool) -> None:
-        before = bool(self._register_group.get_values().get("enabled", False))
-        _logger.info(
-            "Applying dryer enabled toggle state: before=%s requested=%s",
-            before,
-            bool(enabled),
-        )
-        self._register_group.set_values({"enabled": enabled})
-        after = bool(self._register_group.get_values().get("enabled", False))
-        _logger.info("Dryer enabled toggle state applied: after=%s", after)
 
     def get_values(self) -> dict:
         values = {}

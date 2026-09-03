@@ -80,6 +80,31 @@ class TestDeviceControlController(unittest.TestCase):
             ["dryer"],
         )
 
+    def test_load_attaches_and_loads_optional_dryer_panel(self) -> None:
+        controller = self._controller()
+        controller._dryer_view = MagicMock()
+        controller._dryer_controller = MagicMock()
+        controller._model.get_devices.return_value = []
+        controller._model.get_motors.return_value = []
+        controller._model.is_motor_available.return_value = False
+
+        controller.load()
+
+        controller._view.set_device_panel.assert_called_once_with(
+            "dryer",
+            controller._dryer_view,
+        )
+        controller._dryer_controller.load.assert_called_once_with()
+
+    def test_stop_stops_optional_dryer_controller(self) -> None:
+        controller = self._controller()
+        controller._dryer_controller = MagicMock()
+        controller._stop_threads = MagicMock()
+
+        controller.stop()
+
+        controller._dryer_controller.stop.assert_called_once_with()
+
 
 class TestDeviceControlView(unittest.TestCase):
     @classmethod

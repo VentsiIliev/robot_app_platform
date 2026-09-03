@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from enum import Enum
 
-from src.applications.dryer_settings.service.i_dryer_settings_service import IDryerSettingsService
+from src.applications.device_control.dryer.service import IDryerControlService
 from src.engine.hardware.communication.modbus.modbus import ModbusConfig
 from src.engine.hardware.communication.transport_registry import DEFAULT_TRANSPORT_REGISTRY
 from src.engine.hardware.dryer.dryer_controller import DryerController
@@ -11,11 +11,11 @@ from src.engine.hardware.dryer.models.dryer_config import DryerConfig
 from src.engine.hardware.dryer.models.dryer_state import DryerState
 from src.engine.hardware.dryer.models.dryer_write_data import DryerWriteData
 from src.engine.hardware.dryer.models.dryer_modbus_registers import DryerRegisterMap
-from src.engine.hardware.peripherals import PeripheralBinding, PeripheralConfig
+from src.engine.hardware.peripherals import PeripheralConfig
 from src.engine.repositories.interfaces.i_settings_service import ISettingsService
 
 
-class DryerSettingsApplicationService(IDryerSettingsService):
+class DryerControlService(IDryerControlService):
     """Persists dryer defaults and builds controllers from current system settings."""
 
     def __init__(
@@ -31,21 +31,6 @@ class DryerSettingsApplicationService(IDryerSettingsService):
         self._modbus_config_key = modbus_config_key
         self._peripherals_config_key = peripherals_config_key
         self._live_controller = live_controller
-
-    def is_enabled(self) -> bool:
-        return self._dryer_binding(include_disabled=True).enabled
-
-    def set_enabled(self, enabled: bool) -> None:
-        if self._live_controller is None:
-            raise RuntimeError("Dryer service is unavailable")
-        if enabled:
-            if not self._live_controller.enable():
-                self._save_enabled(False)
-                raise RuntimeError(self._live_controller.last_error or "Dryer initialization failed")
-            self._save_enabled(True)
-        else:
-            self._live_controller.disable()
-            self._save_enabled(False)
 
     def load_config(self) -> DryerConfig:
         config = self._settings.get(self._dryer_config_key)
@@ -101,31 +86,9 @@ class DryerSettingsApplicationService(IDryerSettingsService):
             raise TypeError("Peripheral settings are unavailable")
         return peripherals
 
-    def _dryer_binding(self, include_disabled: bool = False):
+    def _dryer_binding(self):
         peripherals = self._peripherals()
-        binding = (
-            peripherals.peripherals.get("dryer")
-            if include_disabled
-            else peripherals.get("dryer")
-        )
+        binding = peripherals.get("dryer")
         if binding is None:
             raise ValueError("Dryer peripheral is unavailable or disabled")
         return binding
-
-    def _save_enabled(self, enabled: bool) -> None:
-        peripherals = self._peripherals()
-        current = peripherals.peripherals.get("dryer")
-        if current is None:
-            raise ValueError("Dryer peripheral is not configured")
-        updated = PeripheralBinding(
-            slave_id=current.slave_id,
-            enabled=enabled,
-            inputs=current.inputs,
-            outputs=current.outputs,
-            commands=current.commands,
-            statuses=current.statuses,
-        )
-        self._settings.save(
-            self._peripherals_config_key,
-            PeripheralConfig({**peripherals.peripherals, "dryer": updated}),
-        )

@@ -4,7 +4,7 @@ from src.engine.hardware.dryer.models.dryer_config import DryerConfig
 from src.engine.hardware.dryer.models.dryer_write_data import DryerWriteData
 
 
-class DryerSettingsMapper:
+class DryerConfigMapper:
     @staticmethod
     def to_flat_dict(config: DryerConfig) -> dict:
         return config.to_dict()

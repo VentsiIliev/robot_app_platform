@@ -105,6 +105,7 @@ class DeviceControlView(IApplicationView):
         root.addWidget(scroll)
 
         self._device_tabs: dict[str, QWidget] = {}
+        self._device_tab_layouts: dict[str, QVBoxLayout] = {}
         self._device_state_labels: dict[str, QLabel] = {}
         self._device_buttons: dict[str, list[QPushButton]] = {}
         self._device_action_labels: dict[str, QLabel] = {}
@@ -134,6 +135,7 @@ class DeviceControlView(IApplicationView):
             self._tabs.removeTab(0)
             widget.deleteLater()
         self._device_tabs.clear()
+        self._device_tab_layouts.clear()
         self._device_state_labels.clear()
         self._device_buttons.clear()
         self._device_action_labels.clear()
@@ -235,6 +237,7 @@ class DeviceControlView(IApplicationView):
             layout.addStretch()
             self._tabs.addTab(page, device.label)
             self._device_tabs[device.key] = page
+            self._device_tab_layouts[device.key] = layout
             self._device_state_labels[device.key] = state
             self._device_buttons[device.key] = buttons
             if actions:
@@ -252,6 +255,14 @@ class DeviceControlView(IApplicationView):
         self._legacy_scroll.setVisible(not has_devices)
         if has_devices:
             self._tabs.setCurrentIndex(0)
+
+    def set_device_panel(self, device_key: str, panel: QWidget) -> None:
+        """Add an optional device-specific panel to an existing device tab."""
+        layout = self._device_tab_layouts.get(device_key)
+        if layout is None:
+            panel.deleteLater()
+            return
+        layout.insertWidget(max(0, layout.count() - 1), panel)
 
     def set_device_state(self, device_key: str, state: dict[str, object]) -> None:
         label = self._device_state_labels.get(device_key)
