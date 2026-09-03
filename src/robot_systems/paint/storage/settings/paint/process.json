@@ -107,6 +107,7 @@
     "corridor_maximum_velocity_percent": 80.0,
     "corridor_maximum_acceleration_percent": 60.0,
     "sub_zero_approach_z_mm": 50.0,
+    "sub_zero_exit_blendR_mm": 10.0,
     "release_align_vel_percent": 70.0,
     "release_align_acc_percent": 50.0,
     "release_align_motion_type": "ptp",

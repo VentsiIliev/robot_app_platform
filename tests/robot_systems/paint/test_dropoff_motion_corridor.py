@@ -29,6 +29,7 @@ class TestDropoffMotionCorridor(unittest.TestCase):
             strategy="movement_group",
             allow_sub_zero_dropoff=True,
             sub_zero_approach_z_mm=50.0,
+            sub_zero_exit_blendR_mm=10.0,
             release_align_vel_percent=20.0,
             release_align_acc_percent=15.0,
             release_align_motion_type="ptp",
@@ -110,15 +111,20 @@ class TestDropoffMotionCorridor(unittest.TestCase):
             [
                 "Moving above dropoff group 'Dropoff'",
                 "Descending through dropoff group 'Dropoff' passage",
-                "Retracting through dropoff group 'Dropoff' passage",
-                "Moving to next-cycle start 'Magazine Fixed Pickup'",
             ],
             labels,
         )
-        robot.prepare_ordered_motion_chain.assert_not_called()
-        robot.execute_prepared_ordered_motion_chain.assert_not_called()
+        motion.move_ordered_pickup_sequence.assert_called_once()
+        ordered_segments = motion.move_ordered_pickup_sequence.call_args.args[1]
+        self.assertEqual("linear", ordered_segments[0]["type"])
+        self.assertEqual(10.0, ordered_segments[0]["blendR"])
+        self.assertEqual("ptp", ordered_segments[1]["type"])
+        self.assertEqual(0.0, ordered_segments[1]["blendR"])
+        robot.set_motion_passage_closed.assert_called_once_with(
+            "workpiece_drop_opening", True
+        )
         self.assertEqual("Magazine Fixed Pickup", owner._last_prepositioned_start_group)
-        self.assertEqual(4, motion.move_pickup_phase.call_count)
+        self.assertEqual(2, motion.move_pickup_phase.call_count)
 
     def test_saved_settings_update_snapshot_and_notify_live_corridor_consumer(self):
         settings_repository = MagicMock()

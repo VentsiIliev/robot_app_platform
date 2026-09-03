@@ -186,6 +186,9 @@ class PaintDropoffConfig:
     corridor_maximum_velocity_percent: float = 80.0
     corridor_maximum_acceleration_percent: float = 60.0
     sub_zero_approach_z_mm: float = 50.0  # [LIVE SETTINGS]
+    # Blend the corridor retract into the next-cycle start move. The final
+    # start pose remains an exact stop.
+    sub_zero_exit_blendR_mm: float = 10.0  # [LIVE SETTINGS]
     release_align_vel_percent: float = 60.0  # [LIVE SETTINGS]
     release_align_acc_percent: float = 40.0  # [LIVE SETTINGS]
     release_align_motion_type: str = "ptp"  # [LIVE SETTINGS]

@@ -182,6 +182,7 @@ def build_process_groups() -> list[SettingGroup]:
             _mm_field("dropoff_plate_spacing_y_mm", "Plate Vertical Spacing", 10.0, min_val=0.0),
             _toggle("dropoff_allow_sub_zero", "Allow Sub-Zero Dropoff"),
             _mm_field("dropoff_sub_zero_approach_z_mm", "Sub-Zero Approach/Retreat Z", 50.0, min_val=0.0),
+            _mm_field("dropoff_sub_zero_exit_blendR_mm", "Sub-Zero Exit to Next-Cycle Blend Radius", 10.0, min_val=0.0),
             _mm_field("dropoff_corridor_x_margin_mm", "Sub-Zero Corridor X Margin (Dropoff X +/-)", 70.0, min_val=0.1),
             _mm_field("dropoff_corridor_y_margin_mm", "Sub-Zero Corridor Y Margin (Dropoff Y +/-)", 70.0, min_val=0.1),
             _mm_field("dropoff_corridor_z_tolerance_mm", "Sub-Zero Corridor Z Tolerance Below Dropoff", 1.0, min_val=0.0),

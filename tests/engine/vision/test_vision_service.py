@@ -85,6 +85,31 @@ class TestVisionServiceHealth(unittest.TestCase):
         self.assertFalse(service.is_healthy())
         self.assertEqual(service.get_health_details()["message"], "No fresh camera frame available")
 
+    def test_intentionally_paused_processing_remains_healthy_without_fresh_frame(self):
+        system = _make_vision_system()
+        system.frame_grabber.get_latest_snapshot.return_value = None
+        service = VisionService(system)
+        service._running = True
+
+        service.pause_processing()
+
+        details = service.get_health_details()
+        self.assertTrue(service.is_healthy())
+        self.assertTrue(details["processing_paused"])
+        self.assertEqual(details["message"], "Vision processing paused by paint process")
+        system.pause_processing.assert_called_once_with()
+
+    def test_pause_does_not_mask_a_closed_camera(self):
+        system = _make_vision_system()
+        system.camera.isOpened.return_value = False
+        service = VisionService(system)
+        service._running = True
+
+        service.pause_processing()
+
+        self.assertFalse(service.is_healthy())
+        self.assertEqual(service.get_health_details()["message"], "Camera is not open")
+
     def test_running_without_open_camera_is_unhealthy(self):
         system = _make_vision_system()
         system.camera.isOpened.return_value = False

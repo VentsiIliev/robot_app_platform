@@ -16,23 +16,28 @@ class VisionService(IVisionService, IHealthCheckable,IExposureControl):
         self._vision_system = vision_system
         self._work_area_service = work_area_service
         self._running = False
+        self._processing_paused = False
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def start(self) -> None:
         self._vision_system.start_system()
         self._running = True
+        self._processing_paused = False
         self._logger.info("VisionService started")
 
     def stop(self) -> None:
         self._vision_system.stop_system()
         self._running = False
+        self._processing_paused = False
         self._logger.info("VisionService stopped")
 
     def pause_processing(self) -> None:
         self._vision_system.pause_processing()
+        self._processing_paused = True
 
     def resume_processing(self) -> None:
         self._vision_system.resume_processing()
+        self._processing_paused = False
 
     def set_raw_mode(self, enabled: bool) -> None:
         self._vision_system.rawMode = enabled
@@ -65,11 +70,17 @@ class VisionService(IVisionService, IHealthCheckable,IExposureControl):
 
         camera_open = self._camera_is_open()
         frame_fresh = self._latest_frame_is_fresh()
-        healthy = bool(state_ok and camera_open and frame_fresh)
+        paused = bool(self._processing_paused)
+        # A stale frame is expected while processing is intentionally paused.
+        # Camera availability and the underlying service state must still be
+        # valid; a pause must not mask a real disconnection.
+        healthy = bool(state_ok and camera_open and (frame_fresh or paused))
         if not state_ok:
             message = f"Vision service state is {state_name}"
         elif not camera_open:
             message = "Camera is not open"
+        elif paused:
+            message = "Vision processing paused by paint process"
         elif not frame_fresh:
             message = "No fresh camera frame available"
         else:
@@ -79,6 +90,7 @@ class VisionService(IVisionService, IHealthCheckable,IExposureControl):
             "state": state_name,
             "camera_open": camera_open,
             "frame_fresh": frame_fresh,
+            "processing_paused": paused,
             "message": message,
         }
 

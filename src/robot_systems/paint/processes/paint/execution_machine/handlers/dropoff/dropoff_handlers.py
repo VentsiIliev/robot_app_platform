@@ -205,6 +205,7 @@ def execute_dropoff_release_for_executor(
         and _poses_close(release_waypoint.pose, getattr(executor, "_last_process_end_pose", None))
     )
     release_completed = False
+    ordered_exit_waypoint: DropoffReleaseWaypoint | None = None
     for index, waypoint in enumerate(plan.waypoints, start=1):
         waypoint_started = perf_counter()
         if waypoint.pose is not None:
@@ -220,6 +221,15 @@ def execute_dropoff_release_for_executor(
                     "[DROPOFF] waypoint '%s' superseded by ordered descent to release pose",
                     waypoint.label,
                 )
+            elif (
+                release_completed
+                and next_cycle_start is not None
+                and waypoint.corridor_id is not None
+            ):
+                # Keep the passage open and combine the protected corridor
+                # retract with the return-to-start move below. A blend radius
+                # cannot span two separate blocking motion requests.
+                ordered_exit_waypoint = waypoint
             elif not executor._motion.move_pickup_phase(
                 waypoint.label,
                 list(waypoint.pose),
@@ -279,8 +289,19 @@ def execute_dropoff_release_for_executor(
                 )
                 return False, msg
 
+    ordered_exit_completed = False
+    if ordered_exit_waypoint is not None and next_cycle_start is not None:
+        ok, msg = _execute_movement_group_ordered_exit(
+            executor,
+            ordered_exit_waypoint,
+            next_cycle_start,
+        )
+        if not ok:
+            return False, msg
+        ordered_exit_completed = True
+
     if next_cycle_start is not None:
-        if not _move_to_next_cycle_start(executor, next_cycle_start):
+        if not ordered_exit_completed and not _move_to_next_cycle_start(executor, next_cycle_start):
             return False, "Dropoff retracted safely, but move to next-cycle start failed"
         if not _next_cycle_start_pose_reached(executor, next_cycle_start):
             return False, "Dropoff retracted safely, but next-cycle start pose was not reached"
@@ -294,6 +315,71 @@ def execute_dropoff_release_for_executor(
         "[DROPOFF] strategy=%s completed elapsed_s=%.3f",
         plan.strategy_name,
         elapsed_s(started),
+    )
+    return True, ""
+
+
+def _execute_movement_group_ordered_exit(
+    executor: object,
+    retract_waypoint: DropoffReleaseWaypoint,
+    next_cycle_start: dict,
+) -> tuple[bool, str]:
+    """Blend a sub-zero corridor retract into the next-cycle start move."""
+    corridor_id = str(retract_waypoint.corridor_id or "").strip()
+    if not corridor_id or retract_waypoint.pose is None:
+        return False, "Workpiece released, but the sub-zero exit route is incomplete"
+    blend_radius = max(
+        0.0,
+        float(
+            getattr(
+                executor._paint_process_config().dropoff,
+                "sub_zero_exit_blendR_mm",
+                10.0,
+            )
+        ),
+    )
+    segments = [
+        {
+            "type": "linear",
+            "label": retract_waypoint.label,
+            "position": list(retract_waypoint.pose),
+            "vel": float(retract_waypoint.vel_percent),
+            "acc": float(retract_waypoint.acc_percent),
+            "blendR": blend_radius,
+            "protected": True,
+        },
+        {
+            "type": str(next_cycle_start.get("type", "ptp")),
+            "label": f"Moving to next-cycle start '{next_cycle_start['group_id']}'",
+            "position": list(next_cycle_start["position"]),
+            "vel": float(next_cycle_start["vel"]),
+            "acc": float(next_cycle_start["acc"]),
+            "blendR": 0.0,
+            "protected": True,
+        },
+    ]
+    _logger.info(
+        "[DROPOFF] Executing movement-group ordered exit corridor=%s blendR=%.3f segments=%d",
+        corridor_id,
+        blend_radius,
+        len(segments),
+    )
+    if not executor._motion.move_ordered_pickup_sequence(
+        "Movement-group ordered exit chain",
+        segments,
+    ):
+        return False, (
+            "Workpiece released, but the ordered corridor retract and "
+            "next-cycle return failed; the dropoff passage remains open"
+        )
+    passage_setter = getattr(executor._robot_service, "set_motion_passage_closed", None)
+    if not callable(passage_setter) or not bool(passage_setter(corridor_id, True)):
+        return False, (
+            f"Next-cycle start was reached, but dropoff passage '{corridor_id}' could not be closed"
+        )
+    _logger.info(
+        "[DROPOFF] Closed motion passage '%s' after ordered exit chain",
+        corridor_id,
     )
     return True, ""
 
