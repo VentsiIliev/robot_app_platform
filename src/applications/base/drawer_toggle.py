@@ -5,8 +5,8 @@ from pl_gui.settings.settings_view.styles import BG_COLOR, BORDER, PRIMARY, PRIM
 
 
 class DrawerToggle(QObject):
-    _BTN_W = 26
-    _BTN_H = 64
+    _BTN_W = 44
+    _BTN_H = 72
 
     def __init__(self, parent_widget, side="right", width=300, height_offset=0):
         super().__init__(parent_widget)
@@ -38,8 +38,8 @@ class DrawerToggle(QObject):
             QPushButton#DrawerToggleBtn {{
                 background-color: {PRIMARY};
                 border: none;
-                border-radius: 4px;
-                font-size: 13px;
+                border-radius: 6px;
+                font-size: 16px;
                 font-weight: bold;
                 color: white;
             }}
