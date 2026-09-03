@@ -96,3 +96,12 @@ XY, marker-orientation, and homography-measured width/height reference. After
 collection, the overlay continuously reports signed `dX`, `dY`, shortest-angle
 `dRZ`, `dW`, and `dH` misalignment. Clicking the button again replaces the
 previous reference.
+
+Five preview-window trackbars set the absolute misalignment limits for `dX`,
+`dY`, `dRZ`, `dW`, and `dH`. Their displayed integer values use 0.1-unit
+resolution (`x10`). If any current error exceeds its limit, the marker is drawn
+red and the overlay reports which limits were exceeded. Initial limits are
+configured by the `misalignment_*_threshold_*` fields in `config.py`.
+The `Baseline samples` trackbar selects how many valid observations the next
+**Capture reference** operation will collect (1–200). Its value is read when the
+button is clicked and remains fixed for that capture cycle.

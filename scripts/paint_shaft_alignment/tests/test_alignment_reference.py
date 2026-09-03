@@ -2,10 +2,27 @@ from __future__ import annotations
 
 import unittest
 
-from scripts.paint_shaft_alignment.alignment_reference import AlignmentReferenceCapture
+from scripts.paint_shaft_alignment.alignment_reference import (
+    AlignmentMisalignment,
+    AlignmentReferenceCapture,
+    MisalignmentThresholds,
+)
 
 
 class AlignmentReferenceCaptureTests(unittest.TestCase):
+    def test_thresholds_report_each_exceeded_absolute_limit(self):
+        thresholds = MisalignmentThresholds(1.0, 2.0, 3.0, 0.5, 0.6)
+        value = AlignmentMisalignment(
+            True,
+            dx_mm=-1.1,
+            dy_mm=2.0,
+            orientation_difference_deg=3.1,
+            marker_width_difference_mm=-0.7,
+            marker_height_difference_mm=0.6,
+        )
+
+        self.assertEqual(("dX", "dRZ", "dW"), thresholds.exceeded_by(value))
+
     def test_collects_required_samples_and_reports_signed_misalignment(self):
         capture = AlignmentReferenceCapture(required_samples=3)
         capture.start()
@@ -39,6 +56,15 @@ class AlignmentReferenceCaptureTests(unittest.TestCase):
         self.assertTrue(capture.capturing)
         self.assertIsNone(capture.reference)
         self.assertEqual(0, capture.sample_count)
+
+    def test_start_can_change_sample_count_for_next_capture(self):
+        capture = AlignmentReferenceCapture(required_samples=30)
+
+        capture.start(required_samples=2)
+
+        self.assertEqual(2, capture.required_samples)
+        self.assertFalse(capture.record(1.0, 2.0, 3.0, 11.0, 11.0))
+        self.assertTrue(capture.record(1.0, 2.0, 3.0, 11.0, 11.0))
 
 
 if __name__ == "__main__":

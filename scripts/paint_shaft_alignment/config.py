@@ -28,6 +28,11 @@ class StandaloneShaftDetectionConfig:
         257.75, 215.7, 400.1, -179.2, 0.0, 0.0,
     )
     reference_capture_samples: int = 30
+    misalignment_dx_threshold_mm: float = 1.0
+    misalignment_dy_threshold_mm: float = 1.0
+    misalignment_drz_threshold_deg: float = 1.0
+    misalignment_dw_threshold_mm: float = 0.5
+    misalignment_dh_threshold_mm: float = 0.5
 
     # Temporary base ROI until it is supplied by the paint_shaft work area.
     base_region_width_px: int = 100
@@ -62,6 +67,14 @@ class StandaloneShaftDetectionConfig:
             raise ValueError("Calibration and capture poses must contain six values")
         if self.reference_capture_samples <= 0:
             raise ValueError("Reference capture sample count must be positive")
+        if min(
+            self.misalignment_dx_threshold_mm,
+            self.misalignment_dy_threshold_mm,
+            self.misalignment_drz_threshold_deg,
+            self.misalignment_dw_threshold_mm,
+            self.misalignment_dh_threshold_mm,
+        ) < 0.0:
+            raise ValueError("Misalignment thresholds must be non-negative")
         if self.orientation_strategy.strip().lower() not in {"compare", "solve_pnp", "corner_edge"}:
             raise ValueError("Unsupported orientation strategy")
         if self.orientation_primary_strategy.strip().lower() not in {"solve_pnp", "corner_edge"}:
