@@ -9,6 +9,7 @@ from scripts.paint_shaft_alignment.models import DetectedMarker, MarkerDetection
 from scripts.paint_shaft_alignment.region import (
     CenteredDetectionRegionProvider,
     PixelRegion,
+    SelectableDetectionRegionProvider,
 )
 from scripts.paint_shaft_alignment.tracker import MarkerRegionTracker, TrackingState
 
@@ -29,6 +30,26 @@ class _FakeVision:
         if self.error is not None:
             raise self.error
         return self.corners, self.ids, image
+
+
+class SelectableDetectionRegionProviderTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.provider = SelectableDetectionRegionProvider(
+            CenteredDetectionRegionProvider(width=40, height=20)
+        )
+
+    def test_uses_centered_default_until_region_is_drawn(self) -> None:
+        self.assertEqual(PixelRegion(30, 40, 40, 20), self.provider.resolve(100, 100))
+
+    def test_normalizes_reverse_drag_and_clips_to_frame(self) -> None:
+        self.assertTrue(self.provider.select((90, 80), (-10, 20)))
+        self.assertEqual(PixelRegion(0, 20, 80, 60), self.provider.resolve(80, 100))
+
+    def test_ignores_zero_area_selection_and_can_restore_default(self) -> None:
+        self.assertFalse(self.provider.select((10, 10), (10, 30)))
+        self.assertTrue(self.provider.select((10, 10), (30, 30)))
+        self.provider.clear()
+        self.assertEqual(PixelRegion(30, 40, 40, 20), self.provider.resolve(100, 100))
 
 
 class ShaftMarkerDetectorTests(unittest.TestCase):

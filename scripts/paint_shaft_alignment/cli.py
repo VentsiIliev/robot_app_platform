@@ -12,9 +12,47 @@ from .coordinate_mapper import MarkerCenterRobotMapper, MarkerRobotPosition
 from .models import MarkerDetection, MarkerDetectionStatus, ShaftMarkerConfig
 from .paint_vision_factory import build_paint_base_transformer, build_paint_vision_service
 from .orientation_factory import build_orientation_strategy
-from .region import CenteredDetectionRegionProvider, PixelRegion
+from .region import (
+    CenteredDetectionRegionProvider,
+    PixelRegion,
+    SelectableDetectionRegionProvider,
+)
 from .stabilizer import MarkerSampleStabilizer, StableMarkerEstimate
 from .tracker import MarkerRegionTracker
+
+
+class _DetectionRegionMouseHandler:
+    """Translates OpenCV mouse gestures into base-region selections."""
+
+    def __init__(self, provider: SelectableDetectionRegionProvider, on_changed) -> None:
+        self._provider = provider
+        self._on_changed = on_changed
+        self._start: tuple[int, int] | None = None
+        self.preview_region: PixelRegion | None = None
+        self.selection_completed = False
+
+    def __call__(self, event, x, y, _flags, _parameter) -> None:
+        point = (x, y)
+        if event == cv2.EVENT_LBUTTONDOWN:
+            self._start = point
+            self.preview_region = None
+        elif event == cv2.EVENT_MOUSEMOVE and self._start is not None:
+            self.preview_region = self._region_between(self._start, point)
+        elif event == cv2.EVENT_LBUTTONUP and self._start is not None:
+            start = self._start
+            self._start = None
+            self.preview_region = None
+            if self._provider.select(start, point):
+                self.selection_completed = True
+                self._on_changed()
+
+    @staticmethod
+    def _region_between(start: tuple[int, int], end: tuple[int, int]) -> PixelRegion | None:
+        left, right = sorted((start[0], end[0]))
+        top, bottom = sorted((start[1], end[1]))
+        if left == right or top == bottom:
+            return None
+        return PixelRegion(left, top, right - left, bottom - top)
 
 
 def _draw_detection(
@@ -28,6 +66,7 @@ def _draw_detection(
     robot_position: MarkerRobotPosition,
     draw_robot_coordinates: bool,
     stable_estimate: StableMarkerEstimate,
+    selection_preview: PixelRegion | None = None,
 ):
     display = frame.copy()
     color = (40, 200, 40) if result.detected else (30, 80, 230)
@@ -38,6 +77,14 @@ def _draw_detection(
             (region.x, region.y),
             (region.right - 1, region.bottom - 1),
             (255, 160, 0),
+            2,
+        )
+    if selection_preview is not None:
+        cv2.rectangle(
+            display,
+            (selection_preview.x, selection_preview.y),
+            (selection_preview.right - 1, selection_preview.bottom - 1),
+            (255, 255, 0),
             2,
         )
     if draw_all_markers:
@@ -150,6 +197,29 @@ def _marker_orientation_label(marker) -> str:
     return f"ID {marker.marker_id} {marker.orientation_deg:+.1f} deg"
 
 
+def _draw_region_prompt(frame, preview: PixelRegion | None):
+    display = frame.copy()
+    if preview is not None:
+        cv2.rectangle(
+            display,
+            (preview.x, preview.y),
+            (preview.right - 1, preview.bottom - 1),
+            (255, 255, 0),
+            2,
+        )
+    cv2.putText(
+        display,
+        "Drag to select initial detection region (Enter = centered default)",
+        (12, 32),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.65,
+        (255, 255, 0),
+        2,
+        cv2.LINE_AA,
+    )
+    return display
+
+
 def main(config: StandaloneShaftDetectionConfig = CONFIG) -> int:
     logging.basicConfig(
         level=logging.DEBUG if config.verbose_logging else logging.INFO
@@ -161,9 +231,11 @@ def main(config: StandaloneShaftDetectionConfig = CONFIG) -> int:
     )
     vision = build_paint_vision_service(runtime_config.active_work_area)
     coordinate_mapper = MarkerCenterRobotMapper(build_paint_base_transformer(vision))
-    work_area_region_provider = CenteredDetectionRegionProvider(
-        width=runtime_config.base_region_width_px,
-        height=runtime_config.base_region_height_px,
+    work_area_region_provider = SelectableDetectionRegionProvider(
+        CenteredDetectionRegionProvider(
+            width=runtime_config.base_region_width_px,
+            height=runtime_config.base_region_height_px,
+        )
     )
     tracker = MarkerRegionTracker(
         work_area_region_provider,
@@ -196,10 +268,28 @@ def main(config: StandaloneShaftDetectionConfig = CONFIG) -> int:
     started_at = time.monotonic()
     previous_status: MarkerDetectionStatus | None = None
 
+    def reset_region_consumers() -> None:
+        tracker.reset()
+        stabilizer.reset()
+
+    mouse_handler = _DetectionRegionMouseHandler(
+        work_area_region_provider,
+        reset_region_consumers,
+    )
+
+    if not runtime_config.headless:
+        cv2.namedWindow(runtime_config.window_title)
+        cv2.setMouseCallback(runtime_config.window_title, mouse_handler)
+
     print(
         "[shaft-marker] started "
         f"marker_id={marker_config.marker_id} area={runtime_config.active_work_area!r} "
         f"raw={runtime_config.raw_mode}"
+    )
+    if not runtime_config.headless:
+        print("[shaft-marker] drag with the left mouse button to select the ROI; press r to reset it")
+    awaiting_initial_region = (
+        runtime_config.draw_initial_detection_region and not runtime_config.headless
     )
     try:
         while (
@@ -216,6 +306,21 @@ def main(config: StandaloneShaftDetectionConfig = CONFIG) -> int:
             if isinstance(frame, np.ndarray) and frame.size > 0:
                 frame_height, frame_width = frame.shape[:2]
                 detection_region = tracker.region_for_frame(frame_width, frame_height)
+            if awaiting_initial_region and isinstance(frame, np.ndarray) and frame.size > 0:
+                cv2.imshow(
+                    runtime_config.window_title,
+                    _draw_region_prompt(frame, mouse_handler.preview_region),
+                )
+                key = cv2.waitKey(1) & 0xFF
+                if key in (27, ord("q")):
+                    break
+                if mouse_handler.selection_completed or key in (10, 13):
+                    awaiting_initial_region = False
+                    reset_region_consumers()
+                    selected = work_area_region_provider.resolve(frame_width, frame_height)
+                    print(f"[shaft-marker] initial detection region={selected}")
+                time.sleep(max(0.0, runtime_config.detection_interval_s))
+                continue
             result = detector.detect(frame, detection_region=detection_region)
             stable_estimate = stabilizer.estimate()
             if result.detected:
@@ -267,10 +372,16 @@ def main(config: StandaloneShaftDetectionConfig = CONFIG) -> int:
                         robot_position=robot_position,
                         draw_robot_coordinates=runtime_config.debug_draw_robot_coordinates,
                         stable_estimate=stable_estimate,
+                        selection_preview=mouse_handler.preview_region,
                     ),
                 )
-                if cv2.waitKey(1) & 0xFF in (27, ord("q")):
+                key = cv2.waitKey(1) & 0xFF
+                if key in (27, ord("q")):
                     break
+                if key == ord("r"):
+                    work_area_region_provider.clear()
+                    reset_region_consumers()
+                    print("[shaft-marker] detection region reset to configured centered ROI")
             time.sleep(max(0.0, runtime_config.detection_interval_s))
     except KeyboardInterrupt:
         pass
