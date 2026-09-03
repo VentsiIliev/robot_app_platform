@@ -41,6 +41,8 @@ Available configuration fields include:
 - `calibration_pose` is the robot TCP pose at which the homography was captured;
 - `capture_pose` is the robot TCP pose used for the current image. Its XY delta
   from `calibration_pose` is applied to marker-center and size transforms;
+- `reference_capture_samples` controls how many valid observations the
+  **Capture reference** button collects (30 by default);
 - `base_region_width_px` and `base_region_height_px` define the temporary base ROI;
 - `tracking_region_padding_px` controls the margin around a tracked marker;
 - `tracking_region_minimum_width_px` and `tracking_region_minimum_height_px`
@@ -88,3 +90,9 @@ homography plane. It shows the real marker size, the measured width and height,
 and their signed differences. A positive difference means the marker appears
 larger on that plane; this is a height-discrepancy indicator, not a robot-Z
 measurement.
+
+Click **Capture reference** while the marker is stable to collect a robust TCP
+XY, marker-orientation, and homography-measured width/height reference. After
+collection, the overlay continuously reports signed `dX`, `dY`, shortest-angle
+`dRZ`, `dW`, and `dH` misalignment. Clicking the button again replaces the
+previous reference.
