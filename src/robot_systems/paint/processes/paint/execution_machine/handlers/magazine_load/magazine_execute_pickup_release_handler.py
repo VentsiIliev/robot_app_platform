@@ -417,11 +417,12 @@ def _execute_magazine_servo_contact_pickup_release(
             if result.timed_out or result.message == "timeout":
                 off_ok, off_msg = executor._motion.turn_vacuum_off()
                 recovery_waypoint = transfer_waypoints[0]
+                recovery_pose = list(retract_reference_pose)
                 recovery_segments = build_magazine_pickup_release_segments(
                     (
                         (
-                            "Returning to magazine pickup origin after no contact",
-                            list(recovery_waypoint[1]),
+                            "Returning to fixed magazine pose after no contact",
+                            recovery_pose,
                             recovery_waypoint[2],
                             recovery_waypoint[3],
                             "linear",
@@ -430,14 +431,14 @@ def _execute_magazine_servo_contact_pickup_release(
                     )
                 )
                 current_pose = _read_fresh_pose(executor._robot_service)
-                if pickup_pose_is_close(current_pose, recovery_waypoint[1]):
+                if pickup_pose_is_close(current_pose, recovery_pose):
                     _logger.info(
-                        "[MAGAZINE_LOAD] Timeout recovery skipped: robot already at pickup origin"
+                        "[MAGAZINE_LOAD] Timeout recovery skipped: robot already at fixed magazine pose"
                     )
                     recovered = True
                 else:
                     recovered = executor._motion.move_ordered_pickup_sequence(
-                        "Magazine pickup timeout recovery",
+                        "Magazine pickup timeout recovery to fixed pose",
                         recovery_segments,
                     )
                 recovery_failures = []
@@ -446,7 +447,7 @@ def _execute_magazine_servo_contact_pickup_release(
                 if not recovered:
                     reason = getattr(executor._motion, "last_motion_error", None)
                     recovery_failures.append(
-                        f"return to pickup origin failed: {reason or 'ordered motion failed'}"
+                        f"return to fixed magazine pose failed: {reason or 'ordered motion failed'}"
                     )
                 if recovery_failures:
                     return False, "Magazine servo pickup timed out; " + "; ".join(recovery_failures)
