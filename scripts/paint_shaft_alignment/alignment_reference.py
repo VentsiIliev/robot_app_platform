@@ -86,6 +86,11 @@ class AlignmentReferenceCapture:
         self._reference = None
         self._capturing = True
 
+    def restore(self, reference: AlignmentReference) -> None:
+        self._samples.clear()
+        self._reference = reference
+        self._capturing = False
+
     def record(
         self,
         x_mm: float,

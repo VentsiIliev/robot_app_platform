@@ -1,0 +1,79 @@
+{
+  "marker_id": 0,
+  "marker_size_mm": 11.0,
+  "minimum_area_px2": 0.0,
+  "active_work_area": "paint",
+  "raw_mode": false,
+  "orientation_strategy": "corner_edge",
+  "orientation_primary_strategy": "corner_edge",
+  "calibration_pose": [
+    -29.075,
+    217.269,
+    200.076,
+    -179.99,
+    0.0,
+    0.0
+  ],
+  "capture_pose": [
+    257.75,
+    215.7,
+    400.1,
+    -179.2,
+    0.0,
+    0.0
+  ],
+  "base_region_width_px": 100,
+  "base_region_height_px": 700,
+  "tracking_region_padding_px": 50,
+  "tracking_region_minimum_width_px": 160,
+  "tracking_region_minimum_height_px": 160,
+  "tracking_recovery_expansion_px": 50,
+  "marker_misses_before_region_fallback": 10,
+  "detections_before_tracking": 1,
+  "acquisition_misses_before_reset": 3,
+  "tracking_position_filter_alpha": 0.5,
+  "tracking_prediction_gain": 0.5,
+  "tracking_maximum_center_jump_px": 100.0,
+  "tracking_maximum_area_ratio_change": 3.0,
+  "stability_required_samples": 5,
+  "stability_maximum_center_spread_px": 5.0,
+  "stability_maximum_orientation_spread_deg": 3.0,
+  "stability_misses_before_reset": 3,
+  "reference_capture_samples": 30,
+  "alignment_check_samples": 10,
+  "misalignment_dx_threshold_mm": 0.3,
+  "misalignment_dy_threshold_mm": 0.3,
+  "misalignment_drz_threshold_deg": 2.0,
+  "misalignment_dw_threshold_mm": 0.5,
+  "misalignment_dh_threshold_mm": 0.5,
+  "detection_interval_s": 0.1,
+  "detection_region_normalized": [
+    0.4409871244635193,
+    0.3893129770992366,
+    0.5879828326180258,
+    0.7061068702290076
+  ],
+  "reference_tcp_x_mm": 186.14848645134066,
+  "reference_tcp_y_mm": 625.8760311882962,
+  "reference_orientation_deg": 8.262717782846039,
+  "reference_marker_width_mm": 7.92305000566739,
+  "reference_marker_height_mm": 7.481821617171436,
+  "reference_marker_corners_normalized": [
+    [
+      0.50234375,
+      0.5415871487723456
+    ],
+    [
+      0.5242962747812272,
+      0.5472134855058459
+    ],
+    [
+      0.52109375,
+      0.5861111111111111
+    ],
+    [
+      0.4987468495965004,
+      0.5810919178856744
+    ]
+  ]
+}

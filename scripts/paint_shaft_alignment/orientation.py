@@ -22,12 +22,28 @@ class MarkerOrientationEstimate:
 
 
 class CornerEdgeOrientationStrategy:
-    """Image-plane orientation from the marker's canonical top edge."""
+    """Image-plane orientation averaged from all four canonical marker edges."""
 
     def orientation_deg(self, corners_px: Sequence[PixelPoint]) -> float:
-        top_left, top_right = corners_px[0], corners_px[1]
+        if len(corners_px) != 4:
+            raise ValueError("Four marker corners are required for edge orientation")
+        # ArUco corners are TL, TR, BR, BL. Convert every directed edge back to
+        # the canonical top-edge angle, then circular-average the four values.
+        expected_edge_offsets = (0.0, 90.0, 180.0, -90.0)
+        edge_angles = []
+        for index, expected_offset in enumerate(expected_edge_offsets):
+            start = corners_px[index]
+            end = corners_px[(index + 1) % 4]
+            measured = math.degrees(
+                math.atan2(end[1] - start[1], end[0] - start[0])
+            )
+            edge_angles.append(_normalize_angle_deg(measured - expected_offset))
+        radians = [math.radians(angle) for angle in edge_angles]
         angle = math.degrees(
-            math.atan2(top_right[1] - top_left[1], top_right[0] - top_left[0])
+            math.atan2(
+                sum(math.sin(value) for value in radians),
+                sum(math.cos(value) for value in radians),
+            )
         )
         return _normalize_angle_deg(angle)
 

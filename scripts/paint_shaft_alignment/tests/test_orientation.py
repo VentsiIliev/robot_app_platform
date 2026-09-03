@@ -13,6 +13,15 @@ from scripts.paint_shaft_alignment.orientation import (
 
 
 class MarkerOrientationStrategyTests(unittest.TestCase):
+    def test_corner_edge_averages_all_edges_to_reduce_single_corner_noise(self):
+        strategy = CornerEdgeOrientationStrategy()
+        corners = ((0.0, 1.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0))
+
+        angle = strategy.orientation_deg(corners)
+
+        self.assertAlmostEqual(-1.43, angle, delta=0.1)
+        self.assertLess(abs(angle), 2.0)
+
     def test_corner_edge_strategy_preserves_current_convention(self):
         strategy = CornerEdgeOrientationStrategy()
 

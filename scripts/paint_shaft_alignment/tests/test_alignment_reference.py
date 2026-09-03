@@ -4,12 +4,23 @@ import unittest
 
 from scripts.paint_shaft_alignment.alignment_reference import (
     AlignmentMisalignment,
+    AlignmentReference,
     AlignmentReferenceCapture,
     MisalignmentThresholds,
 )
 
 
 class AlignmentReferenceCaptureTests(unittest.TestCase):
+    def test_restores_a_persisted_reference_without_capturing(self):
+        capture = AlignmentReferenceCapture(30)
+        reference = AlignmentReference(1.0, 2.0, 3.0, 11.0, 10.9)
+
+        capture.restore(reference)
+
+        self.assertEqual(reference, capture.reference)
+        self.assertFalse(capture.capturing)
+        self.assertEqual(0, capture.sample_count)
+
     def test_thresholds_report_each_exceeded_absolute_limit(self):
         thresholds = MisalignmentThresholds(1.0, 2.0, 3.0, 0.5, 0.6)
         value = AlignmentMisalignment(

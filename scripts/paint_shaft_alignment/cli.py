@@ -36,24 +36,33 @@ class _MisalignmentThresholdControls:
     """OpenCV trackbars backed by thresholds with 0.1-unit resolution."""
 
     _SCALE = 10
+    _MINIMUM = 1
+    _MAXIMUM = 50
     _TRACKBARS = (
-        ("dX limit mm x10", "dx_mm", 1000),
-        ("dY limit mm x10", "dy_mm", 1000),
-        ("dRZ limit deg x10", "orientation_deg", 1800),
-        ("dW limit mm x10", "marker_width_mm", 1000),
-        ("dH limit mm x10", "marker_height_mm", 1000),
+        ("1 - X position", "dx_mm"),
+        ("2 - Y position", "dy_mm"),
+        ("3 - Z rotation", "orientation_deg"),
+        ("4 - Marker width", "marker_width_mm"),
+        ("5 - Marker height", "marker_height_mm"),
     )
 
     def __init__(self, window_title: str, initial: MisalignmentThresholds) -> None:
         self._window_title = window_title
-        for name, attribute, maximum in self._TRACKBARS:
-            initial_value = round(getattr(initial, attribute) * self._SCALE)
-            cv2.createTrackbar(name, window_title, initial_value, maximum, self._on_change)
+        for name, attribute in self._TRACKBARS:
+            initial_value = min(
+                self._MAXIMUM,
+                max(self._MINIMUM, round(getattr(initial, attribute) * self._SCALE)),
+            )
+            cv2.createTrackbar(name, window_title, initial_value, self._MAXIMUM, self._on_change)
+            cv2.setTrackbarMin(name, window_title, self._MINIMUM)
 
     def thresholds(self) -> MisalignmentThresholds:
         values = {
-            attribute: cv2.getTrackbarPos(name, self._window_title) / self._SCALE
-            for name, attribute, _maximum in self._TRACKBARS
+            attribute: max(
+                self._MINIMUM,
+                cv2.getTrackbarPos(name, self._window_title),
+            ) / self._SCALE
+            for name, attribute in self._TRACKBARS
         }
         return MisalignmentThresholds(**values)
 
@@ -65,7 +74,7 @@ class _MisalignmentThresholdControls:
 class _ReferenceCaptureControls:
     """Control the sample count used by the next baseline capture."""
 
-    _TRACKBAR_NAME = "Baseline samples"
+    _TRACKBAR_NAME = "6 - Baseline samples"
     _MAXIMUM_SAMPLES = 200
 
     def __init__(
@@ -83,14 +92,48 @@ class _ReferenceCaptureControls:
             self._MAXIMUM_SAMPLES,
             self._on_change,
         )
+        cv2.setTrackbarMin(self._TRACKBAR_NAME, window_title, 1)
 
     def start_capture(self) -> None:
-        selected = cv2.getTrackbarPos(self._TRACKBAR_NAME, self._window_title)
-        self._capture.start(max(1, selected))
+        self._capture.start(self.selected_samples())
+
+    def selected_samples(self) -> int:
+        return max(1, cv2.getTrackbarPos(self._TRACKBAR_NAME, self._window_title))
 
     @staticmethod
     def _on_change(_value: int) -> None:
         pass
+
+
+def _draw_controls_panel(
+    thresholds: MisalignmentThresholds,
+    selected_samples: int,
+    active_capture_samples: int | None,
+):
+    panel = np.full((300, 760, 3), 32, dtype=np.uint8)
+    lines = [
+        "MISALIGNMENT CONTROLS - threshold range 0.1 to 5.0",
+        f"1  X position difference (dX):       {thresholds.dx_mm:.1f} mm",
+        f"2  Y position difference (dY):       {thresholds.dy_mm:.1f} mm",
+        f"3  Z rotation difference (dRZ):      {thresholds.orientation_deg:.1f} deg",
+        f"4  Measured marker width diff (dW):  {thresholds.marker_width_mm:.1f} mm",
+        f"5  Measured marker height diff (dH): {thresholds.marker_height_mm:.1f} mm",
+        f"6  Samples for next baseline:         {selected_samples}",
+    ]
+    if active_capture_samples is not None:
+        lines.append(f"Active capture sample target: {active_capture_samples}")
+    for index, line in enumerate(lines):
+        cv2.putText(
+            panel,
+            line,
+            (18, 30 + index * 37),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.65,
+            (235, 235, 235),
+            1,
+            cv2.LINE_AA,
+        )
+    return panel
 
 
 class _DetectionRegionMouseHandler:
@@ -445,16 +488,19 @@ def main(config: StandaloneShaftDetectionConfig = CONFIG) -> int:
     )
     threshold_controls = None
     reference_controls = None
+    controls_window_title = f"{runtime_config.window_title} - Alignment Controls"
 
     if not runtime_config.headless:
         cv2.namedWindow(runtime_config.window_title)
         cv2.setMouseCallback(runtime_config.window_title, mouse_handler)
+        cv2.namedWindow(controls_window_title, cv2.WINDOW_NORMAL)
+        cv2.resizeWindow(controls_window_title, 760, 650)
         threshold_controls = _MisalignmentThresholdControls(
-            runtime_config.window_title,
+            controls_window_title,
             thresholds,
         )
         reference_controls = _ReferenceCaptureControls(
-            runtime_config.window_title,
+            controls_window_title,
             reference_capture,
             runtime_config.reference_capture_samples,
         )
@@ -495,6 +541,15 @@ def main(config: StandaloneShaftDetectionConfig = CONFIG) -> int:
                 frame_height, frame_width = frame.shape[:2]
                 detection_region = tracker.region_for_frame(frame_width, frame_height)
             if awaiting_initial_region and isinstance(frame, np.ndarray) and frame.size > 0:
+                thresholds = threshold_controls.thresholds()
+                cv2.imshow(
+                    controls_window_title,
+                    _draw_controls_panel(
+                        thresholds,
+                        reference_controls.selected_samples(),
+                        reference_capture.required_samples if reference_capture.capturing else None,
+                    ),
+                )
                 cv2.imshow(
                     runtime_config.window_title,
                     _draw_region_prompt(frame, mouse_handler.preview_region),
@@ -583,6 +638,14 @@ def main(config: StandaloneShaftDetectionConfig = CONFIG) -> int:
                 previous_status = result.status
 
             if not runtime_config.headless and frame is not None:
+                cv2.imshow(
+                    controls_window_title,
+                    _draw_controls_panel(
+                        thresholds,
+                        reference_controls.selected_samples(),
+                        reference_capture.required_samples if reference_capture.capturing else None,
+                    ),
+                )
                 reference_button_region = PixelRegion(
                     max(0, frame_width - 220),
                     12,
