@@ -6,6 +6,7 @@ import time
 import cv2
 import numpy as np
 
+from .alignment_reference import AlignmentMisalignment, AlignmentReferenceCapture
 from .detector import ShaftMarkerDetector
 from .config import CONFIG, StandaloneShaftDetectionConfig
 from .coordinate_mapper import (
@@ -36,10 +37,20 @@ class _DetectionRegionMouseHandler:
         self._start: tuple[int, int] | None = None
         self.preview_region: PixelRegion | None = None
         self.selection_completed = False
+        self._button_region: PixelRegion | None = None
+        self._button_callback = None
+
+    def set_button(self, region: PixelRegion, callback) -> None:
+        self._button_region = region
+        self._button_callback = callback
 
     def __call__(self, event, x, y, _flags, _parameter) -> None:
         point = (x, y)
         if event == cv2.EVENT_LBUTTONDOWN:
+            if self._button_region is not None and self._contains(self._button_region, point):
+                if self._button_callback is not None:
+                    self._button_callback()
+                return
             self._start = point
             self.preview_region = None
         elif event == cv2.EVENT_MOUSEMOVE and self._start is not None:
@@ -60,6 +71,10 @@ class _DetectionRegionMouseHandler:
             return None
         return PixelRegion(left, top, right - left, bottom - top)
 
+    @staticmethod
+    def _contains(region: PixelRegion, point: tuple[int, int]) -> bool:
+        return region.x <= point[0] < region.right and region.y <= point[1] < region.bottom
+
 
 def _draw_detection(
     frame,
@@ -73,6 +88,9 @@ def _draw_detection(
     draw_robot_coordinates: bool,
     stable_estimate: StableMarkerEstimate,
     planar_size: MarkerPlanarSize,
+    reference_capture: AlignmentReferenceCapture,
+    misalignment: AlignmentMisalignment,
+    reference_button_region: PixelRegion,
     selection_preview: PixelRegion | None = None,
 ):
     display = frame.copy()
@@ -187,6 +205,31 @@ def _draw_detection(
             else f"robot TCP XY: unavailable ({robot_position.message})"
         )
         lines.append(robot_text)
+    if reference_capture.capturing:
+        lines.append(
+            f"reference: CAPTURING {reference_capture.sample_count}/{reference_capture.required_samples}"
+        )
+    elif reference_capture.reference is not None:
+        reference = reference_capture.reference
+        lines.append(
+            f"reference TCP: ({reference.x_mm:+.3f}, {reference.y_mm:+.3f}) mm "
+            f"RZ={reference.orientation_deg:+.2f}deg"
+        )
+        lines.append(
+            f"reference size: {reference.marker_width_mm:.2f} x "
+            f"{reference.marker_height_mm:.2f} mm"
+        )
+    else:
+        lines.append("reference: not captured")
+    if misalignment.available:
+        lines.append(
+            f"misalignment: dX={misalignment.dx_mm:+.3f}mm "
+            f"dY={misalignment.dy_mm:+.3f}mm dRZ={misalignment.orientation_difference_deg:+.2f}deg"
+        )
+        lines.append(
+            f"size misalignment: dW={misalignment.marker_width_difference_mm:+.2f}mm "
+            f"dH={misalignment.marker_height_difference_mm:+.2f}mm"
+        )
     for index, line in enumerate(lines):
         cv2.putText(
             display,
@@ -198,6 +241,25 @@ def _draw_detection(
             2,
             cv2.LINE_AA,
         )
+    button_color = (30, 150, 230) if reference_capture.capturing else (120, 80, 200)
+    cv2.rectangle(
+        display,
+        (reference_button_region.x, reference_button_region.y),
+        (reference_button_region.right - 1, reference_button_region.bottom - 1),
+        button_color,
+        -1,
+    )
+    button_text = "Capturing..." if reference_capture.capturing else "Capture reference"
+    cv2.putText(
+        display,
+        button_text,
+        (reference_button_region.x + 10, reference_button_region.y + 28),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.58,
+        (255, 255, 255),
+        2,
+        cv2.LINE_AA,
+    )
     return display
 
 
@@ -287,6 +349,9 @@ def main(config: StandaloneShaftDetectionConfig = CONFIG) -> int:
     vision.start()
     started_at = time.monotonic()
     previous_status: MarkerDetectionStatus | None = None
+    reference_capture = AlignmentReferenceCapture(
+        runtime_config.reference_capture_samples
+    )
 
     def reset_region_consumers() -> None:
         tracker.reset()
@@ -296,6 +361,7 @@ def main(config: StandaloneShaftDetectionConfig = CONFIG) -> int:
         work_area_region_provider,
         reset_region_consumers,
     )
+    mouse_handler.set_button(PixelRegion(0, 0, 1, 1), reference_capture.start)
 
     if not runtime_config.headless:
         cv2.namedWindow(runtime_config.window_title)
@@ -350,19 +416,32 @@ def main(config: StandaloneShaftDetectionConfig = CONFIG) -> int:
             result = detector.detect(frame, detection_region=detection_region)
             stable_estimate = stabilizer.estimate()
             planar_size = MarkerPlanarSize(False, runtime_config.marker_size_mm)
+            misalignment = AlignmentMisalignment(False, message="Reference not captured.")
             if result.detected:
                 target = next(
                     marker
                     for marker in result.detected_markers
                     if marker.marker_id == marker_config.marker_id
                 )
-                if not tracker.record_detection(target):
+                accepted_by_tracker = tracker.record_detection(target)
+                if not accepted_by_tracker:
                     tracker.record_miss()
                 stable_estimate = stabilizer.record_detection(target)
                 planar_size = coordinate_mapper.measure_planar_size(
                     target.corners_px,
                     runtime_config.marker_size_mm,
                 )
+                sample_position = coordinate_mapper.map_center(target.center_px)
+                if accepted_by_tracker and sample_position.available and planar_size.available:
+                    completed = reference_capture.record(
+                        sample_position.x_mm,
+                        sample_position.y_mm,
+                        target.orientation_deg,
+                        planar_size.width_mm,
+                        planar_size.height_mm,
+                    )
+                    if completed:
+                        print(f"[shaft-marker] reference captured: {reference_capture.reference}")
             elif result.status is MarkerDetectionStatus.MARKER_NOT_FOUND:
                 tracker.record_miss()
                 stable_estimate = stabilizer.record_miss()
@@ -372,6 +451,19 @@ def main(config: StandaloneShaftDetectionConfig = CONFIG) -> int:
                 if stable_estimate.stable and stable_estimate.center_px is not None
                 else MarkerRobotPosition(False, message=stable_estimate.message)
             )
+            if (
+                robot_position.available
+                and stable_estimate.orientation_deg is not None
+                and planar_size.available
+                and not reference_capture.capturing
+            ):
+                misalignment = reference_capture.compare(
+                    robot_position.x_mm,
+                    robot_position.y_mm,
+                    stable_estimate.orientation_deg,
+                    planar_size.width_mm,
+                    planar_size.height_mm,
+                )
 
             next_region = (
                 tracker.region_for_frame(frame_width, frame_height)
@@ -391,6 +483,13 @@ def main(config: StandaloneShaftDetectionConfig = CONFIG) -> int:
                 previous_status = result.status
 
             if not runtime_config.headless and frame is not None:
+                reference_button_region = PixelRegion(
+                    max(0, frame_width - 220),
+                    12,
+                    min(208, frame_width),
+                    42,
+                )
+                mouse_handler.set_button(reference_button_region, reference_capture.start)
                 cv2.imshow(
                     runtime_config.window_title,
                     _draw_detection(
@@ -404,6 +503,9 @@ def main(config: StandaloneShaftDetectionConfig = CONFIG) -> int:
                         draw_robot_coordinates=runtime_config.debug_draw_robot_coordinates,
                         stable_estimate=stable_estimate,
                         planar_size=planar_size,
+                        reference_capture=reference_capture,
+                        misalignment=misalignment,
+                        reference_button_region=reference_button_region,
                         selection_preview=mouse_handler.preview_region,
                     ),
                 )

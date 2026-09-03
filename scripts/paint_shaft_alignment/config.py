@@ -27,6 +27,7 @@ class StandaloneShaftDetectionConfig:
     capture_pose: tuple[float, float, float, float, float, float] = (
         257.75, 215.7, 400.1, -179.2, 0.0, 0.0,
     )
+    reference_capture_samples: int = 30
 
     # Temporary base ROI until it is supplied by the paint_shaft work area.
     base_region_width_px: int = 100
@@ -59,6 +60,8 @@ class StandaloneShaftDetectionConfig:
     def __post_init__(self) -> None:
         if len(self.calibration_pose) != 6 or len(self.capture_pose) != 6:
             raise ValueError("Calibration and capture poses must contain six values")
+        if self.reference_capture_samples <= 0:
+            raise ValueError("Reference capture sample count must be positive")
         if self.orientation_strategy.strip().lower() not in {"compare", "solve_pnp", "corner_edge"}:
             raise ValueError("Unsupported orientation strategy")
         if self.orientation_primary_strategy.strip().lower() not in {"solve_pnp", "corner_edge"}:
