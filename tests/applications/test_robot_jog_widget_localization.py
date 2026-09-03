@@ -38,7 +38,6 @@ class TestRobotJogWidgetLocalization(unittest.TestCase):
         self.assertEqual(widget._tabs.tabText(1), "Стави")
         self.assertEqual(widget._position_title_label.text(), "Текуща позиция")
         self.assertEqual(widget._invert_z_btn.text(), "⇅  Обърни Z")
-        self.assertEqual(widget._mode_label.text(), "Режим:")
         self.assertEqual(widget._step_mode_btn.text(), "Стъпка")
 
     def test_language_change_retranslates_dynamic_mode_labels(self) -> None:

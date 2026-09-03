@@ -580,10 +580,6 @@ class RobotJogWidget(QFrame):
         mode_row.setSpacing(8)
         mode_row.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        self._mode_label = QLabel()
-        self._mode_label.setStyleSheet(f"font-size: 11px; font-weight: 600; color: {TEXT_COLOR};")
-        mode_row.addWidget(self._mode_label)
-
         mode_selector = QFrame()
         mode_selector.setObjectName("JogModeSelector")
         mode_selector.setStyleSheet(f"""
@@ -844,7 +840,6 @@ class RobotJogWidget(QFrame):
         self._rotational_section_label.setText(self._t("Rotational"))
         self._joints_section_label.setText(self._t("Joints"))
         self._invert_z_btn.setText(f"⇅  {self._t('Invert Z')}")
-        self._mode_label.setText(f"{self._t('Mode')}:")
         self._frame_label.setText(f"{self._t('Frame')}:")
         self._step_mode_btn.setText(self._t("Step"))
         self._servo_mode_btn.setText(self._t("Servo"))
