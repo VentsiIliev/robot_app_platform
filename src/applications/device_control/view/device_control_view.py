@@ -4,7 +4,8 @@ from typing import List
 
 from PyQt6.QtCore import pyqtSignal, Qt
 from PyQt6.QtWidgets import (
-    QVBoxLayout, QHBoxLayout, QGroupBox, QPushButton, QLabel, QScrollArea, QTabWidget, QWidget,
+    QVBoxLayout, QHBoxLayout, QGroupBox, QPushButton, QLabel, QLayout,
+    QScrollArea, QTabWidget, QWidget,
 )
 from pl_gui.settings.settings_view.styles import (
     ACTION_BTN_STYLE,
@@ -18,6 +19,7 @@ from pl_gui.settings.settings_view.styles import (
     TAB_WIDGET_STYLE,
     TERTIARY_TEXT,
     TEXT_COLOR,
+    TOUCH_SCROLL_AREA_STYLE,
 )
 from src.applications.base.app_styles import indicator_dot_style
 
@@ -149,6 +151,7 @@ class DeviceControlView(IApplicationView):
             layout = QVBoxLayout(page)
             layout.setContentsMargins(16, 16, 16, 16)
             layout.setSpacing(16)
+            layout.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
 
             heading = QLabel(device.label)
             heading.setStyleSheet(
@@ -235,7 +238,18 @@ class DeviceControlView(IApplicationView):
                 actions_layout.addWidget(action_status)
                 layout.addWidget(actions_box)
             layout.addStretch()
-            self._tabs.addTab(page, device.label)
+            page_scroll = QScrollArea()
+            page_scroll.setWidgetResizable(True)
+            page_scroll.setHorizontalScrollBarPolicy(
+                Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+            )
+            page_scroll.setVerticalScrollBarPolicy(
+                Qt.ScrollBarPolicy.ScrollBarAsNeeded
+            )
+            page_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+            page_scroll.setStyleSheet(TOUCH_SCROLL_AREA_STYLE)
+            page_scroll.setWidget(page)
+            self._tabs.addTab(page_scroll, device.label)
             self._device_tabs[device.key] = page
             self._device_tab_layouts[device.key] = layout
             self._device_state_labels[device.key] = state

@@ -2,12 +2,16 @@ import logging
 import unittest
 from unittest.mock import MagicMock, patch
 
-from PyQt6.QtWidgets import QApplication
+from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QApplication, QLabel, QScrollArea
 
 from src.applications.device_control.controller.device_control_controller import (
     DeviceControlController,
 )
 from src.applications.device_control.view.device_control_view import DeviceControlView
+from src.applications.device_control.dryer.view import DryerControlPanel
+from src.engine.hardware.dryer.models.dryer_config import DryerConfig
+from pl_gui.settings.settings_view.styles import TOUCH_SCROLL_AREA_STYLE
 
 
 class TestDeviceControlController(unittest.TestCase):
@@ -128,6 +132,42 @@ class TestDeviceControlView(unittest.TestCase):
         view.setup_devices([device])
 
         self.assertEqual([], requests)
+
+    def test_device_tab_scrolls_as_one_complete_page(self) -> None:
+        device = MagicMock()
+        device.key = "dryer"
+        device.label = "Dryer"
+        device.is_enabled.return_value = True
+        device.actions.return_value = {}
+        view = DeviceControlView()
+
+        view.setup_devices([device])
+        panel = QLabel("Dryer configuration")
+        view.set_device_panel("dryer", panel)
+
+        page_scroll = view._tabs.widget(0)
+        self.assertIsInstance(page_scroll, QScrollArea)
+        self.assertIs(page_scroll.widget(), view._device_tabs["dryer"])
+        self.assertEqual(page_scroll.styleSheet(), TOUCH_SCROLL_AREA_STYLE)
+        self.assertEqual(
+            page_scroll.verticalScrollBarPolicy(),
+            Qt.ScrollBarPolicy.ScrollBarAsNeeded,
+        )
+        self.assertEqual(panel.parentWidget(), view._device_tabs["dryer"])
+
+    def test_dryer_settings_use_editable_parameter_tables(self) -> None:
+        panel = DryerControlPanel()
+        config = DryerConfig(pwm_open_vrytka=725, acceleration=0.4)
+
+        panel.load_config(config)
+
+        self.assertEqual(panel._register_table.columnCount(), 2)
+        self.assertEqual(panel._timing_table.columnCount(), 2)
+        self.assertEqual(panel._register_table.horizontalHeaderItem(0).text(), "Parameter")
+        self.assertEqual(panel._register_table.horizontalHeaderItem(1).text(), "Value")
+        self.assertEqual(panel.get_values()["pwm_open_vrytka"], 725)
+        self.assertAlmostEqual(panel.get_values()["acceleration"], 0.4)
+        self.assertFalse(hasattr(panel, "_tabs"))
 
 
 if __name__ == "__main__":
