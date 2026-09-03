@@ -27,6 +27,13 @@
       "target_navigation_group": "Magazine",
       "use_height_correction": true,
       "work_area_id": "magazine"
+    },
+    {
+      "name": "vertical_shaft_alignment",
+      "source_navigation_group": "CALIBRATION",
+      "target_navigation_group": "Vertical Shaft Alignment",
+      "use_height_correction": true,
+      "work_area_id": "vertical_shaft_alignment"
     }
   ]
 }

@@ -45,8 +45,8 @@
       "position": "[253.619, 270.066, 247.255, -179.859, -0.015, -0.030]"
     },
     "Vertical Shaft Alignment": {
-      "velocity": 0,
-      "acceleration": 0,
+      "velocity": 10,
+      "acceleration": 30,
       "motion_type": "ptp",
       "iterations": 1,
       "has_iterations": false,
