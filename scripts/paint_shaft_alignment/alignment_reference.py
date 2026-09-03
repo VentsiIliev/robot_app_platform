@@ -77,7 +77,11 @@ class AlignmentReferenceCapture:
     def reference(self) -> AlignmentReference | None:
         return self._reference
 
-    def start(self) -> None:
+    def start(self, required_samples: int | None = None) -> None:
+        if required_samples is not None:
+            if required_samples <= 0:
+                raise ValueError("Reference sample count must be positive")
+            self._required_samples = int(required_samples)
         self._samples.clear()
         self._reference = None
         self._capturing = True

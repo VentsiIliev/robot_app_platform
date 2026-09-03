@@ -57,6 +57,15 @@ class AlignmentReferenceCaptureTests(unittest.TestCase):
         self.assertIsNone(capture.reference)
         self.assertEqual(0, capture.sample_count)
 
+    def test_start_can_change_sample_count_for_next_capture(self):
+        capture = AlignmentReferenceCapture(required_samples=30)
+
+        capture.start(required_samples=2)
+
+        self.assertEqual(2, capture.required_samples)
+        self.assertFalse(capture.record(1.0, 2.0, 3.0, 11.0, 11.0))
+        self.assertTrue(capture.record(1.0, 2.0, 3.0, 11.0, 11.0))
+
 
 if __name__ == "__main__":
     unittest.main()

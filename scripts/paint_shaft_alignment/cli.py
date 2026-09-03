@@ -62,6 +62,37 @@ class _MisalignmentThresholdControls:
         pass
 
 
+class _ReferenceCaptureControls:
+    """Control the sample count used by the next baseline capture."""
+
+    _TRACKBAR_NAME = "Baseline samples"
+    _MAXIMUM_SAMPLES = 200
+
+    def __init__(
+        self,
+        window_title: str,
+        capture: AlignmentReferenceCapture,
+        initial_samples: int,
+    ) -> None:
+        self._window_title = window_title
+        self._capture = capture
+        cv2.createTrackbar(
+            self._TRACKBAR_NAME,
+            window_title,
+            min(max(1, int(initial_samples)), self._MAXIMUM_SAMPLES),
+            self._MAXIMUM_SAMPLES,
+            self._on_change,
+        )
+
+    def start_capture(self) -> None:
+        selected = cv2.getTrackbarPos(self._TRACKBAR_NAME, self._window_title)
+        self._capture.start(max(1, selected))
+
+    @staticmethod
+    def _on_change(_value: int) -> None:
+        pass
+
+
 class _DetectionRegionMouseHandler:
     """Translates OpenCV mouse gestures into base-region selections."""
 
@@ -405,7 +436,6 @@ def main(config: StandaloneShaftDetectionConfig = CONFIG) -> int:
         work_area_region_provider,
         reset_region_consumers,
     )
-    mouse_handler.set_button(PixelRegion(0, 0, 1, 1), reference_capture.start)
     thresholds = MisalignmentThresholds(
         dx_mm=runtime_config.misalignment_dx_threshold_mm,
         dy_mm=runtime_config.misalignment_dy_threshold_mm,
@@ -414,6 +444,7 @@ def main(config: StandaloneShaftDetectionConfig = CONFIG) -> int:
         marker_height_mm=runtime_config.misalignment_dh_threshold_mm,
     )
     threshold_controls = None
+    reference_controls = None
 
     if not runtime_config.headless:
         cv2.namedWindow(runtime_config.window_title)
@@ -421,6 +452,15 @@ def main(config: StandaloneShaftDetectionConfig = CONFIG) -> int:
         threshold_controls = _MisalignmentThresholdControls(
             runtime_config.window_title,
             thresholds,
+        )
+        reference_controls = _ReferenceCaptureControls(
+            runtime_config.window_title,
+            reference_capture,
+            runtime_config.reference_capture_samples,
+        )
+        mouse_handler.set_button(
+            PixelRegion(0, 0, 1, 1),
+            reference_controls.start_capture,
         )
 
     print(
@@ -549,7 +589,10 @@ def main(config: StandaloneShaftDetectionConfig = CONFIG) -> int:
                     min(208, frame_width),
                     42,
                 )
-                mouse_handler.set_button(reference_button_region, reference_capture.start)
+                mouse_handler.set_button(
+                    reference_button_region,
+                    reference_controls.start_capture,
+                )
                 cv2.imshow(
                     runtime_config.window_title,
                     _draw_detection(
