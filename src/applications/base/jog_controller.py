@@ -140,6 +140,10 @@ class JogController:
         self._view      = view
         self._service   = jog_service
         self._messaging = messaging
+        # Cartesian jog commands must retain submission order. In particular, a
+        # quick servo press/release must never let the stop run before the start.
+        self._jog_pool = QThreadPool()
+        self._jog_pool.setMaxThreadCount(1)
         self._bridge    = _Bridge(view, self._apply_frame_options)
         self._subs      = []
         view.jog_requested.connect(self._on_jog)
@@ -220,9 +224,11 @@ class JogController:
         set_options([], default="")
 
     def _on_jog(self, command: str, axis: str, direction: str, step: float) -> None:
-        QThreadPool.globalInstance().start(
-            _FireAndForget(partial(self._service.jog, command, axis, direction, step))
-        )
+        task = _FireAndForget(partial(self._service.jog, command, axis, direction, step))
+        if command == "SERVO_JOG":
+            self._jog_pool.start(task)
+            return
+        QThreadPool.globalInstance().start(task)
 
     def _on_joint_jog(self, command: str, joint: str, direction: str, step: float) -> None:
         QThreadPool.globalInstance().start(
@@ -231,4 +237,4 @@ class JogController:
 
     def _on_jog_stop(self, _key: str) -> None:
         _logger.debug("jog stop: %s", _key)
-        QThreadPool.globalInstance().start(_FireAndForget(self._service.stop_jog))
+        self._jog_pool.start(_FireAndForget(self._service.stop_jog))
