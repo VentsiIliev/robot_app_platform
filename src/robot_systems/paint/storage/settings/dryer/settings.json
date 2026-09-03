@@ -1,7 +1,7 @@
 {
-  "pwm_open_vrytka": 600,
+  "pwm_open_vrytka": 650,
   "pwm_close_vrytka": 180,
-  "pwm_open_izbutvatel": 600,
+  "pwm_open_izbutvatel": 650,
   "pwm_close_izbutvatel": 180,
   "time_delay_move_servo_up": 150,
   "time_delay_move_servo_down": 150,
