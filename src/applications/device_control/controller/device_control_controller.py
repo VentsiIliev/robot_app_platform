@@ -35,11 +35,19 @@ class _DeviceUiRelay(QObject):
 class DeviceControlController(IApplicationController, BackgroundWorker):
     _FAILED_ENABLE_ROLLBACK_MS = 500
 
-    def __init__(self, model: DeviceControlModel, view: DeviceControlView) -> None:
+    def __init__(
+        self,
+        model: DeviceControlModel,
+        view: DeviceControlView,
+        dryer_view=None,
+        dryer_controller=None,
+    ) -> None:
         BackgroundWorker.__init__(self)
         self._model  = model
         self._view   = view
         self._logger = logging.getLogger(self.__class__.__name__)
+        self._dryer_view = dryer_view
+        self._dryer_controller = dryer_controller
         self._device_poll_in_flight = False
         self._device_action_in_flight = False
         self._pending_device_enabled: dict[str, bool] = {}
@@ -67,6 +75,10 @@ class DeviceControlController(IApplicationController, BackgroundWorker):
 
     def load(self) -> None:
         self._view.setup_devices(self._model.get_devices())
+        if self._dryer_view is not None:
+            self._view.set_device_panel("dryer", self._dryer_view)
+        if self._dryer_controller is not None:
+            self._dryer_controller.load()
         motors = self._model.get_motors()
         self._view.setup_motors(motors)
 
@@ -86,6 +98,8 @@ class DeviceControlController(IApplicationController, BackgroundWorker):
     def stop(self) -> None:
         self._device_stopped = True
         self._device_executor.shutdown(wait=False, cancel_futures=True)
+        if self._dryer_controller is not None:
+            self._dryer_controller.stop()
         self._stop_threads()
 
     # ── Laser ─────────────────────────────────────────────────────────

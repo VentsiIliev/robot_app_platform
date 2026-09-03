@@ -32,10 +32,8 @@ ETHERCAT_DIAGNOSTICS_APP = False
 # Configures Modbus communication and tests connections to Modbus devices.
 MODBUS_SETTINGS_APP = True
 
-# Configures the dryer and provides access to its live controller settings.
-DRYER_SETTINGS_APP = True
-
-# Provides manual control and status for configured peripheral devices.
+# Provides manual control and status for configured peripherals, including
+# dryer configuration and test operations in the Dryer tab.
 DEVICE_CONTROL_APP = True
 
 # Configures vision work areas, including their regions of interest.
