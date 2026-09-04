@@ -177,7 +177,15 @@ class TestPaintDashboardUi(unittest.TestCase):
         self.assertFalse(drawer._pass_2_velocity.isEnabled())
         drawer._pass_2_use_first.setChecked(False)
         self.assertTrue(drawer._pass_2_velocity.isEnabled())
-        self.assertEqual(drawer._settings_payload()["pass_2"]["offset_mm"], -2.0)
+        self.assertEqual(3, len(drawer._pass_2_rows))
+        offset_plus = next(
+            button for button in drawer._unmatched_step_buttons
+            if button.property("field_id") == "pass_2_offset"
+            and button.property("step_direction") == 1.0
+        )
+        offset_plus.click()
+        self.assertAlmostEqual(-1.9, drawer._pass_2_offset.value())
+        self.assertAlmostEqual(drawer._settings_payload()["pass_2"]["offset_mm"], -1.9)
 
     def test_info_card_displays_configured_placeholder_content(self) -> None:
         card = PaintInfoCard("Paint", "Running", "Current state")
