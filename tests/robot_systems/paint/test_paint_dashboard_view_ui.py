@@ -21,6 +21,9 @@ from src.robot_systems.paint.applications.dashboard.ui.paint_info_card import (
 from src.robot_systems.paint.applications.dashboard.ui.paint_quick_controls_panel import (
     PaintQuickControlsPanel,
 )
+from src.robot_systems.paint.applications.dashboard.ui.paint_quick_access_panel import (
+    PaintQuickAccessPanel,
+)
 from src.robot_systems.paint.applications.dashboard.ui.paint_plate_layout import (
     PaintPlateLayout,
     _PlateCanvas,
@@ -91,6 +94,83 @@ class _FakeDashboardWidget(QWidget):
 
 
 class TestPaintDashboardUi(unittest.TestCase):
+    def test_combined_speed_control_maps_speed_to_velocity_and_acceleration(self) -> None:
+        drawer = PaintControlsDrawer([], use_combined_speed_control=True)
+        drawer._unmatched_velocity.setValue(80.0)
+        drawer._pass_2_use_first.setChecked(False)
+        drawer._pass_2_velocity.setValue(50.0)
+
+        payload = drawer._settings_payload()
+
+        self.assertEqual(drawer._unmatched_velocity.minimum(), 1.0)
+        self.assertEqual(drawer._unmatched_velocity_label.text(), "Speed")
+        self.assertTrue(drawer._unmatched_acceleration_label.isHidden())
+        self.assertEqual(payload["pass_1"]["velocity_percent"], 80.0)
+        self.assertEqual(payload["pass_1"]["acceleration_percent"], 64.0)
+        self.assertEqual(payload["pass_2"]["velocity_percent"], 50.0)
+        self.assertEqual(payload["pass_2"]["acceleration_percent"], 25.0)
+
+    def test_separate_velocity_and_acceleration_controls_remain_configurable(self) -> None:
+        drawer = PaintControlsDrawer([], use_combined_speed_control=False)
+        drawer._unmatched_velocity.setValue(80.0)
+        drawer._unmatched_acceleration.setValue(37.0)
+
+        payload = drawer._settings_payload()
+
+        self.assertFalse(drawer._unmatched_acceleration_label.isHidden())
+        self.assertEqual(payload["pass_1"]["velocity_percent"], 80.0)
+        self.assertEqual(payload["pass_1"]["acceleration_percent"], 37.0)
+
+    def test_camera_quick_controls_use_the_same_combined_speed_mapping(self) -> None:
+        panel = PaintQuickControlsPanel([], use_combined_speed_control=True)
+        callback = MagicMock()
+        panel.unmatched_paint_settings_requested.connect(callback)
+        panel._velocity.setValue(80.0)
+
+        panel._apply.click()
+
+        payload = callback.call_args.args[0]
+        self.assertEqual(panel._velocity.minimum(), 1.0)
+        self.assertEqual(panel._velocity_label.text(), "Speed")
+        self.assertEqual(payload["pass_1"]["velocity_percent"], 80.0)
+        self.assertEqual(payload["pass_1"]["acceleration_percent"], 64.0)
+
+    def test_quick_access_pump_is_off_only_while_fan_remains_toggleable(self) -> None:
+        panel = PaintQuickAccessPanel([
+            AuxiliaryToggleConfig("pump", "Vacuum Pump"),
+            AuxiliaryToggleConfig("fan", "Fan"),
+        ])
+        callback = MagicMock()
+        panel.device_toggle_requested.connect(callback)
+
+        panel.set_device_state("pump", True)
+        self.assertFalse(panel._buttons["pump"].isCheckable())
+        self.assertEqual(panel._buttons["pump"].text(), "Vacuum Pump: OFF")
+        panel._buttons["pump"].click()
+        callback.assert_called_once_with("pump", False)
+
+        callback.reset_mock()
+        self.assertTrue(panel._buttons["fan"].isCheckable())
+        panel._buttons["fan"].click()
+        callback.assert_called_once_with("fan", True)
+
+    def test_quick_access_new_tray_is_visible_only_in_tray_dry_mode(self) -> None:
+        panel = PaintQuickAccessPanel([])
+        callback = MagicMock()
+        panel.new_tray_requested.connect(callback)
+
+        panel.set_drying_mode("auto")
+        self.assertFalse(panel._new_tray.isVisible())
+
+        panel.set_drying_mode("manual")
+        self.assertFalse(panel._new_tray.isHidden())
+        self.assertEqual(panel._drying_mode_button.text(), "Tray Dry")
+        panel._new_tray.click()
+        callback.assert_called_once_with()
+
+        panel.set_drying_mode("demo")
+        self.assertTrue(panel._new_tray.isHidden())
+
     def test_tray_selection_shows_painted_time_and_live_drying_duration(self) -> None:
         tray = PaintPlateLayout()
         tray.set_state({
@@ -172,6 +252,7 @@ class TestPaintDashboardUi(unittest.TestCase):
         self.assertIsNone(view._quick_controls)
         self.assertIsNone(view._controls_drawer)
         self.assertIsNotNone(view._quick_access)
+        self.assertTrue(view._plate_layout._new_tray.isHidden())
         top_section = view._dashboard.layout_manager.main_layout.itemAt(0).layout()
         status_column = top_section.itemAt(top_section.count() - 1).widget()
         self.assertEqual(

@@ -24,8 +24,15 @@ class PaintQuickControlsPanel(QWidget):
     cable_relief_requested = pyqtSignal()
     drying_mode_requested = pyqtSignal(str)
 
-    def __init__(self, toggle_configs: list, parent=None) -> None:
+    def __init__(
+        self,
+        toggle_configs: list,
+        *,
+        use_combined_speed_control: bool = False,
+        parent=None,
+    ) -> None:
         super().__init__(parent)
+        self._use_combined_speed_control = bool(use_combined_speed_control)
         self._device_states = {item.device_id: False for item in toggle_configs}
         self._off_buttons: dict[str, QPushButton] = {}
         self._step_buttons: list[QPushButton] = []
@@ -53,9 +60,13 @@ class PaintQuickControlsPanel(QWidget):
         settings_grid.setContentsMargins(0, 0, 0, 0)
         settings_grid.setHorizontalSpacing(10)
         settings_grid.setVerticalSpacing(6)
-        self._add_field_row(settings_grid, 0, "velocity", self._velocity_label, self._velocity)
-        self._add_field_row(settings_grid, 1, "acceleration", self._acceleration_label, self._acceleration)
+        self._velocity_row = self._add_field_row(settings_grid, 0, "velocity", self._velocity_label, self._velocity)
+        self._acceleration_row = self._add_field_row(settings_grid, 1, "acceleration", self._acceleration_label, self._acceleration)
         self._add_field_row(settings_grid, 2, "offset", self._offset_label, self._offset)
+        if self._use_combined_speed_control:
+            self._velocity.setMinimum(1.0)
+            self._acceleration_label.hide()
+            self._acceleration_row.hide()
         settings_grid.setColumnStretch(1, 1)
         box_layout.addLayout(settings_grid)
 
@@ -102,7 +113,7 @@ class PaintQuickControlsPanel(QWidget):
         field.setMinimumHeight(44)
         return field
 
-    def _add_field_row(self, grid, row: int, field_id: str, label: QLabel, field) -> None:
+    def _add_field_row(self, grid, row: int, field_id: str, label: QLabel, field) -> QWidget:
         label.setMinimumWidth(95)
         grid.addWidget(label, row, 0)
         controls = QWidget()
@@ -114,6 +125,7 @@ class PaintQuickControlsPanel(QWidget):
         controls_layout.addWidget(field, 1)
         controls_layout.addWidget(self._make_step_button(field_id, 1.0, "+"))
         grid.addWidget(controls, row, 1)
+        return controls
 
     def _make_step_button(self, field_id: str, direction: float, text: str) -> QPushButton:
         button = QPushButton(text)
@@ -142,10 +154,11 @@ class PaintQuickControlsPanel(QWidget):
             field.setValue(value)
 
     def _on_apply(self) -> None:
+        speed = self._velocity.value()
         self.unmatched_paint_settings_requested.emit(
             {
                 "pass_count": int(self._unmatched_settings.get("pass_count", 1)),
-                "pass_1": {"velocity_percent": self._velocity.value(), "acceleration_percent": self._acceleration.value(), "offset_mm": self._offset.value()},
+                "pass_1": {"velocity_percent": speed, "acceleration_percent": speed * speed / 100.0 if self._use_combined_speed_control else self._acceleration.value(), "offset_mm": self._offset.value()},
                 "pass_2": dict(self._unmatched_settings.get("pass_2") or {"use_pass_1_settings": True}),
             }
         )
@@ -171,7 +184,7 @@ class PaintQuickControlsPanel(QWidget):
     def _update_drying_mode_text(self) -> None:
         text = {
             "auto": self.tr("Auto Dry"),
-            "manual": self.tr("Manual Dry"),
+            "manual": self.tr("Tray Dry"),
             "demo": self.tr("Demo Alternate"),
         }[self._drying_mode]
         self._drying_mode_button.setText(text)
@@ -206,7 +219,9 @@ class PaintQuickControlsPanel(QWidget):
 
     def retranslateUi(self) -> None:
         # self._box.setTitle(self.tr("Quick Paint Controls"))
-        self._velocity_label.setText(self.tr("Velocity"))
+        self._velocity_label.setText(
+            self.tr("Speed") if self._use_combined_speed_control else self.tr("Velocity")
+        )
         self._acceleration_label.setText(self.tr("Acceleration"))
         self._offset_label.setText(self.tr("Press Offset"))
         self._apply.setText(self.tr("Apply"))

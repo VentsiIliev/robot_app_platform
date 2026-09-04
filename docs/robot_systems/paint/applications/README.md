@@ -54,6 +54,9 @@ Primary responsibility:
 - retain each committed tray workpiece's painted timestamp and show a live drying duration while that workpiece is selected
 - retain pass count and per-pass velocity, acceleration, and press-offset metadata; show only the pass count in the current tray UI
 - select tray workpieces with a single press instead of a press-and-hold gesture
+- keep the Quick Controls vacuum-pump action OFF-only while retaining the fan's ON/OFF toggle
+- label manual drying as Tray Dry and show its New Tray action in Quick Controls only while that mode is active
+- optionally replace separate paint velocity/acceleration inputs with Speed (1–100), mapping velocity to Speed and acceleration to Speed²/100 while preserving the existing service payload
 - expose the independently addressed tray fan in the Device Control application
 - show the shared plate-layout state in manual drying mode, including committed and pending workpieces
 - allow stopped-state operators to confirm a new tray or press-and-hold a committed workpiece to remove it
@@ -74,6 +77,16 @@ The expanded Paint Settings tab uses a compact composition: Number of Passes
 and Process Scaling share one row, and each pass places Velocity,
 Acceleration, and Press Offset together in one row. The camera-enabled drawer
 retains its original vertical composition.
+
+`PaintDashboardUiConfig.allow_running_paint_settings_updates` controls whether
+paint passes, per-pass Speed/velocity/acceleration/press offset, and process
+acceleration scaling remain editable while the process is running or paused.
+The paint-system switch is
+`paint_system_config.ALLOW_RUNNING_PAINT_SETTINGS_UPDATES`. When enabled, saves
+are persisted immediately but the active workpiece keeps its immutable settings
+snapshot; the updated settings are captured at the start of the next workpiece
+cycle. When disabled, the previous stopped-state-only editing behavior is kept.
+Drying-mode and tray-state edits remain locked during an active process.
 
 Drying-mode selection only persists the requested workflow mode; it does not
 gate navigation through Auto/Manual/Demo on live dryer availability. Automatic

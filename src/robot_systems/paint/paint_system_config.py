@@ -22,6 +22,14 @@ PAINT_DASHBOARD_APP = True
 # process buttons expand to the available width.
 SHOW_DASHBOARD_CAMERA_PREVIEW = False
 
+# Replace separate paint velocity/acceleration inputs with Speed (1..100).
+# Velocity remains Speed, while acceleration is calculated as Speed² / 100.
+USE_COMBINED_PAINT_SPEED_CONTROL = True
+
+# Allow pass settings and process acceleration scaling to be saved while the
+# process runs. Each update is captured at the start of the next workpiece cycle.
+ALLOW_RUNNING_PAINT_SETTINGS_UPDATES = True
+
 # Lists saved workpieces and provides actions for managing the library.
 WORKPIECE_LIBRARY_APP = False
 

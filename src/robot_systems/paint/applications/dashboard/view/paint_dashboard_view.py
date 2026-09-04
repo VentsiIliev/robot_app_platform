@@ -307,6 +307,8 @@ class PaintDashboardView(IApplicationView):
                 self._quick_access.drying_mode_requested.connect(
                     self.drying_mode_requested
                 )
+                self._quick_access.new_tray_requested.connect(self._on_new_tray)
+                self._plate_layout.set_new_tray_button_visible(False)
                 top_section.insertWidget(1, self._quick_access)
         except (AttributeError, RuntimeError):
             self._preview_stack = None
@@ -320,6 +322,7 @@ class PaintDashboardView(IApplicationView):
             show_acceleration_scale_control=self._ui_config.show_acceleration_scale_control,
             show_shortcuts=self._ui_config.show_application_shortcuts,
             compact_layout=not self._ui_config.show_camera_preview,
+            use_combined_speed_control=self._ui_config.use_combined_paint_speed_control,
         )
         if self._ui_config.show_camera_preview:
             self._controls_drawer = DrawerToggle(
@@ -367,7 +370,12 @@ class PaintDashboardView(IApplicationView):
             bottom_layout = bottom_container.layout()
             action_area = bottom_layout.itemAt(0).widget()
             action_layout = action_area.layout()
-            self._quick_controls = PaintQuickControlsPanel(self._auxiliary_toggles)
+            self._quick_controls = PaintQuickControlsPanel(
+                self._auxiliary_toggles,
+                use_combined_speed_control=(
+                    self._ui_config.use_combined_paint_speed_control
+                ),
+            )
             action_layout.addWidget(self._quick_controls, 0, 0)
             self._quick_controls.unmatched_paint_settings_requested.connect(
                 self._on_quick_unmatched_paint_settings
@@ -823,14 +831,17 @@ class PaintDashboardView(IApplicationView):
         self.set_pause_enabled(state.can_pause)
         self.set_pause_label(state.pause_label)
         self.set_action_enabled("reset_errors", state.process_state == "error")
-        self.set_unmatched_paint_settings_editable(
-            state.process_state in ("idle", "stopped", "error")
+        settings_editable = (
+            self._ui_config.allow_running_paint_settings_updates
+            or state.process_state in ("idle", "stopped", "error")
         )
-        self.set_acceleration_scale_editable(
-            state.process_state in ("idle", "stopped", "error")
-        )
+        self.set_unmatched_paint_settings_editable(settings_editable)
+        self.set_acceleration_scale_editable(settings_editable)
         if self._plate_layout is not None:
-            self._plate_layout.set_editable(state.process_state in ("idle", "stopped", "error"))
+            tray_editable = state.process_state in ("idle", "stopped", "error")
+            self._plate_layout.set_editable(tray_editable)
+            if self._quick_access is not None:
+                self._quick_access.set_new_tray_enabled(tray_editable)
 
     @staticmethod
     def _state_signature(state) -> tuple:

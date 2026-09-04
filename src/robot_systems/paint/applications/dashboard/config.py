@@ -22,6 +22,8 @@ class PaintDashboardUiConfig:
     show_acceleration_scale_control: bool = True
     show_bottom_quick_controls: bool = True
     show_camera_preview: bool = True
+    use_combined_paint_speed_control: bool = False
+    allow_running_paint_settings_updates: bool = False
     show_application_shortcuts: bool = False
     shortcut_application_names: tuple[str, ...] = ()
 

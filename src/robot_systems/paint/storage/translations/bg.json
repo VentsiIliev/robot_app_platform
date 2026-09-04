@@ -3,7 +3,6 @@
     "display_name": "Български"
   },
   "PaintPlateLayout": {
-    "Manual Dryer Tray": "Тава за ръчно сушене",
     "Press a workpiece to select it": "Натиснете детайл, за да го изберете",
     "New Tray": "Нова тава",
     "Remove": "Премахване",
@@ -16,8 +15,9 @@
     "Quick Controls": "Бързи команди",
     "Relieve Cable": "Освобождаване на кабела",
     "Auto Dry": "Автоматично сушене",
-    "Manual Dry": "Ръчно сушене",
+    "Tray Dry": "Сушене в тава",
     "Demo Alternate": "Демо редуване",
+    "New Tray": "Нова тава",
     "Vacuum Pump": "Вакуумна помпа",
     "Fan": "Вентилатор",
     "ON": "ВКЛ.",
@@ -40,6 +40,7 @@
     "Pass 2": "Преминаване 2",
     "Use Pass 1 settings": "Използвай настройките от преминаване 1",
     "Velocity": "Скорост",
+    "Speed": "Скорост",
     "Acceleration": "Ускорение",
     "Press Offset": "Отместване на притискане",
     "Used only when workpiece matching is off.": "Използва се само когато съпоставянето на детайли е изключено.",
@@ -50,11 +51,15 @@
     "ON": "ВКЛ.",
     "OFF": "ИЗКЛ.",
     "Application Shortcuts": "Преки пътища към приложения",
-    "Other": "Други"
+    "Other": "Други",
+    "Auto Dry": "Автоматично сушене",
+    "Tray Dry": "Сушене в тава",
+    "Demo Alternate": "Демо редуване"
   },
   "PaintQuickControlsPanel": {
     "Quick Paint Controls": "Бързи контроли за боядисване",
     "Velocity": "Скорост",
+    "Speed": "Скорост",
     "Acceleration": "Ускорение",
     "Press Offset": "Отместване на притискане",
     "Apply": "Приложи",
@@ -63,7 +68,7 @@
     "OFF": "ИЗКЛ.",
     "Relieve Cable (Unwind J6)": "Освободи кабела (развий J6)",
     "Auto Dry": "Автоматично сушене",
-    "Manual Dry": "Ръчно сушене",
+    "Tray Dry": "Сушене в тава",
     "Demo Alternate": "Демо редуване"
   },
   "PaintDashboard": {
