@@ -173,6 +173,18 @@ class PaintRobotSystem(BaseRobotSystem):
         use_combined_paint_speed_control=(
             paint_system_config.USE_COMBINED_PAINT_SPEED_CONTROL
         ),
+        combined_paint_speed_minimum_percent=(
+            paint_system_config.COMBINED_PAINT_SPEED_MINIMUM_PERCENT
+        ),
+        combined_paint_speed_maximum_percent=(
+            paint_system_config.COMBINED_PAINT_SPEED_MAXIMUM_PERCENT
+        ),
+        combined_paint_acceleration_minimum_percent=(
+            paint_system_config.COMBINED_PAINT_ACCELERATION_MINIMUM_PERCENT
+        ),
+        combined_paint_acceleration_maximum_percent=(
+            paint_system_config.COMBINED_PAINT_ACCELERATION_MAXIMUM_PERCENT
+        ),
         show_resolved_paint_speed_values=(
             paint_system_config.SHOW_RESOLVED_PAINT_SPEED_VALUES
         ),

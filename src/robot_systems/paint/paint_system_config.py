@@ -26,6 +26,15 @@ SHOW_DASHBOARD_CAMERA_PREVIEW = False
 # Velocity remains Speed, while acceleration is calculated as Speed² / 100.
 USE_COMBINED_PAINT_SPEED_CONTROL = True
 
+# Map UI Speed 1..100 onto this internal Velocity minimum..100. With 10,
+# UI Speed 1 resolves like the previous Speed 10 (Velocity 10, Acceleration 1).
+COMBINED_PAINT_SPEED_MINIMUM_PERCENT = 10.0
+COMBINED_PAINT_SPEED_MAXIMUM_PERCENT = 100.0
+
+# Independently map UI Speed 1..100 onto this curved acceleration range.
+COMBINED_PAINT_ACCELERATION_MINIMUM_PERCENT = 1.0
+COMBINED_PAINT_ACCELERATION_MAXIMUM_PERCENT = 100.0
+
 # Testing aid: show the Velocity and Acceleration percentages derived from Speed.
 # This has no effect when USE_COMBINED_PAINT_SPEED_CONTROL is False.
 SHOW_RESOLVED_PAINT_SPEED_VALUES = True

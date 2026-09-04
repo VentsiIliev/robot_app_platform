@@ -93,6 +93,14 @@ Drying-mode and tray-state edits remain locked during an active process.
 `paint_system_config.SHOW_RESOLVED_PAINT_SPEED_VALUES`, displays the live
 Velocity and Acceleration values derived from each combined Speed input. It is
 ignored when combined Speed control is disabled.
+`PaintDashboardUiConfig.combined_paint_speed_minimum_percent`, configured by
+`paint_system_config.COMBINED_PAINT_SPEED_MINIMUM_PERCENT`, linearly maps the UI
+Speed range 1–100 onto that internal Velocity minimum through 100. For example,
+a velocity minimum of 10 makes UI Speed 1 resolve to Velocity 10. Velocity and
+acceleration each have independent minimum and maximum settings. Velocity is
+linearly interpolated; acceleration preserves the curved response by linearly
+interpolating its square root and squaring the result. With acceleration bounds
+1–100, UI Speed 1 resolves to Acceleration 1 and UI Speed 100 resolves to 100.
 
 Drying-mode selection only persists the requested workflow mode; it does not
 gate navigation through Auto/Manual/Demo on live dryer availability. Automatic

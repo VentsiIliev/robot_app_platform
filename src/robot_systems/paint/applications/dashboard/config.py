@@ -23,6 +23,10 @@ class PaintDashboardUiConfig:
     show_bottom_quick_controls: bool = True
     show_camera_preview: bool = True
     use_combined_paint_speed_control: bool = False
+    combined_paint_speed_minimum_percent: float = 1.0
+    combined_paint_speed_maximum_percent: float = 100.0
+    combined_paint_acceleration_minimum_percent: float = 0.01
+    combined_paint_acceleration_maximum_percent: float = 100.0
     show_resolved_paint_speed_values: bool = False
     allow_running_paint_settings_updates: bool = False
     show_application_shortcuts: bool = False
