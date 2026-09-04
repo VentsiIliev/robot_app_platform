@@ -113,6 +113,23 @@ class TestPaintDashboardUi(unittest.TestCase):
         panel._buttons["fan"].click()
         callback.assert_called_once_with("fan", True)
 
+    def test_quick_access_new_tray_is_visible_only_in_tray_dry_mode(self) -> None:
+        panel = PaintQuickAccessPanel([])
+        callback = MagicMock()
+        panel.new_tray_requested.connect(callback)
+
+        panel.set_drying_mode("auto")
+        self.assertFalse(panel._new_tray.isVisible())
+
+        panel.set_drying_mode("manual")
+        self.assertFalse(panel._new_tray.isHidden())
+        self.assertEqual(panel._drying_mode_button.text(), "Tray Dry")
+        panel._new_tray.click()
+        callback.assert_called_once_with()
+
+        panel.set_drying_mode("demo")
+        self.assertTrue(panel._new_tray.isHidden())
+
     def test_tray_selection_shows_painted_time_and_live_drying_duration(self) -> None:
         tray = PaintPlateLayout()
         tray.set_state({
@@ -194,6 +211,7 @@ class TestPaintDashboardUi(unittest.TestCase):
         self.assertIsNone(view._quick_controls)
         self.assertIsNone(view._controls_drawer)
         self.assertIsNotNone(view._quick_access)
+        self.assertTrue(view._plate_layout._new_tray.isHidden())
         top_section = view._dashboard.layout_manager.main_layout.itemAt(0).layout()
         status_column = top_section.itemAt(top_section.count() - 1).widget()
         self.assertEqual(

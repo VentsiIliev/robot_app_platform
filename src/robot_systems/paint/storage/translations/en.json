@@ -3,7 +3,6 @@
     "display_name": "English"
   },
   "PaintPlateLayout": {
-    "Manual Dryer Tray": "Manual Dryer Tray",
     "Press a workpiece to select it": "Press a workpiece to select it",
     "New Tray": "New Tray",
     "Remove": "Remove",
@@ -16,8 +15,9 @@
     "Quick Controls": "Quick Controls",
     "Relieve Cable": "Relieve Cable",
     "Auto Dry": "Auto Dry",
-    "Manual Dry": "Manual Dry",
+    "Tray Dry": "Tray Dry",
     "Demo Alternate": "Demo Alternate",
+    "New Tray": "New Tray",
     "Vacuum Pump": "Vacuum Pump",
     "Fan": "Fan",
     "ON": "ON",
@@ -50,7 +50,10 @@
     "ON": "ON",
     "OFF": "OFF",
     "Application Shortcuts": "Application Shortcuts",
-    "Other": "Other"
+    "Other": "Other",
+    "Auto Dry": "Auto Dry",
+    "Tray Dry": "Tray Dry",
+    "Demo Alternate": "Demo Alternate"
   },
   "PaintQuickControlsPanel": {
     "Quick Paint Controls": "Quick Paint Controls",
@@ -63,7 +66,7 @@
     "OFF": "OFF",
     "Relieve Cable (Unwind J6)": "Relieve Cable (Unwind J6)",
     "Auto Dry": "Auto Dry",
-    "Manual Dry": "Manual Dry",
+    "Tray Dry": "Tray Dry",
     "Demo Alternate": "Demo Alternate"
   },
   "PaintDashboard": {

@@ -307,6 +307,8 @@ class PaintDashboardView(IApplicationView):
                 self._quick_access.drying_mode_requested.connect(
                     self.drying_mode_requested
                 )
+                self._quick_access.new_tray_requested.connect(self._on_new_tray)
+                self._plate_layout.set_new_tray_button_visible(False)
                 top_section.insertWidget(1, self._quick_access)
         except (AttributeError, RuntimeError):
             self._preview_stack = None
@@ -830,7 +832,10 @@ class PaintDashboardView(IApplicationView):
             state.process_state in ("idle", "stopped", "error")
         )
         if self._plate_layout is not None:
-            self._plate_layout.set_editable(state.process_state in ("idle", "stopped", "error"))
+            tray_editable = state.process_state in ("idle", "stopped", "error")
+            self._plate_layout.set_editable(tray_editable)
+            if self._quick_access is not None:
+                self._quick_access.set_new_tray_enabled(tray_editable)
 
     @staticmethod
     def _state_signature(state) -> tuple:

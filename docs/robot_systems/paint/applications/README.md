@@ -55,6 +55,7 @@ Primary responsibility:
 - retain pass count and per-pass velocity, acceleration, and press-offset metadata; show only the pass count in the current tray UI
 - select tray workpieces with a single press instead of a press-and-hold gesture
 - keep the Quick Controls vacuum-pump action OFF-only while retaining the fan's ON/OFF toggle
+- label manual drying as Tray Dry and show its New Tray action in Quick Controls only while that mode is active
 - expose the independently addressed tray fan in the Device Control application
 - show the shared plate-layout state in manual drying mode, including committed and pending workpieces
 - allow stopped-state operators to confirm a new tray or press-and-hold a committed workpiece to remove it

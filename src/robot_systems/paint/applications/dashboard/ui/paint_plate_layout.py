@@ -173,15 +173,12 @@ class PaintPlateLayout(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         header = QHBoxLayout()
-        self._title = QLabel()
-        self._title.setStyleSheet(LABEL_STYLE)
         self._hint = QLabel()
         self._hint.setStyleSheet(LABEL_STYLE)
         self._new_tray = QPushButton()
         self._new_tray.setStyleSheet(ACTION_BTN_STYLE)
         self._new_tray.setCursor(Qt.CursorShape.PointingHandCursor)
         self._new_tray.clicked.connect(self._on_new_tray)
-        header.addWidget(self._title)
         header.addStretch()
         header.addWidget(self._new_tray)
         layout.addLayout(header)
@@ -215,6 +212,9 @@ class PaintPlateLayout(QWidget):
     def set_editable(self, editable: bool) -> None:
         self._new_tray.setEnabled(editable)
         self._remove.setEnabled(editable)
+
+    def set_new_tray_button_visible(self, visible: bool) -> None:
+        self._new_tray.setVisible(bool(visible))
 
     def clear_selection(self) -> None:
         self._selected_id = None
@@ -278,7 +278,6 @@ class PaintPlateLayout(QWidget):
             self.remove_requested.emit(self._selected_id)
 
     def retranslateUi(self) -> None:
-        self._title.setText(self.tr("Manual Dryer Tray"))
         if self._selected_id is None:
             self._hint.setText(self.tr("Press a workpiece to select it"))
         else:

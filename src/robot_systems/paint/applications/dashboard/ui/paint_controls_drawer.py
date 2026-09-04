@@ -559,7 +559,7 @@ class PaintControlsDrawer(QWidget):
     def _render_drying_mode(self) -> None:
         text = {
             "auto": self.tr("Auto Dry"),
-            "manual": self.tr("Manual Dry"),
+            "manual": self.tr("Tray Dry"),
             "demo": self.tr("Demo Alternate"),
         }[self._drying_mode]
         self._drying_mode_button.setText(text)

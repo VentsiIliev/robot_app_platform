@@ -12,6 +12,7 @@ class PaintQuickAccessPanel(QWidget):
     device_toggle_requested = pyqtSignal(str, bool)
     cable_relief_requested = pyqtSignal()
     drying_mode_requested = pyqtSignal(str)
+    new_tray_requested = pyqtSignal()
 
     def __init__(self, toggle_configs: list, parent=None) -> None:
         super().__init__(parent)
@@ -41,6 +42,11 @@ class PaintQuickAccessPanel(QWidget):
         self._cable_relief = self._button()
         self._cable_relief.clicked.connect(self._on_cable_relief)
         self._layout.addWidget(self._cable_relief)
+        self._new_tray = self._button()
+        self._new_tray.setStyleSheet(ACTION_BTN_STYLE)
+        self._new_tray.clicked.connect(self._on_new_tray)
+        self._new_tray.hide()
+        self._layout.addWidget(self._new_tray)
         self._layout.addStretch(1)
         root.addWidget(self._box, 1)
         self.retranslateUi()
@@ -63,9 +69,13 @@ class PaintQuickAccessPanel(QWidget):
     def _on_cable_relief(self) -> None:
         self.cable_relief_requested.emit()
 
+    def _on_new_tray(self) -> None:
+        self.new_tray_requested.emit()
+
     def set_drying_mode(self, mode: str) -> None:
         normalized = str(mode).lower()
         self._drying_mode = normalized if normalized in {"auto", "manual", "demo"} else "auto"
+        self._new_tray.setVisible(self._drying_mode == "manual")
         self._render_drying_mode()
 
     def set_drying_mode_busy(self, busy: bool) -> None:
@@ -92,9 +102,13 @@ class PaintQuickAccessPanel(QWidget):
     def set_cable_relief_busy(self, busy: bool) -> None:
         self._cable_relief.setEnabled(not busy)
 
+    def set_new_tray_enabled(self, enabled: bool) -> None:
+        self._new_tray.setEnabled(enabled)
+
     def retranslateUi(self) -> None:
         self._box.setTitle(self.tr("Quick Controls"))
         self._cable_relief.setText(self.tr("Relieve Cable"))
+        self._new_tray.setText(self.tr("New Tray"))
         self._render_drying_mode()
         for config in self._configs:
             self._render_device(config.device_id)
@@ -102,7 +116,7 @@ class PaintQuickAccessPanel(QWidget):
     def _render_drying_mode(self) -> None:
         text = {
             "auto": self.tr("Auto Dry"),
-            "manual": self.tr("Manual Dry"),
+            "manual": self.tr("Tray Dry"),
             "demo": self.tr("Demo Alternate"),
         }[self._drying_mode]
         self._drying_mode_button.setText(text)
