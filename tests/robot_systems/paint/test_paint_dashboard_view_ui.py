@@ -96,6 +96,20 @@ class TestPaintDashboardUi(unittest.TestCase):
         self.assertAlmostEqual((canvas.width() - plate.width()) / 2.0, plate.left())
         self.assertAlmostEqual((canvas.height() - plate.height()) / 2.0, plate.top())
 
+    def test_portrait_tray_and_workpieces_are_rotated_together_for_display(self) -> None:
+        canvas = _PlateCanvas()
+        canvas.resize(600, 300)
+        plate = canvas._scaled_plate_rect(50.0, 200.0)
+
+        bottom_left = canvas._to_canvas_point(0.0, 0.0, 50.0, 200.0, plate)
+        top_left = canvas._to_canvas_point(0.0, 200.0, 50.0, 200.0, plate)
+        bottom_right = canvas._to_canvas_point(50.0, 0.0, 50.0, 200.0, plate)
+
+        self.assertAlmostEqual(4.0, plate.width() / plate.height())
+        self.assertLess(bottom_left.x(), top_left.x())
+        self.assertAlmostEqual(bottom_left.y(), top_left.y())
+        self.assertLess(bottom_left.y(), bottom_right.y())
+
     def test_camera_disabled_uses_expanded_settings_and_tray_tabs(self) -> None:
         view = PaintDashboardView(
             config=PaintDashboardConfig(),
