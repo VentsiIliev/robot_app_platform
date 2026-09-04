@@ -139,6 +139,8 @@ class TestPaintDashboardUi(unittest.TestCase):
         self.assertIsNone(view._quick_controls)
         self.assertIsNone(view._controls_drawer)
         self.assertIsNotNone(view._quick_access)
+        bottom_container = view._dashboard.layout_manager.main_layout.itemAt(1).widget()
+        self.assertEqual(bottom_container.height(), 300)
         reset_button = view._dashboard._action_buttons["reset_errors"]
         self.assertIs(view._quick_access._reset_errors_button, reset_button)
         self.assertIs(reset_button.parent(), view._quick_access._box)

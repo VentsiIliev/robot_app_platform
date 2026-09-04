@@ -49,6 +49,7 @@ _CONTROLS_DRAWER_WIDTH = 400
 _MESSAGE_DRAWER_HANDLE_CLEARANCE = 38
 _PROCESS_CONTROLS_TOP_MARGIN = 19
 _PROCESS_CONTROLS_BOTTOM_MARGIN = 5
+_EXPANDED_PROCESS_SECTION_HEIGHT = 300
 _PROCESS_CONTROLS_PANEL_STYLE = f"""
 QFrame#paintProcessControlsPanel {{
     background-color: white;
@@ -525,6 +526,8 @@ class PaintDashboardView(IApplicationView):
         try:
             main_layout = self._dashboard.layout_manager.main_layout
             bottom_container = main_layout.itemAt(1).widget()
+            if not self._ui_config.show_camera_preview:
+                bottom_container.setFixedHeight(_EXPANDED_PROCESS_SECTION_HEIGHT)
             bottom_layout = bottom_container.layout()
             action_area = bottom_layout.itemAt(0).widget()
             controls = bottom_layout.itemAt(1).widget()
