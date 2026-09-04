@@ -68,6 +68,32 @@ class TestPlateLayoutDropoff(unittest.TestCase):
         self.assertEqual(5, len(outlines[0]))
         self.assertGreater(len(set(outlines[0])), 4)
 
+    def test_workpiece_outline_orientation_is_independent_of_contour_order(self) -> None:
+        points = [
+            [0.0, 0.0],
+            [40.0, 0.0],
+            [40.0, 10.0],
+            [20.0, 20.0],
+            [0.0, 10.0],
+        ]
+        forward_plan = MagicMock()
+        forward_plan.execution_paths.return_value = [points]
+        reverse_plan = MagicMock()
+        reverse_plan.execution_paths.return_value = [[
+            [x + 100.0, y + 50.0] for x, y in reversed(points)
+        ]]
+
+        _, _, forward_outlines = _workpiece_layout_geometry(forward_plan)
+        _, _, reverse_outlines = _workpiece_layout_geometry(reverse_plan)
+
+        normalized_forward = {
+            (round(x, 4), round(y, 4)) for x, y in forward_outlines[0]
+        }
+        normalized_reverse = {
+            (round(x, 4), round(y, 4)) for x, y in reverse_outlines[0]
+        }
+        self.assertEqual(normalized_forward, normalized_reverse)
+
     def test_automatic_center_route_is_used_inside_half_corner_to_center_radius(self) -> None:
         dropoff = SimpleNamespace(
             plate_use_center_waypoint=False,

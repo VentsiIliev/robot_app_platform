@@ -44,11 +44,13 @@ Primary responsibility:
 
 - display paint-process state and operator-facing runtime status
 - show the live camera preview in automatic/demo drying modes
-- place the Reset action in the always-visible Quick Controls column when the camera preview is disabled, allowing the message panel to use the freed status-column space
+- place Start, Pause, and Reset on the first process-control row when the camera preview is disabled, while Stop spans the full second row
+- give Start, Pause, and Reset equal one-third widths regardless of their label size
 - reduce the camera-disabled process-control section to 300 px so the settings/tray and status area receives more vertical space
 - let the camera-disabled status column and message panel expand to the full Quick Controls height
 - route the dashboard Fan control to the standard fan in Auto/Demo drying modes and to the tray fan in Manual Dry mode
 - display the selected fan's actual output-register state after switching drying modes instead of its communication-health state
+- normalize tray workpiece axes to a stable robot-coordinate direction so identical physical orientations cannot render 180 degrees apart
 - expose the independently addressed tray fan in the Device Control application
 - show the shared plate-layout state in manual drying mode, including committed and pending workpieces
 - allow stopped-state operators to confirm a new tray or press-and-hold a committed workpiece to remove it

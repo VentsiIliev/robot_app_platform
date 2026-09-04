@@ -249,7 +249,7 @@ class PaintDashboardView(IApplicationView):
         self._install_manual_plate_layout()
         self._align_preview_and_card_columns()
         self._install_message_panel()
-        self._move_reset_below_cards()
+        self._place_reset_action()
         self._install_bottom_quick_controls()
         self._expand_process_controls()
 
@@ -511,13 +511,23 @@ class PaintDashboardView(IApplicationView):
                 widget.setParent(None)
                 widget.deleteLater()
 
-    def _move_reset_below_cards(self) -> None:
+    def _place_reset_action(self) -> None:
         try:
             reset_button = self._dashboard._action_buttons.get("reset_errors")
             if reset_button is None:
                 return
             if self._quick_access is not None:
-                self._quick_access.add_reset_errors_button(reset_button)
+                controls = self._dashboard.control_buttons
+                top_frame = controls.layout().itemAt(0).widget()
+                top_layout = top_frame.layout()
+                top_layout.addWidget(reset_button)
+                for index, button in enumerate(
+                    (controls.start_btn, controls.pause_btn, reset_button)
+                ):
+                    policy = button.sizePolicy()
+                    policy.setHorizontalPolicy(QSizePolicy.Policy.Ignored)
+                    button.setSizePolicy(policy)
+                    top_layout.setStretch(index, 1)
                 return
             reset_button.setFixedHeight(52)
             main_layout = self._dashboard.layout_manager.main_layout
