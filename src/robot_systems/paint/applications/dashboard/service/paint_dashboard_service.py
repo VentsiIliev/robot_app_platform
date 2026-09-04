@@ -272,14 +272,14 @@ class PaintDashboardService(IPaintDashboardService):
             if device is None:
                 continue
             try:
-                # The dashboard state controls button availability, not whether
-                # the output is currently ON.  Raw fan/pump read_state() values
-                # are active-state booleans, so using them here disabled the OFF
-                # button whenever the device was correctly switched off.
-                health_getter = getattr(device, "is_healthy", None)
-                states[device_id] = bool(health_getter()) if callable(health_getter) else True
+                read_state = getattr(device, "read_state", None)
+                states[device_id] = bool(read_state()) if callable(read_state) else False
             except Exception:
                 self._logger.exception("Could not read %s state", device_id)
+                # Do not leave a stale ON indication after a mode change or a
+                # failed hardware read. Command availability is managed by the
+                # view's busy state, independently of this displayed value.
+                states[device_id] = False
         return states
 
     def set_auxiliary_enabled(self, device_id: str, enabled: bool) -> DashboardCommandResult:
