@@ -220,7 +220,7 @@ def _workpiece_layout_geometry(
     # direction in robot coordinates so asymmetric workpieces are never shown
     # rotated by 180 degrees from their physical orientation.
     dominant_index = int(np.argmax(np.abs(long_axis)))
-    if long_axis[dominant_index] < 0.0:
+    if long_axis[dominant_index] > 0.0:
         long_axis = -long_axis
     short_axis = np.asarray([-long_axis[1], long_axis[0]], dtype=np.float32)
     projected = np.column_stack((xy @ long_axis, xy @ short_axis))
