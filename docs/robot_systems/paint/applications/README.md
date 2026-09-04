@@ -60,8 +60,8 @@ controls are omitted, and Start/Pause/Stop use the full bottom width. Drying
 mode, pump, fan, and cable-relief actions remain immediately accessible in a
 dedicated column between the settings/tray area and the status cards.
 The expanded Paint Settings tab uses a compact composition: Number of Passes
-and Process Scaling share one row, and each pass places Velocity and
-Acceleration side by side with Press Offset below. The camera-enabled drawer
+and Process Scaling share one row, and each pass places Velocity,
+Acceleration, and Press Offset together in one row. The camera-enabled drawer
 retains its original vertical composition.
 
 Drying-mode selection only persists the requested workflow mode; it does not
