@@ -48,6 +48,7 @@ Primary responsibility:
 - reduce the camera-disabled process-control section to 300 px so the settings/tray and status area receives more vertical space
 - let the camera-disabled status column and message panel expand to the full Quick Controls height
 - route the dashboard Fan control to the standard fan in Auto/Demo drying modes and to the tray fan in Manual Dry mode
+- display the selected fan's actual output-register state after switching drying modes instead of its communication-health state
 - expose the independently addressed tray fan in the Device Control application
 - show the shared plate-layout state in manual drying mode, including committed and pending workpieces
 - allow stopped-state operators to confirm a new tray or press-and-hold a committed workpiece to remove it

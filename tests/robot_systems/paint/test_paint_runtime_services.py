@@ -39,6 +39,39 @@ from src.robot_systems.paint.processes.robot_calibration_process import (
 
 
 class TestPaintDashboardService(unittest.TestCase):
+    def test_auxiliary_state_reads_active_manual_tray_fan_output(self) -> None:
+        process = MagicMock(process_id="paint")
+        process.state = ProcessState.IDLE
+        fan = MagicMock()
+        fan.read_state.return_value = True
+        tray_fan = MagicMock()
+        tray_fan.read_state.return_value = False
+        config_service = MagicMock()
+        config_service.get_snapshot.return_value = PaintProcessConfig(
+            dropoff=PaintDropoffConfig(strategy="plate_layout")
+        )
+        service = PaintDashboardService(
+            process,
+            fan_control=fan,
+            tray_fan_control=tray_fan,
+            paint_process_config_service=config_service,
+        )
+
+        states = service.get_auxiliary_states()
+
+        self.assertFalse(states["fan"])
+        tray_fan.read_state.assert_called_once_with()
+        fan.read_state.assert_not_called()
+
+    def test_failed_auxiliary_state_read_clears_stale_on_indication(self) -> None:
+        process = MagicMock(process_id="paint")
+        process.state = ProcessState.IDLE
+        fan = MagicMock()
+        fan.read_state.side_effect = OSError("offline")
+        service = PaintDashboardService(process, fan_control=fan)
+
+        self.assertFalse(service.get_auxiliary_states()["fan"])
+
     def test_fan_control_routes_to_tray_fan_in_manual_drying_mode(self) -> None:
         process = MagicMock(process_id="paint")
         process.state = ProcessState.IDLE
