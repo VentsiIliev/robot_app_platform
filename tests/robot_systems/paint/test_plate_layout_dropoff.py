@@ -15,6 +15,7 @@ from src.robot_systems.paint.processes.paint.plate_layout import (
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.workflow.pickup_handler import (
     _should_preplan_dropoff_in_ordered_chain,
     _workpiece_footprint_mm,
+    _workpiece_layout_geometry,
 )
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handlers import (
     _execute_plate_layout_preparation,
@@ -48,6 +49,24 @@ class TestPlateLayoutDropoff(unittest.TestCase):
 
         self.assertAlmostEqual(60.0, width)
         self.assertAlmostEqual(20.0, height)
+
+    def test_workpiece_layout_geometry_preserves_normalized_outline(self) -> None:
+        execution_plan = MagicMock()
+        execution_plan.execution_paths.return_value = [[
+            [0.0, 0.0],
+            [40.0, 0.0],
+            [40.0, 10.0],
+            [20.0, 20.0],
+            [0.0, 10.0],
+        ]]
+
+        width, height, outlines = _workpiece_layout_geometry(execution_plan)
+
+        self.assertAlmostEqual(40.0, width)
+        self.assertAlmostEqual(20.0, height)
+        self.assertEqual(1, len(outlines))
+        self.assertEqual(5, len(outlines[0]))
+        self.assertGreater(len(set(outlines[0])), 4)
 
     def test_automatic_center_route_is_used_inside_half_corner_to_center_radius(self) -> None:
         dropoff = SimpleNamespace(

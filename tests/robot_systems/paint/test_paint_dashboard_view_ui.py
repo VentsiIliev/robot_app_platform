@@ -5,6 +5,8 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QTabBar
 from PyQt6.QtWidgets import QApplication, QLabel, QWidget
 
 from pl_gui.dashboard.config import CardConfig
@@ -96,6 +98,18 @@ class TestPaintDashboardUi(unittest.TestCase):
         self.assertEqual(view._expanded_tabs.count(), 2)
         self.assertIs(view._expanded_tabs.widget(0), view._controls_widget)
         self.assertIs(view._expanded_tabs.widget(1), view._plate_layout)
+        self.assertEqual(view._expanded_tabs.tabText(0), "")
+        self.assertEqual(view._expanded_tabs.tabText(1), "")
+        self.assertEqual(view._expanded_tabs.tabToolTip(0), "Paint Settings")
+        self.assertEqual(view._expanded_tabs.tabToolTip(1), "Tray")
+        for index in (0, 1):
+            icon_label = view._expanded_tabs.tabBar().tabButton(
+                index,
+                QTabBar.ButtonPosition.LeftSide,
+            )
+            self.assertIsInstance(icon_label, QLabel)
+            self.assertFalse(icon_label.pixmap().isNull())
+            self.assertEqual(icon_label.alignment(), Qt.AlignmentFlag.AlignCenter)
         self.assertIsNone(view._quick_controls)
         self.assertIsNone(view._controls_drawer)
         self.assertIsNotNone(view._quick_access)

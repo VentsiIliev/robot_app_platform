@@ -3,8 +3,8 @@ from __future__ import annotations
 from collections import deque
 from datetime import datetime
 
-from PyQt6.QtCore import QCoreApplication, Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QPixmap
+from PyQt6.QtCore import QCoreApplication, QSize, Qt, QTimer, pyqtSignal
+from PyQt6.QtGui import QIcon, QPixmap
 from PyQt6.QtWidgets import (
     QDialog,
     QFrame,
@@ -12,6 +12,7 @@ from PyQt6.QtWidgets import (
     QLabel,
     QScrollArea,
     QStackedWidget,
+    QTabBar,
     QTabWidget,
     QVBoxLayout,
     QWidget,
@@ -21,7 +22,14 @@ from src.applications.base.i_application_view import IApplicationView
 from src.applications.base.styled_message_box import ask_yes_no
 from src.applications.base.drawer_toggle import DrawerToggle
 from pl_gui.dashboard.DashboardWidget import DashboardWidget
-from pl_gui.settings.settings_view.styles import BG_COLOR, BORDER, PRIMARY, TEXT_COLOR
+from pl_gui.settings.settings_view.styles import (
+    BG_COLOR,
+    BORDER,
+    PRIMARY,
+    TAB_WIDGET_STYLE,
+    TEXT_COLOR,
+)
+from pl_gui.shell.ui.icon_loader import load_icon
 from src.robot_systems.paint.applications.dashboard.ui.paint_controls_drawer import (
     PaintControlsDrawer,
 )
@@ -52,6 +60,14 @@ _PROCESS_CONTROLS_CONTENT_STYLE = """
 QWidget#paintProcessControls {
     background-color: transparent;
     border: none;
+}
+"""
+_EXPANDED_ICON_TAB_STYLE = TAB_WIDGET_STYLE + """
+QTabBar::tab {
+    min-width: 72px;
+    max-width: 72px;
+    min-height: 64px;
+    padding: 0;
 }
 """
 _MESSAGE_PANEL_STYLE = f"""
@@ -261,8 +277,21 @@ class PaintDashboardView(IApplicationView):
             else:
                 camera.hide()
                 self._expanded_tabs = QTabWidget()
-                self._expanded_tabs.addTab(QWidget(), self._translate_text("Paint Settings"))
-                self._expanded_tabs.addTab(self._plate_layout, self._translate_text("Tray"))
+                self._expanded_tabs.setStyleSheet(_EXPANDED_ICON_TAB_STYLE)
+                self._expanded_tabs.setIconSize(QSize(36, 36))
+                self._expanded_tabs.addTab(
+                    QWidget(),
+                    load_icon("fa5s.sliders-h", color=PRIMARY),
+                    "",
+                )
+                self._expanded_tabs.addTab(
+                    self._plate_layout,
+                    load_icon("fa5s.th", color=PRIMARY),
+                    "",
+                )
+                self._center_expanded_tab_icon(0, "fa5s.sliders-h")
+                self._center_expanded_tab_icon(1, "fa5s.th")
+                self._retranslate_expanded_tabs()
                 preview_layout.insertWidget(0, self._expanded_tabs)
                 self._quick_access = PaintQuickAccessPanel(self._auxiliary_toggles)
                 self._quick_access.setMinimumWidth(220)
@@ -303,8 +332,11 @@ class PaintDashboardView(IApplicationView):
             self._expanded_tabs.insertTab(
                 0,
                 self._controls_widget,
-                self._translate_text("Paint Settings"),
+                load_icon("fa5s.sliders-h", color=PRIMARY),
+                "",
             )
+            self._center_expanded_tab_icon(0, "fa5s.sliders-h")
+            self._retranslate_expanded_tabs()
         self._controls_widget.cable_relief_requested.connect(self.cable_relief_requested)
         self._controls_widget.device_toggle_requested.connect(self.auxiliary_toggle_requested)
         self._controls_widget.application_shortcut_requested.connect(
@@ -832,13 +864,39 @@ class PaintDashboardView(IApplicationView):
         if self._quick_access is not None:
             self._quick_access.retranslateUi()
         if self._expanded_tabs is not None:
-            self._expanded_tabs.setTabText(0, self._translate_text("Paint Settings"))
-            self._expanded_tabs.setTabText(1, self._translate_text("Tray"))
+            self._retranslate_expanded_tabs()
         self._last_card_states.clear()
         self._last_state_signature = None
         if self._last_state is not None:
             self.apply_dashboard_state(self._last_state)
         self._render_messages()
+
+    def _retranslate_expanded_tabs(self) -> None:
+        if self._expanded_tabs is None or self._expanded_tabs.count() < 2:
+            return
+        labels = (
+            self._translate_text("Paint Settings"),
+            self._translate_text("Tray"),
+        )
+        for index, label in enumerate(labels):
+            self._expanded_tabs.setTabText(index, "")
+            self._expanded_tabs.setTabToolTip(index, label)
+            self._expanded_tabs.widget(index).setAccessibleName(label)
+
+    def _center_expanded_tab_icon(self, index: int, icon_name: str) -> None:
+        if self._expanded_tabs is None:
+            return
+        icon_label = QLabel(self._expanded_tabs.tabBar())
+        icon_label.setFixedSize(72, 64)
+        icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        icon_label.setStyleSheet("background: transparent; border: none;")
+        icon_label.setPixmap(load_icon(icon_name, color=PRIMARY).pixmap(QSize(36, 36)))
+        self._expanded_tabs.setTabIcon(index, QIcon())
+        self._expanded_tabs.tabBar().setTabButton(
+            index,
+            QTabBar.ButtonPosition.LeftSide,
+            icon_label,
+        )
 
     @staticmethod
     def _translate_text(text: str) -> str:

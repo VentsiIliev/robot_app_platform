@@ -113,7 +113,7 @@ def _reserve_plate_dropoff(ctx, executor, pickup_plan) -> tuple[bool, str]:
     align_pose = getattr(motion_plan, "align_pose", None)
     if align_pose is None or len(align_pose) < 6:
         return False, "Plate-layout dropoff could not resolve workpiece orientation at calibration"
-    width_mm, height_mm = _workpiece_footprint_mm(ctx.execution_plan)
+    width_mm, height_mm, outlines_mm = _workpiece_layout_geometry(ctx.execution_plan)
 
     magazine = ctx.magazine_config or getattr(ctx.process_config, "magazine_load", None)
     group_id = str(getattr(magazine, "calibration_group_id", "CALIBRATION") or "CALIBRATION")
@@ -130,6 +130,7 @@ def _reserve_plate_dropoff(ctx, executor, pickup_plan) -> tuple[bool, str]:
         calibration_pose=list(calibration_pose),
         workpiece_rz_at_calibration_deg=float(align_pose[5]),
         pose_calculator=calculate_workpiece_dropoff_pose,
+        outlines_mm=outlines_mm,
     )
     if reservation is None:
         return False, message
@@ -145,21 +146,44 @@ def _reserve_plate_dropoff(ctx, executor, pickup_plan) -> tuple[bool, str]:
 
 def _workpiece_footprint_mm(execution_plan) -> tuple[float, float]:
     """Return canonical min-rectangle sides as long-side width and short-side height."""
-    points = [
-        pose[:2]
+    width, height, _outlines = _workpiece_layout_geometry(execution_plan)
+    return width, height
+
+
+def _workpiece_layout_geometry(
+    execution_plan,
+) -> tuple[float, float, tuple[tuple[tuple[float, float], ...], ...]]:
+    """Return footprint and execution paths projected into its local rectangle."""
+    paths = [
+        [pose[:2] for pose in path if len(pose) >= 2]
         for path in execution_plan.execution_paths()
-        for pose in path
-        if len(pose) >= 2
     ]
+    paths = [path for path in paths if path]
+    points = [point for path in paths for point in path]
     if len(points) < 3:
-        return 0.0, 0.0
+        return 0.0, 0.0, ()
     xy = np.asarray(points, dtype=np.float32)
     if not np.all(np.isfinite(xy)):
-        return 0.0, 0.0
+        return 0.0, 0.0, ()
     import cv2
-    _, size, _ = cv2.minAreaRect(np.ascontiguousarray(xy.reshape(-1, 1, 2)))
-    side_a, side_b = float(size[0]), float(size[1])
-    return max(side_a, side_b), min(side_a, side_b)
+    rectangle = cv2.boxPoints(cv2.minAreaRect(np.ascontiguousarray(xy.reshape(-1, 1, 2))))
+    edges = [rectangle[(index + 1) % 4] - rectangle[index] for index in range(4)]
+    long_axis = max(edges, key=lambda edge: float(np.linalg.norm(edge)))
+    long_axis = long_axis / np.linalg.norm(long_axis)
+    short_axis = np.asarray([-long_axis[1], long_axis[0]], dtype=np.float32)
+    projected = np.column_stack((xy @ long_axis, xy @ short_axis))
+    minimum = projected.min(axis=0)
+    projected -= minimum
+    width, height = projected.max(axis=0)
+    outlines = []
+    offset = 0
+    for path in paths:
+        count = len(path)
+        outlines.append(tuple(
+            (float(x), float(y)) for x, y in projected[offset:offset + count]
+        ))
+        offset += count
+    return float(width), float(height), tuple(outlines)
 
 
 @timed_step(_logger, "ordered_pickup_paint_contact_chain")

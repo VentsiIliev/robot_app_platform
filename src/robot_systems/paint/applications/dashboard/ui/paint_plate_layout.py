@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from PyQt6.QtCore import QEvent, QRectF, Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QColor, QPainter, QPen
+from PyQt6.QtCore import QEvent, QPointF, QRectF, Qt, QTimer, pyqtSignal
+from PyQt6.QtGui import QColor, QPainter, QPen, QPolygonF
 from PyQt6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from pl_gui.settings.settings_view.styles import (
@@ -80,7 +80,22 @@ class _PlateCanvas(QWidget):
         if pending:
             fill.setAlpha(55)
         painter.setBrush(fill)
-        painter.drawRoundedRect(rect, 5, 5)
+        outlines = item.get("outlines_mm") or ()
+        if outlines:
+            for outline in outlines:
+                polygon = QPolygonF([
+                    QPointF(
+                        plate.left() + (float(item["left_mm"]) + float(x)) / width * plate.width(),
+                        plate.bottom() - (float(item["bottom_mm"]) + float(y)) / height * plate.height(),
+                    )
+                    for x, y in outline
+                ])
+                if len(polygon) >= 3:
+                    painter.drawPolygon(polygon)
+                elif len(polygon) == 2:
+                    painter.drawPolyline(polygon)
+        else:
+            painter.drawRoundedRect(rect, 5, 5)
         painter.setPen(QColor(TEXT_COLOR if pending else TEXT_ON_PRIMARY))
         painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, str(placement_id))
 
