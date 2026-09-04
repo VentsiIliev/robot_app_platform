@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QTabBar
-from PyQt6.QtWidgets import QApplication, QLabel, QWidget
+from PyQt6.QtWidgets import QApplication, QLabel, QSizePolicy, QWidget
 
 from pl_gui.dashboard.config import CardConfig
 from src.robot_systems.paint.applications.dashboard.dashboard_state import DashboardCardState, DashboardState
@@ -139,6 +139,13 @@ class TestPaintDashboardUi(unittest.TestCase):
         self.assertIsNone(view._quick_controls)
         self.assertIsNone(view._controls_drawer)
         self.assertIsNotNone(view._quick_access)
+        top_section = view._dashboard.layout_manager.main_layout.itemAt(0).layout()
+        status_column = top_section.itemAt(top_section.count() - 1).widget()
+        self.assertEqual(
+            status_column.sizePolicy().verticalPolicy(),
+            QSizePolicy.Policy.Expanding,
+        )
+        self.assertGreater(status_column.maximumHeight(), 458)
         bottom_container = view._dashboard.layout_manager.main_layout.itemAt(1).widget()
         self.assertEqual(bottom_container.height(), 300)
         reset_button = view._dashboard._action_buttons["reset_errors"]
