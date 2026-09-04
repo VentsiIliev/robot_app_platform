@@ -268,7 +268,10 @@ class PaintDashboardView(IApplicationView):
             preview_layout = preview_container.layout()
             camera = self._dashboard.trajectory_widget
             preview_layout.removeWidget(camera)
-            self._plate_layout = PaintPlateLayout()
+            self._plate_layout = PaintPlateLayout(
+                use_dry_duration=self._ui_config.use_tray_dry_duration,
+                drying_duration_minutes=self._ui_config.tray_dry_duration_minutes,
+            )
             self._plate_layout.new_tray_requested.connect(self._on_new_tray)
             self._plate_layout.remove_requested.connect(self._on_remove_plate_placement)
             if self._ui_config.show_camera_preview:

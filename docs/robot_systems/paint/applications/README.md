@@ -52,6 +52,7 @@ Primary responsibility:
 - display the selected fan's actual output-register state after switching drying modes instead of its communication-health state
 - normalize tray workpiece axes to a stable reversed robot-coordinate direction so identical physical orientations render consistently in the desired dashboard direction
 - retain each committed tray workpiece's painted timestamp and show a live drying duration while that workpiece is selected
+- optionally show a Tray Dry duration control and recolor workpieces when their painted timestamp reaches the configured duration
 - retain pass count and per-pass velocity, acceleration, and press-offset metadata; show only the pass count in the current tray UI
 - select tray workpieces with a single press instead of a press-and-hold gesture
 - keep the Quick Controls vacuum-pump action OFF-only while retaining the fan's ON/OFF toggle
