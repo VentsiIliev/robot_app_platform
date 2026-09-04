@@ -269,6 +269,7 @@ class TestPaintDashboardUi(unittest.TestCase):
 
         self.assertIn("Painted at: 11:30:15", tray._hint.text())
         self.assertIn("Drying for: 1m 5s", tray._hint.text())
+        self.assertEqual(tray._selected_drying_value.text(), "1m 5s")
         self.assertIn("Passes: 2", tray._hint.text())
         self.assertTrue(tray._drying_timer.isActive())
 
@@ -280,8 +281,11 @@ class TestPaintDashboardUi(unittest.TestCase):
         )
 
         self.assertTrue(disabled._drying_duration_box.isHidden())
+        self.assertTrue(disabled._selected_drying_box.isHidden())
         self.assertIsNone(disabled._canvas._drying_duration_seconds)
         self.assertFalse(enabled._drying_duration_box.isHidden())
+        self.assertFalse(enabled._selected_drying_box.isHidden())
+        self.assertEqual(enabled._selected_drying_value.text(), "—")
         self.assertEqual(enabled._canvas._drying_duration_seconds, 15 * 60)
         enabled.set_editable(False, removal_editable=True)
         self.assertFalse(enabled._new_tray.isEnabled())

@@ -9,8 +9,10 @@
     "Painted at": "Боядисан в",
     "Drying for": "Съхне от",
     "Drying Duration": "Продължителност на сушене",
+    "Selected Drying Time": "Време за сушене на избрания детайл",
     "Passes": "Преминавания",
-    "Drying time is unavailable": "Времето за сушене не е налично"
+    "Drying time is unavailable": "Времето за сушене не е налично",
+    "Unavailable": "Не е налично"
   },
   "PaintQuickAccessPanel": {
     "Quick Controls": "Бързи команди",

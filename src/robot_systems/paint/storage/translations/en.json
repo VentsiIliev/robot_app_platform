@@ -9,8 +9,10 @@
     "Painted at": "Painted at",
     "Drying for": "Drying for",
     "Drying Duration": "Drying Duration",
+    "Selected Drying Time": "Selected Drying Time",
     "Passes": "Passes",
-    "Drying time is unavailable": "Drying time is unavailable"
+    "Drying time is unavailable": "Drying time is unavailable",
+    "Unavailable": "Unavailable"
   },
   "PaintQuickAccessPanel": {
     "Quick Controls": "Quick Controls",
