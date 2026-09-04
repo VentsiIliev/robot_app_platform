@@ -123,11 +123,19 @@ class TestPaintDashboardUi(unittest.TestCase):
         self.assertFalse(drawer._pass_1_resolved_speed.isHidden())
         self.assertEqual(
             drawer._pass_1_resolved_speed.text(),
-            "Velocity: 80.0%  ·  Acceleration: 64.0%",
+            "Velocity: 80.0%  ·  Acceleration: 64.00%",
         )
         self.assertEqual(
             drawer._pass_2_resolved_speed.text(),
-            "Velocity: 50.0%  ·  Acceleration: 25.0%",
+            "Velocity: 50.0%  ·  Acceleration: 25.00%",
+        )
+
+        drawer._unmatched_velocity.setValue(1.0)
+        payload = drawer._settings_payload()
+        self.assertEqual(payload["pass_1"]["acceleration_percent"], 0.01)
+        self.assertEqual(
+            drawer._pass_1_resolved_speed.text(),
+            "Velocity: 1.0%  ·  Acceleration: 0.01%",
         )
 
     def test_resolved_speed_values_stay_hidden_without_combined_control(self) -> None:
@@ -175,7 +183,7 @@ class TestPaintDashboardUi(unittest.TestCase):
 
         self.assertEqual(
             panel._resolved_speed.text(),
-            "Velocity: 80.0%  ·  Acceleration: 64.0%",
+            "Velocity: 80.0%  ·  Acceleration: 64.00%",
         )
 
     def test_quick_access_pump_is_off_only_while_fan_remains_toggleable(self) -> None:

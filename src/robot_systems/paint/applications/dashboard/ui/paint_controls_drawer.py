@@ -444,7 +444,7 @@ class PaintControlsDrawer(QWidget):
     def _resolved_speed_text(self, speed: float) -> str:
         return (
             f"{self.tr('Velocity')}: {float(speed):.1f}%  ·  "
-            f"{self.tr('Acceleration')}: {self._derived_acceleration(speed):.1f}%"
+            f"{self.tr('Acceleration')}: {self._derived_acceleration(speed):.2f}%"
         )
 
     def _on_pass_count_changed(self, count: int) -> None:
