@@ -18,7 +18,7 @@
   "default_paint_velocity_percent": 100.0,
   "default_paint_acceleration_percent": 100.0,
   "paint_process_acceleration_scale_percent": 100.0,
-  "default_paint_offset_mm": -16.6,
+  "default_paint_offset_mm": 0.0,
   "unmatched_paint_pass_count": 1,
   "unmatched_second_pass": {
     "use_pass_1_settings": true,
