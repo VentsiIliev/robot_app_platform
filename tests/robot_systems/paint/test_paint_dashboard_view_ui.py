@@ -20,6 +20,7 @@ from src.robot_systems.paint.applications.dashboard.ui.paint_info_card import (
 from src.robot_systems.paint.applications.dashboard.ui.paint_quick_controls_panel import (
     PaintQuickControlsPanel,
 )
+from src.robot_systems.paint.applications.dashboard.ui.paint_plate_layout import _PlateCanvas
 from src.robot_systems.paint.applications.dashboard.ui.paint_controls_drawer import (
     PaintControlsDrawer,
 )
@@ -85,6 +86,16 @@ class _FakeDashboardWidget(QWidget):
 
 
 class TestPaintDashboardUi(unittest.TestCase):
+    def test_tray_canvas_preserves_physical_aspect_ratio(self) -> None:
+        canvas = _PlateCanvas()
+        canvas.resize(600, 300)
+
+        plate = canvas._scaled_plate_rect(200.0, 50.0)
+
+        self.assertAlmostEqual(4.0, plate.width() / plate.height())
+        self.assertAlmostEqual((canvas.width() - plate.width()) / 2.0, plate.left())
+        self.assertAlmostEqual((canvas.height() - plate.height()) / 2.0, plate.top())
+
     def test_camera_disabled_uses_expanded_settings_and_tray_tabs(self) -> None:
         view = PaintDashboardView(
             config=PaintDashboardConfig(),
