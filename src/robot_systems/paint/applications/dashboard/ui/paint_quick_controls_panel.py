@@ -29,10 +29,14 @@ class PaintQuickControlsPanel(QWidget):
         toggle_configs: list,
         *,
         use_combined_speed_control: bool = False,
+        show_resolved_speed_values: bool = False,
         parent=None,
     ) -> None:
         super().__init__(parent)
         self._use_combined_speed_control = bool(use_combined_speed_control)
+        self._show_resolved_speed_values = bool(
+            show_resolved_speed_values and use_combined_speed_control
+        )
         self._device_states = {item.device_id: False for item in toggle_configs}
         self._off_buttons: dict[str, QPushButton] = {}
         self._step_buttons: list[QPushButton] = []
@@ -61,12 +65,19 @@ class PaintQuickControlsPanel(QWidget):
         settings_grid.setHorizontalSpacing(10)
         settings_grid.setVerticalSpacing(6)
         self._velocity_row = self._add_field_row(settings_grid, 0, "velocity", self._velocity_label, self._velocity)
-        self._acceleration_row = self._add_field_row(settings_grid, 1, "acceleration", self._acceleration_label, self._acceleration)
-        self._add_field_row(settings_grid, 2, "offset", self._offset_label, self._offset)
+        next_row = 1
+        self._resolved_speed = QLabel()
+        self._resolved_speed.setVisible(self._show_resolved_speed_values)
+        if self._show_resolved_speed_values:
+            settings_grid.addWidget(self._resolved_speed, next_row, 1)
+            next_row += 1
+        self._acceleration_row = self._add_field_row(settings_grid, next_row, "acceleration", self._acceleration_label, self._acceleration)
+        self._add_field_row(settings_grid, next_row + 1, "offset", self._offset_label, self._offset)
         if self._use_combined_speed_control:
             self._velocity.setMinimum(1.0)
             self._acceleration_label.hide()
             self._acceleration_row.hide()
+        self._velocity.valueChanged.connect(self._update_resolved_speed_label)
         settings_grid.setColumnStretch(1, 1)
         box_layout.addLayout(settings_grid)
 
@@ -163,6 +174,15 @@ class PaintQuickControlsPanel(QWidget):
             }
         )
 
+    def _update_resolved_speed_label(self) -> None:
+        if not self._show_resolved_speed_values:
+            return
+        speed = float(self._velocity.value())
+        self._resolved_speed.setText(
+            f"{self.tr('Velocity')}: {speed:.1f}%  ·  "
+            f"{self.tr('Acceleration')}: {speed * speed / 100.0:.1f}%"
+        )
+
     def _on_device_off(self) -> None:
         self.device_off_requested.emit(str(self.sender().property("device_id")))
 
@@ -224,6 +244,7 @@ class PaintQuickControlsPanel(QWidget):
         )
         self._acceleration_label.setText(self.tr("Acceleration"))
         self._offset_label.setText(self.tr("Press Offset"))
+        self._update_resolved_speed_label()
         self._apply.setText(self.tr("Apply"))
         self._cable_relief.setText(self.tr("Relieve Cable (Unwind J6)"))
         for button in self._off_buttons.values():
