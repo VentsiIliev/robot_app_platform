@@ -296,9 +296,8 @@ class PaintControlsDrawer(QWidget):
         pair = QHBoxLayout()
         pair.addWidget(self._field_column(self._unmatched_velocity_label, self._velocity_row), 1)
         pair.addWidget(self._field_column(self._unmatched_acceleration_label, self._acceleration_row), 1)
+        pair.addWidget(self._field_column(self._unmatched_offset_label, self._offset_row), 1)
         self._pass_1_layout.addLayout(pair)
-        self._pass_1_layout.addWidget(self._unmatched_offset_label)
-        self._pass_1_layout.addWidget(self._offset_row)
 
     def _compact_pass_two_fields(self) -> None:
         for label, row in zip(self._pass_2_labels, self._pass_2_rows):
@@ -307,9 +306,8 @@ class PaintControlsDrawer(QWidget):
         pair = QHBoxLayout()
         pair.addWidget(self._field_column(self._pass_2_labels[0], self._pass_2_rows[0]), 1)
         pair.addWidget(self._field_column(self._pass_2_labels[1], self._pass_2_rows[1]), 1)
+        pair.addWidget(self._field_column(self._pass_2_labels[2], self._pass_2_rows[2]), 1)
         self._pass_2_layout.addLayout(pair)
-        self._pass_2_layout.addWidget(self._pass_2_labels[2])
-        self._pass_2_layout.addWidget(self._pass_2_rows[2])
 
     @staticmethod
     def _field_column(label: QLabel, field: QWidget) -> QWidget:
