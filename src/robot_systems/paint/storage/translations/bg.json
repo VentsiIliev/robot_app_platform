@@ -23,7 +23,8 @@
     "Tray is not configured": "Тавата не е конфигурирана"
   },
   "DeviceControlView": {
-    "Manage availability, inspect state, and run device commands.": "Управлявайте наличността, преглеждайте състоянието и изпълнявайте команди."
+    "Manage availability, inspect state, and run device commands.": "Управлявайте наличността, преглеждайте състоянието и изпълнявайте команди.",
+    "Tray Fan": "Вентилатор на тавата"
   },
   "PaintControlsDrawer": {
     "Manual Controls": "Ръчно управление",

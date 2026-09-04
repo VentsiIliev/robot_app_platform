@@ -303,10 +303,11 @@ def build_device_control_adapters(
     labels = {
         "vacuum_pump": "Vacuum Pump",
         "fan": "Fan",
+        "tray_fan": "Tray Fan",
         "laser": "Laser",
     }
     adapters: list[object] = []
-    for key in ("vacuum_pump", "fan", "laser"):
+    for key in ("vacuum_pump", "fan", "tray_fan", "laser"):
         binding = peripheral_config.peripherals.get(key)
         if binding is None or services.get(key) is None:
             continue

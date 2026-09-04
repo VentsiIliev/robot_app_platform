@@ -107,16 +107,15 @@ class SystemBuilder:
             services={},
         )
 
-        # merge vision_service-level per-spec builders into registry (override defaults)
         registry = dict(self._registry)
-        for spec in system_class.services:
-            if spec.builder is not None:
-                registry[spec.service_type] = spec.builder
 
         services: Dict[str, Any] = {}
 
         for spec in system_class.services:
-            builder = registry.get(spec.service_type)
+            # A per-spec builder belongs to that named service. Resolving it
+            # through the type registry would make the last declaration win
+            # when multiple services intentionally share one interface.
+            builder = spec.builder or registry.get(spec.service_type)
 
             if builder is None:
                 if spec.required:

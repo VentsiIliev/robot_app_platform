@@ -1173,6 +1173,7 @@ def _build_device_control_application(robot_system):
     services = {
         "vacuum_pump": robot_system.get_optional_service(ServiceID.VACUUM_PUMP),
         "fan": robot_system.get_optional_service(ServiceID.FAN),
+        "tray_fan": robot_system.get_optional_service(ServiceID.TRAY_FAN),
         "vacuum_sensor": robot_system.get_optional_service(ServiceID.VACUUM_SENSOR),
         "physical_control_buttons": robot_system.get_optional_service(ServiceID.PHYSICAL_CONTROL_BUTTONS),
         "dryer": robot_system.get_optional_service(ServiceID.DRYER),

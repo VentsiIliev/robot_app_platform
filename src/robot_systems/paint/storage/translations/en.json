@@ -23,7 +23,8 @@
     "Tray is not configured": "Tray is not configured"
   },
   "DeviceControlView": {
-    "Manage availability, inspect state, and run device commands.": "Manage availability, inspect state, and run device commands."
+    "Manage availability, inspect state, and run device commands.": "Manage availability, inspect state, and run device commands.",
+    "Tray Fan": "Tray Fan"
   },
   "PaintControlsDrawer": {
     "Manual Controls": "Manual Controls",

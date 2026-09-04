@@ -71,6 +71,11 @@ class DeviceControlAdaptersTest(unittest.TestCase):
                     outputs={"fan": "Y3"},
                     commands={"on": 1, "off": 0},
                 ),
+                "tray_fan": PeripheralBinding(
+                    slave_id=1,
+                    outputs={"fan": "Y6"},
+                    commands={"on": 1, "off": 0},
+                ),
                 "vacuum_sensor": PeripheralBinding(slave_id=1, inputs={"sensor": "X4"}),
                 "physical_control_buttons": PeripheralBinding(
                     slave_id=1,
@@ -81,6 +86,7 @@ class DeviceControlAdaptersTest(unittest.TestCase):
             }
         )
         self.fan = _Binary()
+        self.tray_fan = _Binary()
         self.buttons = _Buttons()
 
     def test_builds_only_configured_devices_and_exposes_actions(self):
@@ -88,6 +94,7 @@ class DeviceControlAdaptersTest(unittest.TestCase):
             self.config,
             {
                 "fan": self.fan,
+                "tray_fan": self.tray_fan,
                 "vacuum_sensor": _Sensor(),
                 "physical_control_buttons": self.buttons,
             },
@@ -95,7 +102,7 @@ class DeviceControlAdaptersTest(unittest.TestCase):
 
         self.assertEqual(
             [device.key for device in devices],
-            ["fan", "vacuum_sensor", "physical_control_buttons"],
+            ["fan", "tray_fan", "vacuum_sensor", "physical_control_buttons"],
         )
         fan = devices[0]
         self.assertTrue(fan.execute("on"))
@@ -103,7 +110,12 @@ class DeviceControlAdaptersTest(unittest.TestCase):
         self.assertEqual(fan.read_state()["active"], True)
         self.assertIsNone(fan.read_state()["healthy"])
 
-        buttons = devices[2]
+        tray_fan = devices[1]
+        self.assertEqual(tray_fan.label, "Tray Fan")
+        self.assertTrue(tray_fan.execute("on"))
+        self.assertTrue(self.tray_fan.active)
+
+        buttons = devices[3]
         self.assertIn("start_on", buttons.actions())
         self.assertTrue(buttons.execute("start_on"))
         self.assertTrue(self.buttons.outputs["start"])
