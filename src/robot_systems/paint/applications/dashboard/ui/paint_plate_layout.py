@@ -26,12 +26,7 @@ class _PlateCanvas(QWidget):
         super().__init__(parent)
         self._state: dict[str, object] = {}
         self._rects: dict[int, QRectF] = {}
-        self._pressed_id: int | None = None
         self._selected_id: int | None = None
-        self._hold_timer = QTimer(self)
-        self._hold_timer.setSingleShot(True)
-        self._hold_timer.setInterval(650)
-        self._hold_timer.timeout.connect(self._emit_held)
         self.setMinimumSize(420, 300)
 
     def set_state(self, state: dict[str, object]) -> None:
@@ -152,25 +147,15 @@ class _PlateCanvas(QWidget):
 
     def mousePressEvent(self, event) -> None:
         if event.button() == Qt.MouseButton.LeftButton:
-            self._pressed_id = next(
+            placement_id = next(
                 (placement_id for placement_id, rect in self._rects.items() if rect.contains(event.position())),
                 None,
             )
-            if self._pressed_id is not None:
-                self._hold_timer.start()
+            if placement_id is not None:
+                self._selected_id = placement_id
+                self.update()
+                self.placement_held.emit(placement_id)
         super().mousePressEvent(event)
-
-    def mouseReleaseEvent(self, event) -> None:
-        self._hold_timer.stop()
-        self._pressed_id = None
-        super().mouseReleaseEvent(event)
-
-    def _emit_held(self) -> None:
-        if self._pressed_id is None:
-            return
-        self._selected_id = self._pressed_id
-        self.update()
-        self.placement_held.emit(self._pressed_id)
 
 
 class PaintPlateLayout(QWidget):
@@ -236,7 +221,7 @@ class PaintPlateLayout(QWidget):
         self._drying_timer.stop()
         self._remove.hide()
         self._canvas.clear_selection()
-        self._hint.setText(self.tr("Press and hold a workpiece to select it"))
+        self._hint.setText(self.tr("Press a workpiece to select it"))
 
     def _on_new_tray(self) -> None:
         self.new_tray_requested.emit()
@@ -295,7 +280,7 @@ class PaintPlateLayout(QWidget):
     def retranslateUi(self) -> None:
         self._title.setText(self.tr("Manual Dryer Tray"))
         if self._selected_id is None:
-            self._hint.setText(self.tr("Press and hold a workpiece to select it"))
+            self._hint.setText(self.tr("Press a workpiece to select it"))
         else:
             self._render_selection_metadata()
         self._new_tray.setText(self.tr("New Tray"))
