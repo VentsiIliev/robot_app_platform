@@ -862,7 +862,10 @@ class PaintDashboardView(IApplicationView):
         self.set_acceleration_scale_editable(settings_editable)
         if self._plate_layout is not None:
             tray_editable = state.process_state in ("idle", "stopped", "error")
-            self._plate_layout.set_editable(tray_editable)
+            self._plate_layout.set_editable(
+                tray_editable,
+                removal_editable=True,
+            )
             if self._quick_access is not None:
                 self._quick_access.set_new_tray_enabled(tray_editable)
 

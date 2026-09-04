@@ -55,6 +55,7 @@ Primary responsibility:
 - optionally show a Tray Dry duration control and recolor workpieces when their painted timestamp reaches the configured duration
 - retain pass count and per-pass velocity, acceleration, and press-offset metadata; show only the pass count in the current tray UI
 - select tray workpieces with a single press instead of a press-and-hold gesture
+- allow individual tray workpieces to be removed during production so the shared layout planner reuses the freed space from the next cycle, while keeping New Tray locked
 - keep the Quick Controls vacuum-pump action OFF-only while retaining the fan's ON/OFF toggle
 - label manual drying as Tray Dry and show its New Tray action in Quick Controls only while that mode is active
 - optionally replace separate paint velocity/acceleration inputs with Speed (1–100), mapping velocity to Speed and acceleration to Speed²/100 while preserving the existing service payload
