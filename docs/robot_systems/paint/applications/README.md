@@ -78,6 +78,16 @@ and Process Scaling share one row, and each pass places Velocity,
 Acceleration, and Press Offset together in one row. The camera-enabled drawer
 retains its original vertical composition.
 
+`PaintDashboardUiConfig.allow_running_paint_settings_updates` controls whether
+paint passes, per-pass Speed/velocity/acceleration/press offset, and process
+acceleration scaling remain editable while the process is running or paused.
+The paint-system switch is
+`paint_system_config.ALLOW_RUNNING_PAINT_SETTINGS_UPDATES`. When enabled, saves
+are persisted immediately but the active workpiece keeps its immutable settings
+snapshot; the updated settings are captured at the start of the next workpiece
+cycle. When disabled, the previous stopped-state-only editing behavior is kept.
+Drying-mode and tray-state edits remain locked during an active process.
+
 Drying-mode selection only persists the requested workflow mode; it does not
 gate navigation through Auto/Manual/Demo on live dryer availability. Automatic
 and demo dryer readiness is checked when Start is pressed, so a disconnected

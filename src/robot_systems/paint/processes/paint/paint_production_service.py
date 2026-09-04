@@ -242,6 +242,14 @@ class PaintProductionService:
         cycle_index: int,
         repeats_after_success: bool = False,
     ) -> tuple[bool, str]:
+        raw_process_config = process_config
+        if self._paint_process_config_service is not None:
+            try:
+                raw_process_config = self._paint_process_config_service.get_snapshot()
+                process_config = scale_paint_process_accelerations(raw_process_config)
+            except Exception:
+                _logger.exception("Failed to capture settings for paint cycle %d", cycle_index)
+                return False, "Failed to read paint process settings"
         cycle_strategy = self._effective_dropoff_strategy(process_config, cycle_index)
         set_cycle_strategy = getattr(self._path_executor, "set_cycle_dropoff_strategy", None)
         if callable(set_cycle_strategy):
@@ -257,6 +265,7 @@ class PaintProductionService:
             stop_requested=should_stop,
             control=self._paint_control,
             process_config=process_config,
+            raw_process_config=raw_process_config,
             magazine_config=magazine_config,
             cycle_index=cycle_index,
             repeats_after_success=repeats_after_success,

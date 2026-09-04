@@ -26,6 +26,10 @@ SHOW_DASHBOARD_CAMERA_PREVIEW = False
 # Velocity remains Speed, while acceleration is calculated as Speed² / 100.
 USE_COMBINED_PAINT_SPEED_CONTROL = True
 
+# Allow pass settings and process acceleration scaling to be saved while the
+# process runs. Each update is captured at the start of the next workpiece cycle.
+ALLOW_RUNNING_PAINT_SETTINGS_UPDATES = True
+
 # Lists saved workpieces and provides actions for managing the library.
 WORKPIECE_LIBRARY_APP = False
 

@@ -37,6 +37,7 @@ class PaintDashboardService(IPaintDashboardService):
         vacuum_pump=None,
         fan_control=None,
         tray_fan_control=None,
+        allow_running_paint_settings_updates: bool = False,
         dryer_service=None,
         persist_dryer_enabled=None,
         development_mode: bool = False,
@@ -61,6 +62,9 @@ class PaintDashboardService(IPaintDashboardService):
             "fan": fan_control,
         }
         self._tray_fan_control = tray_fan_control
+        self._allow_running_paint_settings_updates = bool(
+            allow_running_paint_settings_updates
+        )
         self._target_point_name = str(target_point_name or "camera").strip().lower()
         self._frame_name = str(frame_name or "calibration").strip().lower()
         self._geometry_scale_cache = GeometryScaleCache()
@@ -146,7 +150,10 @@ class PaintDashboardService(IPaintDashboardService):
         if service is None:
             return DashboardCommandResult(False, "Paint process settings are not available.")
         process_state = str(getattr(getattr(self._process, "state", None), "value", ""))
-        if process_state in {ProcessState.RUNNING.value, ProcessState.PAUSED.value}:
+        if (
+            not self._allow_running_paint_settings_updates
+            and process_state in {ProcessState.RUNNING.value, ProcessState.PAUSED.value}
+        ):
             return DashboardCommandResult(
                 False,
                 "Stop the paint process before changing unmatched paint settings.",
@@ -216,7 +223,10 @@ class PaintDashboardService(IPaintDashboardService):
         if service is None:
             return DashboardCommandResult(False, "Paint process settings are not available.")
         process_state = str(getattr(getattr(self._process, "state", None), "value", ""))
-        if process_state in {ProcessState.RUNNING.value, ProcessState.PAUSED.value}:
+        if (
+            not self._allow_running_paint_settings_updates
+            and process_state in {ProcessState.RUNNING.value, ProcessState.PAUSED.value}
+        ):
             return DashboardCommandResult(
                 False, "Stop the paint process before changing process scaling."
             )

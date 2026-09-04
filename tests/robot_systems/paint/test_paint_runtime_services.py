@@ -299,6 +299,42 @@ class TestPaintDashboardService(unittest.TestCase):
         self.assertFalse(result.success)
         config_service.save.assert_not_called()
 
+    def test_unmatched_paint_settings_can_change_while_running_when_enabled(self) -> None:
+        process = MagicMock(process_id="paint")
+        process.state = ProcessState.RUNNING
+        config_service = MagicMock()
+        config_service.get_snapshot.return_value = PaintProcessConfig()
+        service = PaintDashboardService(
+            process,
+            paint_process_config_service=config_service,
+            allow_running_paint_settings_updates=True,
+        )
+
+        result = service.save_unmatched_paint_settings(25.0, 35.0, -4.5)
+
+        self.assertTrue(result.success)
+        saved = config_service.save.call_args.args[0]
+        self.assertEqual(25.0, saved.default_paint_velocity_percent)
+        self.assertEqual(35.0, saved.default_paint_acceleration_percent)
+        self.assertEqual(-4.5, saved.default_paint_offset_mm)
+
+    def test_acceleration_scale_can_change_while_paused_when_enabled(self) -> None:
+        process = MagicMock(process_id="paint")
+        process.state = ProcessState.PAUSED
+        config_service = MagicMock()
+        config_service.get_snapshot.return_value = PaintProcessConfig()
+        service = PaintDashboardService(
+            process,
+            paint_process_config_service=config_service,
+            allow_running_paint_settings_updates=True,
+        )
+
+        result = service.save_acceleration_scale(72.0)
+
+        self.assertTrue(result.success)
+        saved = config_service.save.call_args.args[0]
+        self.assertEqual(72.0, saved.paint_process_acceleration_scale_percent)
+
     def test_load_state_maps_process_state_into_dashboard_contract(self) -> None:
         process = MagicMock(process_id="paint")
         robot = MagicMock()

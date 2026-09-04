@@ -18,6 +18,7 @@ class PaintExecutionContext:
     stop_requested: Callable[[], bool]
     control: PaintExecutionControl
     process_config: PaintProcessConfig | None = None
+    raw_process_config: PaintProcessConfig | None = None
     magazine_config: PaintMagazineLoadConfig | None = None
     cycle_index: int = 1
     repeats_after_success: bool = False

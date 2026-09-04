@@ -173,6 +173,9 @@ class PaintRobotSystem(BaseRobotSystem):
         use_combined_paint_speed_control=(
             paint_system_config.USE_COMBINED_PAINT_SPEED_CONTROL
         ),
+        allow_running_paint_settings_updates=(
+            paint_system_config.ALLOW_RUNNING_PAINT_SETTINGS_UPDATES
+        ),
     )
 
 
@@ -585,6 +588,9 @@ class PaintRobotSystem(BaseRobotSystem):
             vacuum_pump=self._vacuum_pump,
             fan_control=self._fan,
             tray_fan_control=self._tray_fan,
+            allow_running_paint_settings_updates=(
+                self.ui_config.allow_running_paint_settings_updates
+            ),
             dryer_service=self._dryer,
             persist_dryer_enabled=self._persist_dryer_enabled,
             development_mode=self.development_mode,

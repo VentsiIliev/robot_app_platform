@@ -831,12 +831,12 @@ class PaintDashboardView(IApplicationView):
         self.set_pause_enabled(state.can_pause)
         self.set_pause_label(state.pause_label)
         self.set_action_enabled("reset_errors", state.process_state == "error")
-        self.set_unmatched_paint_settings_editable(
-            state.process_state in ("idle", "stopped", "error")
+        settings_editable = (
+            self._ui_config.allow_running_paint_settings_updates
+            or state.process_state in ("idle", "stopped", "error")
         )
-        self.set_acceleration_scale_editable(
-            state.process_state in ("idle", "stopped", "error")
-        )
+        self.set_unmatched_paint_settings_editable(settings_editable)
+        self.set_acceleration_scale_editable(settings_editable)
         if self._plate_layout is not None:
             tray_editable = state.process_state in ("idle", "stopped", "error")
             self._plate_layout.set_editable(tray_editable)

@@ -486,6 +486,17 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             self._paint_process_config_snapshot = PAINT_PROCESS_CONFIG
             self._apply_cycle_dropoff_strategy()
 
+    def _set_cycle_process_config_snapshot(self, config) -> None:
+        """Freeze one raw settings snapshot for the active workpiece cycle."""
+        if config is None:
+            self._paint_process_config_snapshot = PAINT_PROCESS_CONFIG
+        else:
+            self._paint_process_config_snapshot = scale_paint_process_accelerations(config)
+        self._apply_cycle_dropoff_strategy()
+        self._enable_vacuum_pump = bool(self._paint_process_config_snapshot.enable_vacuum_pump)
+        if self._pickup_condition_provider is not None:
+            self._pickup_condition = self._pickup_condition_provider()
+
     def _apply_cycle_dropoff_strategy(self) -> None:
         if self._cycle_dropoff_strategy is None:
             return

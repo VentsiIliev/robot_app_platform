@@ -24,7 +24,11 @@ def start_paint_motion_if_needed(ctx: PaintExecutionContext) -> None:
     ctx.paint_previous_control = executor._active_execution_control
     ctx.paint_motion_active = True
     executor._active_execution_control = ctx.control
-    executor._refresh_paint_process_config_snapshot()
+    set_cycle_snapshot = getattr(executor, "_set_cycle_process_config_snapshot", None)
+    if callable(set_cycle_snapshot):
+        set_cycle_snapshot(ctx.raw_process_config or ctx.process_config)
+    else:
+        executor._refresh_paint_process_config_snapshot()
     executor._apply_paint_process_contact_config()
     executor._dropoff_unwind_prepared = False
     ctx.paint_total_waypoints = 0
