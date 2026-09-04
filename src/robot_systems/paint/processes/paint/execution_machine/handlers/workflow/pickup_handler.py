@@ -114,6 +114,11 @@ def _reserve_plate_dropoff(ctx, executor, pickup_plan) -> tuple[bool, str]:
     if align_pose is None or len(align_pose) < 6:
         return False, "Plate-layout dropoff could not resolve workpiece orientation at calibration"
     width_mm, height_mm, outlines_mm = _workpiece_layout_geometry(ctx.execution_plan)
+    paint_passes = _paint_pass_metadata(
+        ctx.execution_plan,
+        executor._paint_process_config(),
+        executor,
+    )
 
     magazine = ctx.magazine_config or getattr(ctx.process_config, "magazine_load", None)
     group_id = str(getattr(magazine, "calibration_group_id", "CALIBRATION") or "CALIBRATION")
@@ -131,6 +136,7 @@ def _reserve_plate_dropoff(ctx, executor, pickup_plan) -> tuple[bool, str]:
         workpiece_rz_at_calibration_deg=float(align_pose[5]),
         pose_calculator=calculate_workpiece_dropoff_pose,
         outlines_mm=outlines_mm,
+        paint_passes=paint_passes,
     )
     if reservation is None:
         return False, message
@@ -148,6 +154,45 @@ def _workpiece_footprint_mm(execution_plan) -> tuple[float, float]:
     """Return canonical min-rectangle sides as long-side width and short-side height."""
     width, height, _outlines = _workpiece_layout_geometry(execution_plan)
     return width, height
+
+
+def _paint_pass_metadata(execution_plan, config, executor) -> tuple[dict, ...]:
+    """Capture the configured paint controls used by each production pass."""
+    jobs = list(getattr(execution_plan, "execution_jobs", []) or [])
+    first_job = jobs[0] if jobs else {}
+    try:
+        first_offset = float(
+            executor._resolve_pivot_offset_mm(first_job or None, execution_plan)
+        )
+    except (AttributeError, TypeError, ValueError):
+        first_offset = float(getattr(config, "default_paint_offset_mm", 0.0))
+    first_pass = {
+        "pass_number": 1,
+        "velocity_percent": float(
+            first_job.get("vel", getattr(config, "default_paint_velocity_percent", 10.0))
+        ),
+        "acceleration_percent": float(
+            first_job.get("acc", getattr(config, "default_paint_acceleration_percent", 10.0))
+        ),
+        "press_offset_mm": first_offset,
+    }
+    passes = [first_pass]
+    workpiece = getattr(execution_plan, "workpiece", {}) or {}
+    is_unmatched = str(workpiece.get("workpieceId", "")).strip().lower() == "captured"
+    pass_count = max(1, min(2, int(getattr(config, "unmatched_paint_pass_count", 1))))
+    if is_unmatched and pass_count == 2:
+        second = config.unmatched_second_pass
+        if bool(second.use_pass_1_settings):
+            second_pass = {**first_pass, "pass_number": 2}
+        else:
+            second_pass = {
+                "pass_number": 2,
+                "velocity_percent": float(second.velocity_percent),
+                "acceleration_percent": float(second.acceleration_percent),
+                "press_offset_mm": float(second.offset_mm),
+            }
+        passes.append(second_pass)
+    return tuple(passes)
 
 
 def _workpiece_layout_geometry(

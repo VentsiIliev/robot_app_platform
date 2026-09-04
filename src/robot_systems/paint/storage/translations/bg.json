@@ -6,7 +6,11 @@
     "Manual Dryer Tray": "Тава за ръчно сушене",
     "Press and hold a workpiece to select it": "Натиснете и задръжте детайл, за да го изберете",
     "New Tray": "Нова тава",
-    "Remove": "Премахване"
+    "Remove": "Премахване",
+    "Painted at": "Боядисан в",
+    "Drying for": "Съхне от",
+    "Passes": "Преминавания",
+    "Drying time is unavailable": "Времето за сушене не е налично"
   },
   "PaintQuickAccessPanel": {
     "Quick Controls": "Бързи команди",

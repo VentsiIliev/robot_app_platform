@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import unittest
+from datetime import datetime
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -20,7 +21,10 @@ from src.robot_systems.paint.applications.dashboard.ui.paint_info_card import (
 from src.robot_systems.paint.applications.dashboard.ui.paint_quick_controls_panel import (
     PaintQuickControlsPanel,
 )
-from src.robot_systems.paint.applications.dashboard.ui.paint_plate_layout import _PlateCanvas
+from src.robot_systems.paint.applications.dashboard.ui.paint_plate_layout import (
+    PaintPlateLayout,
+    _PlateCanvas,
+)
 from src.robot_systems.paint.applications.dashboard.ui.paint_controls_drawer import (
     PaintControlsDrawer,
 )
@@ -87,6 +91,35 @@ class _FakeDashboardWidget(QWidget):
 
 
 class TestPaintDashboardUi(unittest.TestCase):
+    def test_tray_selection_shows_painted_time_and_live_drying_duration(self) -> None:
+        tray = PaintPlateLayout()
+        tray.set_state({
+            "width_mm": 200.0,
+            "height_mm": 100.0,
+            "placements": [{
+                "placement_id": 1,
+                "left_mm": 0.0,
+                "bottom_mm": 0.0,
+                "width_mm": 20.0,
+                "height_mm": 30.0,
+                "painted_at": "2026-09-04T11:30:15+03:00",
+                "paint_pass_count": 2,
+            }],
+            "pending": None,
+        })
+
+        with patch(
+            "src.robot_systems.paint.applications.dashboard.ui.paint_plate_layout.datetime"
+        ) as clock:
+            clock.fromisoformat.side_effect = datetime.fromisoformat
+            clock.now.return_value = datetime.fromisoformat("2026-09-04T11:31:20+03:00")
+            tray._on_placement_held(1)
+
+        self.assertIn("Painted at: 11:30:15", tray._hint.text())
+        self.assertIn("Drying for: 1m 5s", tray._hint.text())
+        self.assertIn("Passes: 2", tray._hint.text())
+        self.assertTrue(tray._drying_timer.isActive())
+
     def test_tray_canvas_preserves_physical_aspect_ratio(self) -> None:
         canvas = _PlateCanvas()
         canvas.resize(600, 300)
