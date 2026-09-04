@@ -208,39 +208,7 @@ class PaintDashboardController(
 
     def _on_drying_mode(self, mode: str) -> None:
         normalized_mode = str(mode).strip().lower()
-        if normalized_mode in {"auto", "demo"}:
-            state = self._model.get_dryer_state()
-            if not bool(state.get("available", False)):
-                if self._confirm_development_dryer_bypass(state):
-                    self._start_drying_mode_change(normalized_mode)
-                    return
-                self._view.show_warning(
-                    self._t("Drying Mode"),
-                    self._t("Dryer service is not available."),
-                )
-                return
-            if bool(state.get("enabled", False)) and not bool(state.get("healthy", False)):
-                message = str(state.get("message") or self._t("Dryer is not ready."))
-                self._view.show_warning(self._t("Drying Mode"), message)
-                return
-            if not bool(state.get("healthy", False)):
-                confirmed = self._view.ask_enable_dryer(
-                    self._t("Enable Dryer"),
-                    self._t(
-                        "Automatic drying requires the dryer. Do you want to enable it now?"
-                    ),
-                )
-                if not confirmed:
-                    if self._confirm_development_dryer_bypass(state):
-                        self._start_drying_mode_change(normalized_mode)
-                    return
-                self._view.set_drying_mode_busy(True)
-                self._run_background(
-                    self._dryer_enable_command(normalized_mode),
-                    self._on_drying_mode_finished,
-                )
-                return
-        self._start_drying_mode_change(mode)
+        self._start_drying_mode_change(normalized_mode)
 
     def _dryer_enable_command(self, mode: str):
         if mode == "auto":

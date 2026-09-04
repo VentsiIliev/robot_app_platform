@@ -47,22 +47,39 @@ class _PlateCanvas(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.fillRect(self.rect(), QColor(BG_COLOR))
-        plate = QRectF(18, 18, max(1, self.width() - 36), max(1, self.height() - 36))
-        painter.setPen(QPen(QColor(BORDER), 3))
-        painter.setBrush(QColor(TEXT_ON_PRIMARY))
-        painter.drawRoundedRect(plate, 10, 10)
         width = float(self._state.get("width_mm", 0.0) or 0.0)
         height = float(self._state.get("height_mm", 0.0) or 0.0)
         self._rects.clear()
         if width <= 0.0 or height <= 0.0:
+            plate = QRectF(18, 18, max(1, self.width() - 36), max(1, self.height() - 36))
+            painter.setPen(QPen(QColor(BORDER), 3))
+            painter.setBrush(QColor(TEXT_ON_PRIMARY))
+            painter.drawRoundedRect(plate, 10, 10)
             painter.setPen(QColor(TEXT_COLOR))
             painter.drawText(plate, Qt.AlignmentFlag.AlignCenter, self.tr("Tray is not configured"))
             return
+        plate = self._scaled_plate_rect(width, height)
+        painter.setPen(QPen(QColor(BORDER), 3))
+        painter.setBrush(QColor(TEXT_ON_PRIMARY))
+        painter.drawRoundedRect(plate, 10, 10)
         for item in self._state.get("placements", []):
             self._draw_placement(painter, plate, width, height, item, pending=False)
         pending = self._state.get("pending")
         if isinstance(pending, dict):
             self._draw_placement(painter, plate, width, height, pending, pending=True)
+
+    def _scaled_plate_rect(self, width_mm: float, height_mm: float) -> QRectF:
+        available_width = max(1.0, float(self.width() - 36))
+        available_height = max(1.0, float(self.height() - 36))
+        scale = min(available_width / width_mm, available_height / height_mm)
+        plate_width = width_mm * scale
+        plate_height = height_mm * scale
+        return QRectF(
+            (self.width() - plate_width) / 2.0,
+            (self.height() - plate_height) / 2.0,
+            plate_width,
+            plate_height,
+        )
 
     def _draw_placement(self, painter, plate, width, height, item, *, pending: bool) -> None:
         placement_id = int(item["placement_id"])

@@ -60,6 +60,11 @@ controls are omitted, and Start/Pause/Stop use the full bottom width. Drying
 mode, pump, fan, and cable-relief actions remain immediately accessible in a
 dedicated column between the settings/tray area and the status cards.
 
+Drying-mode selection only persists the requested workflow mode; it does not
+gate navigation through Auto/Manual/Demo on live dryer availability. Automatic
+and demo dryer readiness is checked when Start is pressed, so a disconnected
+dryer cannot trap the operator on one mode while cycling the selector.
+
 ---
 
 ## Shared Applications With Paint Wiring
