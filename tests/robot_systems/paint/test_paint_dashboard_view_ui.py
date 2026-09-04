@@ -94,6 +94,47 @@ class _FakeDashboardWidget(QWidget):
 
 
 class TestPaintDashboardUi(unittest.TestCase):
+    def test_combined_speed_control_maps_speed_to_velocity_and_acceleration(self) -> None:
+        drawer = PaintControlsDrawer([], use_combined_speed_control=True)
+        drawer._unmatched_velocity.setValue(80.0)
+        drawer._pass_2_use_first.setChecked(False)
+        drawer._pass_2_velocity.setValue(50.0)
+
+        payload = drawer._settings_payload()
+
+        self.assertEqual(drawer._unmatched_velocity.minimum(), 1.0)
+        self.assertEqual(drawer._unmatched_velocity_label.text(), "Speed")
+        self.assertTrue(drawer._unmatched_acceleration_label.isHidden())
+        self.assertEqual(payload["pass_1"]["velocity_percent"], 80.0)
+        self.assertEqual(payload["pass_1"]["acceleration_percent"], 64.0)
+        self.assertEqual(payload["pass_2"]["velocity_percent"], 50.0)
+        self.assertEqual(payload["pass_2"]["acceleration_percent"], 25.0)
+
+    def test_separate_velocity_and_acceleration_controls_remain_configurable(self) -> None:
+        drawer = PaintControlsDrawer([], use_combined_speed_control=False)
+        drawer._unmatched_velocity.setValue(80.0)
+        drawer._unmatched_acceleration.setValue(37.0)
+
+        payload = drawer._settings_payload()
+
+        self.assertFalse(drawer._unmatched_acceleration_label.isHidden())
+        self.assertEqual(payload["pass_1"]["velocity_percent"], 80.0)
+        self.assertEqual(payload["pass_1"]["acceleration_percent"], 37.0)
+
+    def test_camera_quick_controls_use_the_same_combined_speed_mapping(self) -> None:
+        panel = PaintQuickControlsPanel([], use_combined_speed_control=True)
+        callback = MagicMock()
+        panel.unmatched_paint_settings_requested.connect(callback)
+        panel._velocity.setValue(80.0)
+
+        panel._apply.click()
+
+        payload = callback.call_args.args[0]
+        self.assertEqual(panel._velocity.minimum(), 1.0)
+        self.assertEqual(panel._velocity_label.text(), "Speed")
+        self.assertEqual(payload["pass_1"]["velocity_percent"], 80.0)
+        self.assertEqual(payload["pass_1"]["acceleration_percent"], 64.0)
+
     def test_quick_access_pump_is_off_only_while_fan_remains_toggleable(self) -> None:
         panel = PaintQuickAccessPanel([
             AuxiliaryToggleConfig("pump", "Vacuum Pump"),

@@ -40,6 +40,7 @@
     "Pass 2": "Pass 2",
     "Use Pass 1 settings": "Use Pass 1 settings",
     "Velocity": "Velocity",
+    "Speed": "Speed",
     "Acceleration": "Acceleration",
     "Press Offset": "Press Offset",
     "Used only when workpiece matching is off.": "Used only when workpiece matching is off.",
@@ -58,6 +59,7 @@
   "PaintQuickControlsPanel": {
     "Quick Paint Controls": "Quick Paint Controls",
     "Velocity": "Velocity",
+    "Speed": "Speed",
     "Acceleration": "Acceleration",
     "Press Offset": "Press Offset",
     "Apply": "Apply",

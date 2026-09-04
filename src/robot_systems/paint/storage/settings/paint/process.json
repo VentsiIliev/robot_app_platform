@@ -97,7 +97,7 @@
     "second_pass_pivot_z_offset_mm": -25.0
   },
   "dropoff": {
-    "strategy": "movement_group",
+    "strategy": "plate_layout",
     "alternate_drying_demo": false,
     "allow_sub_zero_dropoff": true,
     "corridor_x_margin_mm": 70.0,

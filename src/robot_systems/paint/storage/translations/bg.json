@@ -40,6 +40,7 @@
     "Pass 2": "Преминаване 2",
     "Use Pass 1 settings": "Използвай настройките от преминаване 1",
     "Velocity": "Скорост",
+    "Speed": "Скорост",
     "Acceleration": "Ускорение",
     "Press Offset": "Отместване на притискане",
     "Used only when workpiece matching is off.": "Използва се само когато съпоставянето на детайли е изключено.",
@@ -58,6 +59,7 @@
   "PaintQuickControlsPanel": {
     "Quick Paint Controls": "Бързи контроли за боядисване",
     "Velocity": "Скорост",
+    "Speed": "Скорост",
     "Acceleration": "Ускорение",
     "Press Offset": "Отместване на притискане",
     "Apply": "Приложи",

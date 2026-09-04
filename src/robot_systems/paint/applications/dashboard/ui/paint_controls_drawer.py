@@ -49,6 +49,7 @@ class PaintControlsDrawer(QWidget):
         show_acceleration_scale_control: bool = True,
         show_shortcuts: bool = True,
         compact_layout: bool = False,
+        use_combined_speed_control: bool = False,
         parent=None,
     ) -> None:
         super().__init__(parent)
@@ -58,6 +59,7 @@ class PaintControlsDrawer(QWidget):
         self._drying_mode = "auto"
         self._shortcuts = []
         self._compact_layout = bool(compact_layout)
+        self._use_combined_speed_control = bool(use_combined_speed_control)
         self._shortcut_buttons: dict[str, QPushButton] = {}
         self._title = QLabel()
         self._title.setStyleSheet(LABEL_STYLE)
@@ -176,6 +178,13 @@ class PaintControlsDrawer(QWidget):
             self._build_touch_spin_row("pass_2_acceleration", self._pass_2_acceleration),
             self._build_touch_spin_row("pass_2_offset", self._pass_2_offset),
         ]
+        if self._use_combined_speed_control:
+            self._unmatched_velocity.setMinimum(1.0)
+            self._pass_2_velocity.setMinimum(1.0)
+            self._unmatched_acceleration_label.hide()
+            self._acceleration_row.hide()
+            self._pass_2_labels[1].hide()
+            self._pass_2_rows[1].hide()
         for label, row in zip(self._pass_2_labels, self._pass_2_rows):
             pass_2_layout.addWidget(label)
             pass_2_layout.addWidget(row)
@@ -295,7 +304,8 @@ class PaintControlsDrawer(QWidget):
             self._pass_1_layout.removeWidget(widget)
         pair = QHBoxLayout()
         pair.addWidget(self._field_column(self._unmatched_velocity_label, self._velocity_row), 1)
-        pair.addWidget(self._field_column(self._unmatched_acceleration_label, self._acceleration_row), 1)
+        if not self._use_combined_speed_control:
+            pair.addWidget(self._field_column(self._unmatched_acceleration_label, self._acceleration_row), 1)
         pair.addWidget(self._field_column(self._unmatched_offset_label, self._offset_row), 1)
         self._pass_1_layout.addLayout(pair)
 
@@ -305,7 +315,8 @@ class PaintControlsDrawer(QWidget):
             self._pass_2_layout.removeWidget(row)
         pair = QHBoxLayout()
         pair.addWidget(self._field_column(self._pass_2_labels[0], self._pass_2_rows[0]), 1)
-        pair.addWidget(self._field_column(self._pass_2_labels[1], self._pass_2_rows[1]), 1)
+        if not self._use_combined_speed_control:
+            pair.addWidget(self._field_column(self._pass_2_labels[1], self._pass_2_rows[1]), 1)
         pair.addWidget(self._field_column(self._pass_2_labels[2], self._pass_2_rows[2]), 1)
         self._pass_2_layout.addLayout(pair)
 
@@ -390,11 +401,18 @@ class PaintControlsDrawer(QWidget):
         )
 
     def _settings_payload(self) -> dict:
+        pass_1_speed = self._unmatched_velocity.value()
+        pass_2_speed = self._pass_2_velocity.value()
         return {
             "pass_count": self._unmatched_pass_count.value(),
-            "pass_1": {"velocity_percent": self._unmatched_velocity.value(), "acceleration_percent": self._unmatched_acceleration.value(), "offset_mm": self._unmatched_offset.value()},
-            "pass_2": {"use_pass_1_settings": self._pass_2_use_first.isChecked(), "velocity_percent": self._pass_2_velocity.value(), "acceleration_percent": self._pass_2_acceleration.value(), "offset_mm": self._pass_2_offset.value()},
+            "pass_1": {"velocity_percent": pass_1_speed, "acceleration_percent": self._derived_acceleration(pass_1_speed) if self._use_combined_speed_control else self._unmatched_acceleration.value(), "offset_mm": self._unmatched_offset.value()},
+            "pass_2": {"use_pass_1_settings": self._pass_2_use_first.isChecked(), "velocity_percent": pass_2_speed, "acceleration_percent": self._derived_acceleration(pass_2_speed) if self._use_combined_speed_control else self._pass_2_acceleration.value(), "offset_mm": self._pass_2_offset.value()},
         }
+
+    @staticmethod
+    def _derived_acceleration(speed_percent: float) -> float:
+        speed = max(1.0, min(100.0, float(speed_percent)))
+        return speed * speed / 100.0
 
     def _on_pass_count_changed(self, count: int) -> None:
         self._unmatched_tabs.setTabVisible(1, int(count) == 2)
@@ -542,10 +560,13 @@ class PaintControlsDrawer(QWidget):
         self._unmatched_tabs.setTabText(0, self.tr("Pass 1"))
         self._unmatched_tabs.setTabText(1, self.tr("Pass 2"))
         self._pass_2_use_first.setText(self.tr("Use Pass 1 settings"))
-        self._unmatched_velocity_label.setText(self.tr("Velocity"))
+        self._unmatched_velocity_label.setText(
+            self.tr("Speed") if self._use_combined_speed_control else self.tr("Velocity")
+        )
         self._unmatched_acceleration_label.setText(self.tr("Acceleration"))
         self._unmatched_offset_label.setText(self.tr("Press Offset"))
-        for label, text in zip(self._pass_2_labels, ("Velocity", "Acceleration", "Press Offset")):
+        pass_2_velocity_label = "Speed" if self._use_combined_speed_control else "Velocity"
+        for label, text in zip(self._pass_2_labels, (pass_2_velocity_label, "Acceleration", "Press Offset")):
             label.setText(self.tr(text))
         self._unmatched_note.setText(self.tr("Used only when workpiece matching is off."))
         self._unmatched_apply.setText(self.tr("Apply"))
