@@ -56,7 +56,7 @@ class _PlateCanvas(QWidget):
         self._rects.clear()
         if width <= 0.0 or height <= 0.0:
             painter.setPen(QColor(TEXT_COLOR))
-            painter.drawText(plate, Qt.AlignmentFlag.AlignCenter, self.tr("Plate is not configured"))
+            painter.drawText(plate, Qt.AlignmentFlag.AlignCenter, self.tr("Tray is not configured"))
             return
         for item in self._state.get("placements", []):
             self._draw_placement(painter, plate, width, height, item, pending=False)

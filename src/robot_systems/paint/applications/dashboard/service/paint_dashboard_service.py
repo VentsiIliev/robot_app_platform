@@ -357,7 +357,7 @@ class PaintDashboardService(IPaintDashboardService):
         if blocked is not None:
             return blocked
         if self._plate_layout_service is None:
-            return DashboardCommandResult(False, "Plate layout is not available.")
+            return DashboardCommandResult(False, "Tray layout is not available.")
         self._plate_layout_service.clear()
         return DashboardCommandResult(True, "A new tray is ready.")
 
@@ -366,7 +366,7 @@ class PaintDashboardService(IPaintDashboardService):
         if blocked is not None:
             return blocked
         if self._plate_layout_service is None:
-            return DashboardCommandResult(False, "Plate layout is not available.")
+            return DashboardCommandResult(False, "Tray layout is not available.")
         if not self._plate_layout_service.remove(placement_id):
             return DashboardCommandResult(False, "The selected workpiece is no longer on the tray.")
         return DashboardCommandResult(True, "Workpiece removed from the tray.")

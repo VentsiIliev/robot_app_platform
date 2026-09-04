@@ -27,6 +27,7 @@ from src.robot_systems.paint.applications.dashboard.view.paint_dashboard_view im
 )
 from src.robot_systems.paint.applications.dashboard.config import (
     AuxiliaryToggleConfig,
+    PaintDashboardConfig,
     PaintDashboardUiConfig,
 )
 from src.shared_contracts.events.shell_events import ApplicationShortcut
@@ -82,6 +83,23 @@ class _FakeDashboardWidget(QWidget):
 
 
 class TestPaintDashboardUi(unittest.TestCase):
+    def test_camera_disabled_uses_expanded_settings_and_tray_tabs(self) -> None:
+        view = PaintDashboardView(
+            config=PaintDashboardConfig(),
+            action_buttons=[],
+            cards=[],
+            auxiliary_toggles=[],
+            ui_config=PaintDashboardUiConfig(show_camera_preview=False),
+        )
+
+        self.assertIsNotNone(view._expanded_tabs)
+        self.assertEqual(view._expanded_tabs.count(), 2)
+        self.assertIs(view._expanded_tabs.widget(0), view._controls_widget)
+        self.assertIs(view._expanded_tabs.widget(1), view._plate_layout)
+        self.assertIsNone(view._quick_controls)
+        self.assertIsNone(view._controls_drawer)
+        self.assertIsNotNone(view._quick_access)
+
     @classmethod
     def setUpClass(cls) -> None:
         os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")

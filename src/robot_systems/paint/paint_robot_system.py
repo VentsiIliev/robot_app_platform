@@ -167,7 +167,9 @@ def _build_application_specs():
 
 class PaintRobotSystem(BaseRobotSystem):
 
-    ui_config = PaintDashboardUiConfig()
+    ui_config = PaintDashboardUiConfig(
+        show_camera_preview=paint_system_config.SHOW_DASHBOARD_CAMERA_PREVIEW,
+    )
 
 
     movement_groups = [

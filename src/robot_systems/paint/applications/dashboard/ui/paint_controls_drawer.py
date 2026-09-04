@@ -38,6 +38,7 @@ class PaintControlsDrawer(QWidget):
     application_shortcut_requested = pyqtSignal(str)
     unmatched_paint_settings_requested = pyqtSignal(object)
     acceleration_scale_requested = pyqtSignal(float)
+    drying_mode_requested = pyqtSignal(str)
 
     def __init__(
         self,
@@ -53,6 +54,7 @@ class PaintControlsDrawer(QWidget):
         self._configs = list(toggle_configs)
         self._states = {item.device_id: False for item in self._configs}
         self._buttons: dict[str, QPushButton] = {}
+        self._drying_mode = "auto"
         self._shortcuts = []
         self._shortcut_buttons: dict[str, QPushButton] = {}
         self._title = QLabel()
@@ -228,6 +230,11 @@ class PaintControlsDrawer(QWidget):
             button.clicked.connect(self._on_device_toggle)
             devices_layout.addWidget(button)
             self._buttons[item.device_id] = button
+        self._drying_mode_button = QPushButton()
+        self._drying_mode_button.setStyleSheet(GHOST_BTN_STYLE)
+        self._drying_mode_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._drying_mode_button.clicked.connect(self._on_drying_mode)
+        devices_layout.addWidget(self._drying_mode_button)
         self._devices_box.setVisible(show_manual_controls)
         layout.addWidget(self._devices_box)
 
@@ -366,6 +373,18 @@ class PaintControlsDrawer(QWidget):
     def _on_cable_relief(self) -> None:
         self.cable_relief_requested.emit()
 
+    def _on_drying_mode(self) -> None:
+        next_mode = {"auto": "manual", "manual": "demo", "demo": "auto"}
+        self.drying_mode_requested.emit(next_mode[self._drying_mode])
+
+    def set_drying_mode(self, mode: str) -> None:
+        normalized = str(mode).lower()
+        self._drying_mode = normalized if normalized in {"auto", "manual", "demo"} else "auto"
+        self._render_drying_mode()
+
+    def set_drying_mode_busy(self, busy: bool) -> None:
+        self._drying_mode_button.setEnabled(not busy)
+
     def set_device_state(self, device_id: str, enabled: bool) -> None:
         button = self._buttons.get(device_id)
         if button is None:
@@ -455,7 +474,16 @@ class PaintControlsDrawer(QWidget):
         self._shortcuts_box.setTitle(self.tr("Application Shortcuts"))
         for item in self._configs:
             self._render_device_button(item.device_id)
+        self._render_drying_mode()
         self._render_shortcuts()
+
+    def _render_drying_mode(self) -> None:
+        text = {
+            "auto": self.tr("Auto Dry"),
+            "manual": self.tr("Manual Dry"),
+            "demo": self.tr("Demo Alternate"),
+        }[self._drying_mode]
+        self._drying_mode_button.setText(text)
 
     def set_acceleration_scale(self, value: float) -> None:
         self._acceleration_scale.setValue(max(0, min(100, int(round(value)))))

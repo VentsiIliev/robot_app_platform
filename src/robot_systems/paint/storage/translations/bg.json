@@ -8,8 +8,19 @@
     "New Tray": "Нова тава",
     "Remove": "Премахване"
   },
+  "PaintQuickAccessPanel": {
+    "Quick Controls": "Бързи команди",
+    "Relieve Cable": "Освобождаване на кабела",
+    "Auto Dry": "Автоматично сушене",
+    "Manual Dry": "Ръчно сушене",
+    "Demo Alternate": "Демо редуване",
+    "Vacuum Pump": "Вакуумна помпа",
+    "Fan": "Вентилатор",
+    "ON": "ВКЛ.",
+    "OFF": "ИЗКЛ."
+  },
   "_PlateCanvas": {
-    "Plate is not configured": "Плочата не е конфигурирана"
+    "Tray is not configured": "Тавата не е конфигурирана"
   },
   "DeviceControlView": {
     "Manage availability, inspect state, and run device commands.": "Управлявайте наличността, преглеждайте състоянието и изпълнявайте команди."
@@ -68,6 +79,8 @@
     "Cable Relief": "Освобождаване на кабела",
     "Manual Control": "Ръчно управление",
     "Drying Mode": "Режим на сушене",
+    "Paint Settings": "Настройки за боядисване",
+    "Tray": "Тава",
     "New Tray": "Нова тава",
     "Clear all workpieces and start a new tray?": "Да се изчистят ли всички детайли и да се започне нова тава?",
     "Remove Workpiece": "Премахване на детайл",
@@ -76,7 +89,7 @@
     "Workpiece removed from the tray.": "Детайлът е премахнат от тавата.",
     "The selected workpiece is no longer on the tray.": "Избраният детайл вече не е върху тавата.",
     "Stop the paint process before editing the tray.": "Спрете процеса за боядисване, преди да редактирате тавата.",
-    "Plate layout is not available.": "Разположението на плочата не е налично.",
+    "Tray layout is not available.": "Разположението на тавата не е налично.",
     "Enable Dryer": "Включване на сушилнята",
     "Automatic drying requires the dryer. Do you want to enable it now?": "Автоматичното сушене изисква сушилнята. Искате ли да я включите сега?",
     "Dryer service is not available.": "Услугата за сушилнята не е налична.",

@@ -8,8 +8,19 @@
     "New Tray": "New Tray",
     "Remove": "Remove"
   },
+  "PaintQuickAccessPanel": {
+    "Quick Controls": "Quick Controls",
+    "Relieve Cable": "Relieve Cable",
+    "Auto Dry": "Auto Dry",
+    "Manual Dry": "Manual Dry",
+    "Demo Alternate": "Demo Alternate",
+    "Vacuum Pump": "Vacuum Pump",
+    "Fan": "Fan",
+    "ON": "ON",
+    "OFF": "OFF"
+  },
   "_PlateCanvas": {
-    "Plate is not configured": "Plate is not configured"
+    "Tray is not configured": "Tray is not configured"
   },
   "DeviceControlView": {
     "Manage availability, inspect state, and run device commands.": "Manage availability, inspect state, and run device commands."
@@ -68,6 +79,8 @@
     "Cable Relief": "Cable Relief",
     "Manual Control": "Manual Control",
     "Drying Mode": "Drying Mode",
+    "Paint Settings": "Paint Settings",
+    "Tray": "Tray",
     "New Tray": "New Tray",
     "Clear all workpieces and start a new tray?": "Clear all workpieces and start a new tray?",
     "Remove Workpiece": "Remove Workpiece",
@@ -76,7 +89,7 @@
     "Workpiece removed from the tray.": "Workpiece removed from the tray.",
     "The selected workpiece is no longer on the tray.": "The selected workpiece is no longer on the tray.",
     "Stop the paint process before editing the tray.": "Stop the paint process before editing the tray.",
-    "Plate layout is not available.": "Plate layout is not available.",
+    "Tray layout is not available.": "Tray layout is not available.",
     "Enable Dryer": "Enable Dryer",
     "Automatic drying requires the dryer. Do you want to enable it now?": "Automatic drying requires the dryer. Do you want to enable it now?",
     "Dryer service is not available.": "Dryer service is not available.",

@@ -21,6 +21,7 @@ class PaintDashboardUiConfig:
     show_unmatched_paint_controls: bool = True
     show_acceleration_scale_control: bool = True
     show_bottom_quick_controls: bool = True
+    show_camera_preview: bool = True
     show_application_shortcuts: bool = False
     shortcut_application_names: tuple[str, ...] = ()
 
