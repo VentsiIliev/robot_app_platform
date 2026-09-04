@@ -69,11 +69,14 @@ class _PlateCanvas(QWidget):
             self._draw_placement(painter, plate, width, height, pending, pending=True)
 
     def _scaled_plate_rect(self, width_mm: float, height_mm: float) -> QRectF:
+        display_width, display_height = (
+            (height_mm, width_mm) if height_mm > width_mm else (width_mm, height_mm)
+        )
         available_width = max(1.0, float(self.width() - 36))
         available_height = max(1.0, float(self.height() - 36))
-        scale = min(available_width / width_mm, available_height / height_mm)
-        plate_width = width_mm * scale
-        plate_height = height_mm * scale
+        scale = min(available_width / display_width, available_height / display_height)
+        plate_width = display_width * scale
+        plate_height = display_height * scale
         return QRectF(
             (self.width() - plate_width) / 2.0,
             (self.height() - plate_height) / 2.0,
@@ -83,12 +86,15 @@ class _PlateCanvas(QWidget):
 
     def _draw_placement(self, painter, plate, width, height, item, *, pending: bool) -> None:
         placement_id = int(item["placement_id"])
-        rect = QRectF(
-            plate.left() + float(item["left_mm"]) / width * plate.width(),
-            plate.bottom() - (float(item["bottom_mm"]) + float(item["height_mm"])) / height * plate.height(),
-            float(item["width_mm"]) / width * plate.width(),
-            float(item["height_mm"]) / height * plate.height(),
-        ).adjusted(2, 2, -2, -2)
+        left = float(item["left_mm"])
+        bottom = float(item["bottom_mm"])
+        item_width = float(item["width_mm"])
+        item_height = float(item["height_mm"])
+        corners = (
+            self._to_canvas_point(left, bottom, width, height, plate),
+            self._to_canvas_point(left + item_width, bottom + item_height, width, height, plate),
+        )
+        rect = QRectF(corners[0], corners[1]).normalized().adjusted(2, 2, -2, -2)
         if not pending:
             self._rects[placement_id] = rect
         selected = placement_id == self._selected_id
@@ -101,9 +107,12 @@ class _PlateCanvas(QWidget):
         if outlines:
             for outline in outlines:
                 polygon = QPolygonF([
-                    QPointF(
-                        plate.left() + (float(item["left_mm"]) + float(x)) / width * plate.width(),
-                        plate.bottom() - (float(item["bottom_mm"]) + float(y)) / height * plate.height(),
+                    self._to_canvas_point(
+                        left + float(x),
+                        bottom + float(y),
+                        width,
+                        height,
+                        plate,
                     )
                     for x, y in outline
                 ])
@@ -115,6 +124,29 @@ class _PlateCanvas(QWidget):
             painter.drawRoundedRect(rect, 5, 5)
         painter.setPen(QColor(TEXT_COLOR if pending else TEXT_ON_PRIMARY))
         painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, str(placement_id))
+
+    @staticmethod
+    def _to_canvas_point(
+        x_mm: float,
+        y_mm: float,
+        tray_width_mm: float,
+        tray_height_mm: float,
+        plate: QRectF,
+    ) -> QPointF:
+        if tray_height_mm > tray_width_mm:
+            display_x = y_mm
+            display_y = tray_width_mm - x_mm
+            display_width = tray_height_mm
+            display_height = tray_width_mm
+        else:
+            display_x = x_mm
+            display_y = y_mm
+            display_width = tray_width_mm
+            display_height = tray_height_mm
+        return QPointF(
+            plate.left() + display_x / display_width * plate.width(),
+            plate.bottom() - display_y / display_height * plate.height(),
+        )
 
     def mousePressEvent(self, event) -> None:
         if event.button() == Qt.MouseButton.LeftButton:
