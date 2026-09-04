@@ -65,6 +65,26 @@ def build_fan_service(ctx):
         return None
 
 
+def build_tray_fan_service(ctx):
+    from src.engine.hardware.fan.modbus.modbus_fan_factory import build_modbus_fan_control
+
+    try:
+        modbus_config = ctx.settings.get(CommonSettingsID.MODBUS_CONFIG)
+        peripheral_config = ctx.settings.get(SettingsID.PERIPHERALS)
+        if not isinstance(modbus_config, ModbusConfig):
+            return None
+        if not isinstance(peripheral_config, PeripheralConfig):
+            return None
+        return build_modbus_fan_control(
+            modbus_config,
+            peripheral_config,
+            peripheral_key="tray_fan",
+        )
+    except Exception:
+        _logger.exception("Tray fan service could not be built; continuing without it")
+        return None
+
+
 def build_physical_control_buttons_service(ctx):
     from src.engine.hardware.physical_control_buttons.modbus.modbus_physical_control_buttons_factory import (
         build_modbus_physical_control_buttons,

@@ -5,6 +5,7 @@ class ServiceID(str, Enum):
     CUSTOM_DEVICE = "custom_device"
     VACUUM_PUMP = "vacuum_pump"
     FAN = "fan"
+    TRAY_FAN = "tray_fan"
     PHYSICAL_CONTROL_BUTTONS = "physical_control_buttons"
     VACUUM_SENSOR = "vacuum_sensor"
     DRYER = "dryer"

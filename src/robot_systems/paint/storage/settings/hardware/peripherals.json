@@ -36,6 +36,19 @@
     },
     "statuses": {}
   },
+  "tray_fan": {
+    "enabled": true,
+    "slave_id": 1,
+    "inputs": {},
+    "outputs": {
+      "fan": "Y6"
+    },
+    "commands": {
+      "on": 1,
+      "off": 0
+    },
+    "statuses": {}
+  },
   "physical_control_buttons": {
     "enabled": true,
     "slave_id": 1,
