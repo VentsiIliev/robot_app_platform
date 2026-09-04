@@ -132,7 +132,7 @@ class TestPaintDashboardUi(unittest.TestCase):
 
         drawer._unmatched_velocity.setValue(1.0)
         payload = drawer._settings_payload()
-        self.assertEqual(payload["pass_1"]["acceleration_percent"], 0.01)
+        self.assertAlmostEqual(payload["pass_1"]["acceleration_percent"], 0.01)
         self.assertEqual(
             drawer._pass_1_resolved_speed.text(),
             "Velocity: 1.0%  ·  Acceleration: 0.01%",
@@ -146,6 +146,27 @@ class TestPaintDashboardUi(unittest.TestCase):
         )
 
         self.assertTrue(drawer._pass_1_resolved_speed.isHidden())
+
+    def test_combined_speed_can_map_ui_one_to_internal_ten(self) -> None:
+        drawer = PaintControlsDrawer(
+            [],
+            use_combined_speed_control=True,
+            combined_speed_minimum_percent=10.0,
+            combined_acceleration_minimum_percent=1.0,
+            show_resolved_speed_values=True,
+        )
+        drawer._unmatched_velocity.setValue(1.0)
+
+        payload = drawer._settings_payload()
+
+        self.assertEqual(payload["pass_1"]["velocity_percent"], 10.0)
+        self.assertEqual(payload["pass_1"]["acceleration_percent"], 1.0)
+        self.assertEqual(
+            drawer._pass_1_resolved_speed.text(),
+            "Velocity: 10.0%  ·  Acceleration: 1.00%",
+        )
+        drawer.set_unmatched_paint_settings(payload["pass_1"])
+        self.assertEqual(drawer._unmatched_velocity.value(), 1.0)
 
     def test_separate_velocity_and_acceleration_controls_remain_configurable(self) -> None:
         drawer = PaintControlsDrawer([], use_combined_speed_control=False)

@@ -323,6 +323,10 @@ class PaintDashboardView(IApplicationView):
             show_shortcuts=self._ui_config.show_application_shortcuts,
             compact_layout=not self._ui_config.show_camera_preview,
             use_combined_speed_control=self._ui_config.use_combined_paint_speed_control,
+            combined_speed_minimum_percent=self._ui_config.combined_paint_speed_minimum_percent,
+            combined_speed_maximum_percent=self._ui_config.combined_paint_speed_maximum_percent,
+            combined_acceleration_minimum_percent=self._ui_config.combined_paint_acceleration_minimum_percent,
+            combined_acceleration_maximum_percent=self._ui_config.combined_paint_acceleration_maximum_percent,
             show_resolved_speed_values=self._ui_config.show_resolved_paint_speed_values,
         )
         if self._ui_config.show_camera_preview:
@@ -375,6 +379,18 @@ class PaintDashboardView(IApplicationView):
                 self._auxiliary_toggles,
                 use_combined_speed_control=(
                     self._ui_config.use_combined_paint_speed_control
+                ),
+                combined_speed_minimum_percent=(
+                    self._ui_config.combined_paint_speed_minimum_percent
+                ),
+                combined_speed_maximum_percent=(
+                    self._ui_config.combined_paint_speed_maximum_percent
+                ),
+                combined_acceleration_minimum_percent=(
+                    self._ui_config.combined_paint_acceleration_minimum_percent
+                ),
+                combined_acceleration_maximum_percent=(
+                    self._ui_config.combined_paint_acceleration_maximum_percent
                 ),
                 show_resolved_speed_values=(
                     self._ui_config.show_resolved_paint_speed_values

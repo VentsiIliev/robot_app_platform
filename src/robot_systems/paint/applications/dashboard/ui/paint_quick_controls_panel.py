@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from math import sqrt
+
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import (
     QAbstractSpinBox,
@@ -29,11 +31,29 @@ class PaintQuickControlsPanel(QWidget):
         toggle_configs: list,
         *,
         use_combined_speed_control: bool = False,
+        combined_speed_minimum_percent: float = 1.0,
+        combined_speed_maximum_percent: float = 100.0,
+        combined_acceleration_minimum_percent: float = 0.01,
+        combined_acceleration_maximum_percent: float = 100.0,
         show_resolved_speed_values: bool = False,
         parent=None,
     ) -> None:
         super().__init__(parent)
         self._use_combined_speed_control = bool(use_combined_speed_control)
+        self._combined_speed_minimum_percent = max(
+            1.0, min(100.0, float(combined_speed_minimum_percent))
+        )
+        self._combined_speed_maximum_percent = max(
+            self._combined_speed_minimum_percent,
+            min(100.0, float(combined_speed_maximum_percent)),
+        )
+        self._combined_acceleration_minimum_percent = max(
+            0.01, min(100.0, float(combined_acceleration_minimum_percent))
+        )
+        self._combined_acceleration_maximum_percent = max(
+            self._combined_acceleration_minimum_percent,
+            min(100.0, float(combined_acceleration_maximum_percent)),
+        )
         self._show_resolved_speed_values = bool(
             show_resolved_speed_values and use_combined_speed_control
         )
@@ -166,21 +186,48 @@ class PaintQuickControlsPanel(QWidget):
 
     def _on_apply(self) -> None:
         speed = self._velocity.value()
+        velocity = self._resolved_velocity(speed)
         self.unmatched_paint_settings_requested.emit(
             {
                 "pass_count": int(self._unmatched_settings.get("pass_count", 1)),
-                "pass_1": {"velocity_percent": speed, "acceleration_percent": speed * speed / 100.0 if self._use_combined_speed_control else self._acceleration.value(), "offset_mm": self._offset.value()},
+                "pass_1": {"velocity_percent": velocity, "acceleration_percent": self._resolved_acceleration(speed) if self._use_combined_speed_control else self._acceleration.value(), "offset_mm": self._offset.value()},
                 "pass_2": dict(self._unmatched_settings.get("pass_2") or {"use_pass_1_settings": True}),
             }
         )
+
+    def _resolved_velocity(self, speed_percent: float) -> float:
+        speed = max(1.0, min(100.0, float(speed_percent)))
+        if not self._use_combined_speed_control:
+            return speed
+        minimum = self._combined_speed_minimum_percent
+        maximum = self._combined_speed_maximum_percent
+        return minimum + (speed - 1.0) * (maximum - minimum) / 99.0
+
+    def _resolved_acceleration(self, speed_percent: float) -> float:
+        speed = max(1.0, min(100.0, float(speed_percent)))
+        progress = (speed - 1.0) / 99.0
+        minimum_root = sqrt(self._combined_acceleration_minimum_percent)
+        maximum_root = sqrt(self._combined_acceleration_maximum_percent)
+        return (minimum_root + progress * (maximum_root - minimum_root)) ** 2
+
+    def _display_speed(self, velocity_percent: float) -> float:
+        velocity = max(1.0, min(100.0, float(velocity_percent)))
+        if not self._use_combined_speed_control:
+            return velocity
+        minimum = self._combined_speed_minimum_percent
+        maximum = self._combined_speed_maximum_percent
+        if minimum >= maximum:
+            return 1.0
+        return 1.0 + (max(minimum, min(maximum, velocity)) - minimum) * 99.0 / (maximum - minimum)
 
     def _update_resolved_speed_label(self) -> None:
         if not self._show_resolved_speed_values:
             return
         speed = float(self._velocity.value())
+        velocity = self._resolved_velocity(speed)
         self._resolved_speed.setText(
-            f"{self.tr('Velocity')}: {speed:.1f}%  ·  "
-            f"{self.tr('Acceleration')}: {speed * speed / 100.0:.2f}%"
+            f"{self.tr('Velocity')}: {velocity:.1f}%  ·  "
+            f"{self.tr('Acceleration')}: {self._resolved_acceleration(speed):.2f}%"
         )
 
     def _on_device_off(self) -> None:
@@ -214,7 +261,9 @@ class PaintQuickControlsPanel(QWidget):
             self._box.setEnabled(False)
             return
         self._unmatched_settings = dict(settings)
-        self._velocity.setValue(float(settings.get("velocity_percent", 10.0)))
+        self._velocity.setValue(
+            self._display_speed(float(settings.get("velocity_percent", 10.0)))
+        )
         self._acceleration.setValue(float(settings.get("acceleration_percent", 10.0)))
         self._offset.setValue(float(settings.get("offset_mm", 0.0)))
         self._box.setEnabled(True)
