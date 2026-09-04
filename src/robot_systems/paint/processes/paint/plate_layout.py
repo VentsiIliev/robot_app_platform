@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 import math
 from threading import RLock
+from typing import Callable
 
 
 @dataclass(frozen=True)
@@ -17,6 +19,7 @@ class PlateDropoffReservation:
     left_mm: float = 0.0
     bottom_mm: float = 0.0
     outlines_mm: tuple[tuple[tuple[float, float], ...], ...] = ()
+    paint_passes: tuple[dict[str, float | int], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -27,13 +30,16 @@ class PlatePlacement:
     width_mm: float
     height_mm: float
     outlines_mm: tuple[tuple[tuple[float, float], ...], ...] = ()
+    painted_at: str = ""
+    paint_passes: tuple[dict[str, float | int], ...] = ()
 
 
 class PlateLayoutService:
     """Validate a taught plate and reserve deterministic shelf placements."""
 
-    def __init__(self) -> None:
+    def __init__(self, clock: Callable[[], datetime] | None = None) -> None:
         self._lock = RLock()
+        self._clock = clock or (lambda: datetime.now().astimezone())
         self._signature: tuple | None = None
         self._next_left_mm = 0.0
         self._row_bottom_mm = 0.0
@@ -62,7 +68,14 @@ class PlateLayoutService:
             return {
                 "width_mm": width,
                 "height_mm": height,
-                "placements": [vars(item).copy() for item in self._placements],
+                "placements": [
+                    {
+                        **vars(item),
+                        "paint_pass_count": len(item.paint_passes),
+                        "paint_passes": [dict(value) for value in item.paint_passes],
+                    }
+                    for item in self._placements
+                ],
                 "pending": ({
                     "placement_id": pending.placement_id,
                     "left_mm": pending.left_mm,
@@ -101,6 +114,7 @@ class PlateLayoutService:
         workpiece_rz_at_calibration_deg: float,
         pose_calculator,
         outlines_mm=(),
+        paint_passes=(),
     ) -> tuple[PlateDropoffReservation | None, str]:
         with self._lock:
             return self._reserve_locked(
@@ -111,12 +125,14 @@ class PlateLayoutService:
                 workpiece_rz_at_calibration_deg=workpiece_rz_at_calibration_deg,
                 pose_calculator=pose_calculator,
                 outlines_mm=outlines_mm,
+                paint_passes=paint_passes,
             )
 
     def _reserve_locked(
         self, config, *, width_mm: float, height_mm: float,
         calibration_pose: list[float], workpiece_rz_at_calibration_deg: float,
         pose_calculator, outlines_mm=(),
+        paint_passes=(),
     ) -> tuple[PlateDropoffReservation | None, str]:
         corners, error = validate_plate_corners(config.plate_corners)
         if error:
@@ -227,6 +243,7 @@ class PlateLayoutService:
                 tuple((float(x), float(y)) for x, y in outline)
                 for outline in outlines_mm
             ),
+            paint_passes=tuple(dict(value) for value in paint_passes),
         )
         self._pending_state = (left, bottom, max(row_height, height))
         return self._pending, ""
@@ -237,9 +254,14 @@ class PlateLayoutService:
                 return
             left, bottom, row_height = self._pending_state
             self._placements.append(PlatePlacement(
-                self._pending.placement_id, left, bottom,
-                self._pending.width_mm, self._pending.height_mm,
-                self._pending.outlines_mm,
+                placement_id=self._pending.placement_id,
+                left_mm=left,
+                bottom_mm=bottom,
+                width_mm=self._pending.width_mm,
+                height_mm=self._pending.height_mm,
+                outlines_mm=self._pending.outlines_mm,
+                painted_at=self._clock().isoformat(),
+                paint_passes=self._pending.paint_passes,
             ))
             self._next_placement_id += 1
             self._next_left_mm = left + self._pending.width_mm + float(config.plate_spacing_x_mm)

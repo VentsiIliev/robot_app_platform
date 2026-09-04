@@ -1,4 +1,5 @@
 import unittest
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -14,6 +15,7 @@ from src.robot_systems.paint.processes.paint.plate_layout import (
 )
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.workflow.pickup_handler import (
     _should_preplan_dropoff_in_ordered_chain,
+    _paint_pass_metadata,
     _workpiece_footprint_mm,
     _workpiece_layout_geometry,
 )
@@ -36,6 +38,69 @@ def _corners():
 
 
 class TestPlateLayoutDropoff(unittest.TestCase):
+    def test_paint_pass_metadata_records_two_distinct_pass_settings(self) -> None:
+        execution_plan = MagicMock()
+        execution_plan.workpiece = {"workpieceId": "captured"}
+        execution_plan.execution_jobs = [{"vel": 21.0, "acc": 32.0}]
+        config = PaintProcessConfig(
+            unmatched_paint_pass_count=2,
+            unmatched_second_pass=SimpleNamespace(
+                use_pass_1_settings=False,
+                velocity_percent=41.0,
+                acceleration_percent=52.0,
+                offset_mm=1.5,
+            ),
+        )
+        executor = MagicMock()
+        executor._resolve_pivot_offset_mm.return_value = 0.7
+
+        passes = _paint_pass_metadata(execution_plan, config, executor)
+
+        self.assertEqual(passes, (
+            {
+                "pass_number": 1,
+                "velocity_percent": 21.0,
+                "acceleration_percent": 32.0,
+                "press_offset_mm": 0.7,
+            },
+            {
+                "pass_number": 2,
+                "velocity_percent": 41.0,
+                "acceleration_percent": 52.0,
+                "press_offset_mm": 1.5,
+            },
+        ))
+
+    def test_committed_placement_keeps_painted_timestamp_metadata(self) -> None:
+        painted_at = datetime(2026, 9, 4, 11, 30, 15, tzinfo=timezone.utc)
+        service = PlateLayoutService(clock=lambda: painted_at)
+        config = PaintDropoffConfig(
+            strategy="plate_layout",
+            plate_corners=_corners(),
+            plate_passage_gate_pose=[200, 100, 180, 180, 0, 0],
+        )
+        service.reserve(
+            config,
+            width_mm=20.0,
+            height_mm=30.0,
+            calibration_pose=[0.0, 0.0, 0.0, 180.0, 0.0, 0.0],
+            workpiece_rz_at_calibration_deg=0.0,
+            pose_calculator=calculate_workpiece_dropoff_pose,
+            paint_passes=({
+                "pass_number": 1,
+                "velocity_percent": 20.0,
+                "acceleration_percent": 30.0,
+                "press_offset_mm": 0.5,
+            },),
+        )
+
+        service.commit(config)
+
+        placement = service.snapshot(config)["placements"][0]
+        self.assertEqual(placement["painted_at"], painted_at.isoformat())
+        self.assertEqual(placement["paint_pass_count"], 1)
+        self.assertEqual(placement["paint_passes"][0]["press_offset_mm"], 0.5)
+
     def test_workpiece_footprint_always_uses_long_side_as_width(self) -> None:
         execution_plan = MagicMock()
         execution_plan.execution_paths.return_value = [[

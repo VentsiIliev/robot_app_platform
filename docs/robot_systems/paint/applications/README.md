@@ -51,6 +51,8 @@ Primary responsibility:
 - route the dashboard Fan control to the standard fan in Auto/Demo drying modes and to the tray fan in Manual Dry mode
 - display the selected fan's actual output-register state after switching drying modes instead of its communication-health state
 - normalize tray workpiece axes to a stable robot-coordinate direction so identical physical orientations cannot render 180 degrees apart
+- retain each committed tray workpiece's painted timestamp and show a live drying duration while that workpiece is selected
+- retain pass count and per-pass velocity, acceleration, and press-offset metadata; show only the pass count in the current tray UI
 - expose the independently addressed tray fan in the Device Control application
 - show the shared plate-layout state in manual drying mode, including committed and pending workpieces
 - allow stopped-state operators to confirm a new tray or press-and-hold a committed workpiece to remove it

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 from PyQt6.QtCore import QEvent, QPointF, QRectF, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QColor, QPainter, QPen, QPolygonF
 from PyQt6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
@@ -178,6 +180,10 @@ class PaintPlateLayout(QWidget):
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self._selected_id: int | None = None
+        self._state: dict[str, object] = {}
+        self._drying_timer = QTimer(self)
+        self._drying_timer.setInterval(1000)
+        self._drying_timer.timeout.connect(self._render_selection_metadata)
         self.setStyleSheet(f"background-color: {BG_COLOR};")
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -210,7 +216,16 @@ class PaintPlateLayout(QWidget):
         self.retranslateUi()
 
     def set_state(self, state: dict[str, object]) -> None:
+        self._state = dict(state or {})
         self._canvas.set_state(state)
+        placement_ids = {
+            int(item["placement_id"])
+            for item in self._state.get("placements", [])
+        }
+        if self._selected_id not in placement_ids:
+            self.clear_selection()
+        else:
+            self._render_selection_metadata()
 
     def set_editable(self, editable: bool) -> None:
         self._new_tray.setEnabled(editable)
@@ -218,8 +233,10 @@ class PaintPlateLayout(QWidget):
 
     def clear_selection(self) -> None:
         self._selected_id = None
+        self._drying_timer.stop()
         self._remove.hide()
         self._canvas.clear_selection()
+        self._hint.setText(self.tr("Press and hold a workpiece to select it"))
 
     def _on_new_tray(self) -> None:
         self.new_tray_requested.emit()
@@ -227,6 +244,49 @@ class PaintPlateLayout(QWidget):
     def _on_placement_held(self, placement_id: int) -> None:
         self._selected_id = placement_id
         self._remove.show()
+        self._render_selection_metadata()
+        self._drying_timer.start()
+
+    def _render_selection_metadata(self) -> None:
+        placement = next(
+            (
+                item
+                for item in self._state.get("placements", [])
+                if int(item["placement_id"]) == self._selected_id
+            ),
+            None,
+        )
+        if placement is None:
+            return
+        raw_timestamp = str(placement.get("painted_at", "") or "")
+        try:
+            painted_at = datetime.fromisoformat(raw_timestamp)
+            if painted_at.tzinfo is None:
+                painted_at = painted_at.astimezone()
+            now = datetime.now().astimezone()
+            elapsed_seconds = max(0, int((now - painted_at).total_seconds()))
+            painted_time = painted_at.astimezone().strftime("%H:%M:%S")
+        except (TypeError, ValueError):
+            self._hint.setText(self.tr("Drying time is unavailable"))
+            return
+        self._hint.setText(
+            f"{self.tr('Painted at')}: {painted_time}   •   "
+            f"{self.tr('Drying for')}: {self._format_duration(elapsed_seconds)}   •   "
+            f"{self.tr('Passes')}: {int(placement.get('paint_pass_count', 0) or 0)}"
+        )
+
+    @staticmethod
+    def _format_duration(total_seconds: int) -> str:
+        days, remainder = divmod(max(0, int(total_seconds)), 86400)
+        hours, remainder = divmod(remainder, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        if days:
+            return f"{days}d {hours}h {minutes}m"
+        if hours:
+            return f"{hours}h {minutes}m {seconds}s"
+        if minutes:
+            return f"{minutes}m {seconds}s"
+        return f"{seconds}s"
 
     def _on_remove(self) -> None:
         if self._selected_id is not None:
@@ -234,7 +294,10 @@ class PaintPlateLayout(QWidget):
 
     def retranslateUi(self) -> None:
         self._title.setText(self.tr("Manual Dryer Tray"))
-        self._hint.setText(self.tr("Press and hold a workpiece to select it"))
+        if self._selected_id is None:
+            self._hint.setText(self.tr("Press and hold a workpiece to select it"))
+        else:
+            self._render_selection_metadata()
         self._new_tray.setText(self.tr("New Tray"))
         self._remove.setText(self.tr("Remove"))
 

@@ -6,7 +6,11 @@
     "Manual Dryer Tray": "Manual Dryer Tray",
     "Press and hold a workpiece to select it": "Press and hold a workpiece to select it",
     "New Tray": "New Tray",
-    "Remove": "Remove"
+    "Remove": "Remove",
+    "Painted at": "Painted at",
+    "Drying for": "Drying for",
+    "Passes": "Passes",
+    "Drying time is unavailable": "Drying time is unavailable"
   },
   "PaintQuickAccessPanel": {
     "Quick Controls": "Quick Controls",
