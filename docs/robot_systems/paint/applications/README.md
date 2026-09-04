@@ -176,3 +176,9 @@ It receives:
 - paint path executor for preview and execution-oriented diagnostics
 
 That makes it the main authoring surface for paint workpieces and the main manual entry point into the same geometry pipeline later used by the background paint process.
+
+The Paint Process Settings application's `Sensor-Controlled Fast LIN` section
+exposes both `Controlled Stop Duration` (the requested deceleration duration)
+and `Stop Confirmation Timeout` (how long pickup waits for the stopped task to
+become inactive). The latter defaults to 3 seconds and applies to normal and
+magazine sensor-controlled pickup.

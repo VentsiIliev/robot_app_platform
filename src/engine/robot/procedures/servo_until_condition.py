@@ -40,6 +40,7 @@ class ServoUntilConditionConfig:
     initial_linear_mm_s: float | None = None
     slowdown_z_mm: float | None = None
     controlled_stop_duration_s: float | None = 0.20
+    stop_confirmation_timeout_s: float = 3.0
 
 
 @dataclass(frozen=True)
@@ -886,7 +887,7 @@ class ServoUntilConditionProcedure:
                         )
                     execution_inactive = self._wait_for_execution_inactive(
                         task_id=outcome.get("task_id"),
-                        timeout_s=1.0,
+                        timeout_s=cfg.stop_confirmation_timeout_s,
                         poll_interval_s=max(0.01, min(0.05, float(cfg.poll_interval_s))),
                     )
                     if not execution_inactive:
@@ -1727,6 +1728,12 @@ class ServoUntilConditionProcedure:
                 return False, "invalid_minimum_z"
             if not math.isfinite(minimum_z):
                 return False, "invalid_minimum_z"
+        try:
+            stop_confirmation_timeout = float(cfg.stop_confirmation_timeout_s)
+        except (TypeError, ValueError):
+            return False, "invalid_stop_confirmation_timeout"
+        if not math.isfinite(stop_confirmation_timeout) or stop_confirmation_timeout <= 0.0:
+            return False, "invalid_stop_confirmation_timeout"
         if (cfg.initial_linear_mm_s is None) != (cfg.slowdown_z_mm is None):
             return False, "incomplete_slowdown_config"
         if cfg.initial_linear_mm_s is not None:

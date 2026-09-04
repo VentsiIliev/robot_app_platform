@@ -400,6 +400,9 @@ def _execute_magazine_servo_contact_pickup_release(
                 controlled_stop_duration_s=float(
                     getattr(pickup_motion, "servo_contact_controlled_stop_duration_s", 0.20)
                 ),
+                stop_confirmation_timeout_s=float(
+                    getattr(pickup_motion, "servo_contact_stop_confirmation_timeout_s", 3.0)
+                ),
                 timeout_s=float(pickup_motion.servo_contact_timeout_s),
                 preflight_condition_read_attempts=int(pickup_motion.servo_contact_preflight_read_attempts),
                 condition_read_failure_limit=int(pickup_motion.servo_contact_read_failure_limit),

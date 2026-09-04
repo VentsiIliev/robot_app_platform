@@ -192,6 +192,7 @@
     "Calibration Pickup": "Вземане от калибрационната зона",
     "Servo Contact Settings": "Настройки за Servo Contact",
     "Controlled Stop Duration": "Продължителност на контролираното спиране",
+    "Stop Confirmation Timeout": "Изчакване за потвърждение на спирането",
     "Fixed Pickup Movement Group": "Фиксирана група за движение при вземане",
     "Fixed Pickup Position Tolerance": "Допуск за фиксираната позиция на вземане",
     "Fixed Pickup Orientation Tolerance": "Допуск за ориентацията при фиксирано вземане",

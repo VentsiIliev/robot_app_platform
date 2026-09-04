@@ -151,6 +151,7 @@ class TestPaintProcessSettingsController(unittest.TestCase):
         flat["pickup_servo_contact_fast_lin_velocity_percent"] = 15.0
         flat["pickup_servo_contact_fast_lin_acceleration_percent"] = 25.0
         flat["pickup_servo_contact_controlled_stop_duration_s"] = 0.15
+        flat["pickup_servo_contact_stop_confirmation_timeout_s"] = 4.5
 
         restored = PaintProcessSettingsMapper.from_flat_dict(flat, base)
 
@@ -158,6 +159,7 @@ class TestPaintProcessSettingsController(unittest.TestCase):
         self.assertEqual(15.0, restored.pickup_motion.servo_contact_fast_lin_velocity_percent)
         self.assertEqual(25.0, restored.pickup_motion.servo_contact_fast_lin_acceleration_percent)
         self.assertEqual(0.15, restored.pickup_motion.servo_contact_controlled_stop_duration_s)
+        self.assertEqual(4.5, restored.pickup_motion.servo_contact_stop_confirmation_timeout_s)
 
     def test_magazine_retract_policy_round_trips(self):
         base = PaintProcessConfig()

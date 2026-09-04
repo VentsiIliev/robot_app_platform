@@ -192,6 +192,7 @@
     "Calibration Pickup": "Calibration Pickup",
     "Servo Contact Settings": "Servo Contact Settings",
     "Controlled Stop Duration": "Controlled Stop Duration",
+    "Stop Confirmation Timeout": "Stop Confirmation Timeout",
     "Fixed Pickup Movement Group": "Fixed Pickup Movement Group",
     "Fixed Pickup Position Tolerance": "Fixed Pickup Position Tolerance",
     "Fixed Pickup Orientation Tolerance": "Fixed Pickup Orientation Tolerance",
