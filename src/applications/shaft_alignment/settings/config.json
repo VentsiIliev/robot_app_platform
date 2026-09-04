@@ -49,16 +49,31 @@
   "misalignment_dw_threshold_mm": 0.5,
   "misalignment_dh_threshold_mm": 0.5,
   "detection_interval_s": 0.1,
- "reference_tcp_x_mm": 245.0049982869421,
-"reference_tcp_y_mm": 296.08587061888466,
-"reference_orientation_deg": 8.723384902431064,
-"reference_marker_width_mm": 26.412764489032316,
-"reference_marker_height_mm": 25.570961226818497,
-"reference_marker_corners_normalized": [
-[0.4796875, 0.45555555555555555],
-[0.528125, 0.46944444444444444],
-[0.5203125, 0.5555555555555556],
-[0.471875, 0.5416666666666666]
-],
-"reference_point_of_interest_normalized": [0.50133125, 0.6070111111111111]
+  "reference_tcp_x_mm": 247.4013630882945,
+  "reference_tcp_y_mm": 300.1927395220798,
+  "reference_orientation_deg": 5.4502772981040835,
+  "reference_marker_width_mm": 28.39190587416884,
+  "reference_marker_height_mm": 28.46704778923439,
+  "reference_marker_corners_normalized": [
+    [
+      0.474534347653389,
+      0.4512324227227105
+    ],
+    [
+      0.5279627442359924,
+      0.45983119540744355
+    ],
+    [
+      0.5222902357578278,
+      0.5582636091444227
+    ],
+    [
+      0.47109375,
+      0.5472222222222223
+    ]
+  ],
+  "reference_point_of_interest_normalized": [
+    0.5042748308290135,
+    0.606942328462697
+  ]
 }

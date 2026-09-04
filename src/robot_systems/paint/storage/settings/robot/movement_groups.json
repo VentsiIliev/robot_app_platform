@@ -42,7 +42,7 @@
       "iterations": 1,
       "has_iterations": false,
       "has_trajectory_execution": true,
-      "position": "[253.619, 270.066, 247.255, -179.859, -0.015, -0.030]"
+      "position": "[253.687, 275.136, 253.000, -179.670, 0.000, 0.000]"
     },
     "Vertical Shaft Alignment": {
       "velocity": 10,

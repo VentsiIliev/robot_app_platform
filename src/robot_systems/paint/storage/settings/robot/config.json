@@ -2,8 +2,8 @@
   "ROBOT_IP": "192.168.58.2",
   "ROBOT_TOOL": 1,
   "ROBOT_USER": 1,
-  "CAMERA_TO_TCP_X_OFFSET": -4.155,
-  "CAMERA_TO_TCP_Y_OFFSET": 81.773,
+  "CAMERA_TO_TCP_X_OFFSET": -11.157,
+  "CAMERA_TO_TCP_Y_OFFSET": 88.123,
   "CAMERA_Z_SHIFT_X_PER_MM_PX": 0.0,
   "CAMERA_Z_SHIFT_Y_PER_MM_PX": 0.0,
   "CAMERA_Z_SHIFT_X_PER_MM": -0.018411,
@@ -24,7 +24,7 @@
     "y_min": -350,
     "y_max": 500,
     "z_min": 0,
-    "z_max": 252,
+    "z_max": 300,
     "rx_min": 170,
     "rx_max": 180,
     "ry_min": -10,
@@ -37,7 +37,7 @@
     "global_acceleration": 100,
     "emergency_decel": 500,
     "max_jog_step": 50,
-    "recovery_servo_linear_mm_s": 25.0,
-    "recovery_servo_angular_deg_s": 5.0
+    "recovery_servo_linear_mm_s": 50.0,
+    "recovery_servo_angular_deg_s": 30.0
   }
 }
