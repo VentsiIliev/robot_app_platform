@@ -43,6 +43,22 @@ The dashboard is a thin UI over `PaintDashboardService`, which is built in `Pain
 Primary responsibility:
 
 - display paint-process state and operator-facing runtime status
+- show the live camera preview in automatic/demo drying modes
+- show the shared plate-layout state in manual drying mode, including committed and pending workpieces
+- allow stopped-state operators to confirm a new tray or press-and-hold a committed workpiece to remove it
+
+Tray edits are routed through `PaintDashboardService` to the same `PlateLayoutService`
+instance used by robot drop-off. They are rejected while the process is running or
+paused. Tray occupancy is runtime state and is not restored after an application restart.
+
+`PaintDashboardUiConfig.show_camera_preview` selects the dashboard composition.
+Its paint-system switch is `paint_system_config.SHOW_DASHBOARD_CAMERA_PREVIEW`.
+The default `True` preserves the camera-first layout unchanged. With `False`,
+the main area contains `Paint Settings` and `Tray` tabs, the existing two-pass
+paint editor and process-scaling controls move into `Paint Settings`, the duplicate quick
+controls are omitted, and Start/Pause/Stop use the full bottom width. Drying
+mode, pump, fan, and cable-relief actions remain immediately accessible in a
+dedicated column between the settings/tray area and the status cards.
 
 ---
 

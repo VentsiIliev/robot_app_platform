@@ -17,6 +17,11 @@ BYPASS_CONTOUR_PREPARATION = False
 # Main production dashboard for monitoring and controlling the paint process.
 PAINT_DASHBOARD_APP = True
 
+# Keep the current camera-first dashboard layout. When False, the camera is
+# omitted, paint/pass controls move into the main content area, and the bottom
+# process buttons expand to the available width.
+SHOW_DASHBOARD_CAMERA_PREVIEW = False
+
 # Lists saved workpieces and provides actions for managing the library.
 WORKPIECE_LIBRARY_APP = False
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import math
+from threading import RLock
 
 
 @dataclass(frozen=True)
@@ -12,12 +13,25 @@ class PlateDropoffReservation:
     has_space_for_same_footprint: bool
     width_mm: float
     height_mm: float
+    placement_id: int = 0
+    left_mm: float = 0.0
+    bottom_mm: float = 0.0
+
+
+@dataclass(frozen=True)
+class PlatePlacement:
+    placement_id: int
+    left_mm: float
+    bottom_mm: float
+    width_mm: float
+    height_mm: float
 
 
 class PlateLayoutService:
     """Validate a taught plate and reserve deterministic shelf placements."""
 
     def __init__(self) -> None:
+        self._lock = RLock()
         self._signature: tuple | None = None
         self._next_left_mm = 0.0
         self._row_bottom_mm = 0.0
@@ -25,11 +39,54 @@ class PlateLayoutService:
         self._pending: PlateDropoffReservation | None = None
         self.has_space_for_same_footprint: bool = True
         self._margin_left_mm = 0.0
+        self._margin_bottom_mm = 0.0
+        self._spacing_x_mm = 0.0
         self._spacing_y_mm = 0.0
+        self._placements: list[PlatePlacement] = []
+        self._next_placement_id = 1
 
     @property
     def pending(self) -> PlateDropoffReservation | None:
-        return self._pending
+        with self._lock:
+            return self._pending
+
+    def snapshot(self, config) -> dict[str, object]:
+        """Return an immutable dashboard-friendly view of the physical plate."""
+        with self._lock:
+            corners, _error = validate_plate_corners(config.plate_corners)
+            width = _average_edge_length(corners[0], corners[1], corners[3], corners[2]) if corners else 0.0
+            height = _average_edge_length(corners[0], corners[3], corners[1], corners[2]) if corners else 0.0
+            pending = self._pending
+            return {
+                "width_mm": width,
+                "height_mm": height,
+                "placements": [vars(item).copy() for item in self._placements],
+                "pending": ({
+                    "placement_id": pending.placement_id,
+                    "left_mm": pending.left_mm,
+                    "bottom_mm": pending.bottom_mm,
+                    "width_mm": pending.width_mm,
+                    "height_mm": pending.height_mm,
+                } if pending is not None else None),
+            }
+
+    def clear(self) -> None:
+        with self._lock:
+            self._placements.clear()
+            self._pending = None
+            self._next_left_mm = self._margin_left_mm
+            self._row_bottom_mm = self._margin_bottom_mm
+            self._row_height_mm = 0.0
+            self.has_space_for_same_footprint = True
+            self._next_placement_id = 1
+
+    def remove(self, placement_id: int) -> bool:
+        with self._lock:
+            before = len(self._placements)
+            self._placements = [
+                item for item in self._placements if item.placement_id != int(placement_id)
+            ]
+            return len(self._placements) != before
 
     def reserve(
         self,
@@ -39,6 +96,21 @@ class PlateLayoutService:
         height_mm: float,
         calibration_pose: list[float],
         workpiece_rz_at_calibration_deg: float,
+        pose_calculator,
+    ) -> tuple[PlateDropoffReservation | None, str]:
+        with self._lock:
+            return self._reserve_locked(
+                config,
+                width_mm=width_mm,
+                height_mm=height_mm,
+                calibration_pose=calibration_pose,
+                workpiece_rz_at_calibration_deg=workpiece_rz_at_calibration_deg,
+                pose_calculator=pose_calculator,
+            )
+
+    def _reserve_locked(
+        self, config, *, width_mm: float, height_mm: float,
+        calibration_pose: list[float], workpiece_rz_at_calibration_deg: float,
         pose_calculator,
     ) -> tuple[PlateDropoffReservation | None, str]:
         corners, error = validate_plate_corners(config.plate_corners)
@@ -71,7 +143,11 @@ class PlateLayoutService:
             self._row_bottom_mm = float(config.plate_margin_bottom_mm)
             self._row_height_mm = 0.0
             self._pending = None
+            self._placements.clear()
+            self._next_placement_id = 1
             self._margin_left_mm = float(config.plate_margin_left_mm)
+            self._margin_bottom_mm = float(config.plate_margin_bottom_mm)
+            self._spacing_x_mm = float(config.plate_spacing_x_mm)
             self._spacing_y_mm = float(config.plate_spacing_y_mm)
         if self._pending is not None:
             return None, "Plate-layout dropoff already has an active reservation"
@@ -85,7 +161,7 @@ class PlateLayoutService:
             return None, "Plate-layout margins leave no usable plate area"
         right = plate_width - float(config.plate_margin_right_mm)
         top = plate_height - float(config.plate_margin_top_mm)
-        left, bottom, row_height = self._candidate(width, height, right)
+        left, bottom, row_height = self._candidate(width, height, right, top)
         if left + width > right or bottom + height > top:
             return None, "Drop-off plate is full"
 
@@ -125,15 +201,13 @@ class PlateLayoutService:
             + float(config.plate_approach_clearance_mm),
         ]
 
-        next_left = left + width + float(config.plate_spacing_x_mm)
-        next_row_height = max(row_height, height)
-        has_more = (
-            next_left + width <= right
-            or (
-                float(config.plate_margin_left_mm) + width <= right
-                and bottom + next_row_height + float(config.plate_spacing_y_mm) + height <= top
-            )
+        occupied_with_pending = [*self._placements, PlatePlacement(
+            self._next_placement_id, left, bottom, width, height
+        )]
+        next_left, next_bottom, _ = self._candidate(
+            width, height, right, top, placements=occupied_with_pending
         )
+        has_more = next_left + width <= right and next_bottom + height <= top
         self._pending = PlateDropoffReservation(
             release_pose=release_pose,
             approach_pose=approach_pose,
@@ -141,32 +215,60 @@ class PlateLayoutService:
             has_space_for_same_footprint=has_more,
             width_mm=width,
             height_mm=height,
+            placement_id=self._next_placement_id,
+            left_mm=left,
+            bottom_mm=bottom,
         )
         self._pending_state = (left, bottom, max(row_height, height))
         return self._pending, ""
 
     def commit(self, config) -> None:
-        if self._pending is None:
-            return
-        left, bottom, row_height = self._pending_state
-        self._next_left_mm = left + self._pending.width_mm + float(config.plate_spacing_x_mm)
-        self._row_bottom_mm = bottom
-        self._row_height_mm = row_height
-        self.has_space_for_same_footprint = self._pending.has_space_for_same_footprint
-        self._pending = None
+        with self._lock:
+            if self._pending is None:
+                return
+            left, bottom, row_height = self._pending_state
+            self._placements.append(PlatePlacement(
+                self._pending.placement_id, left, bottom,
+                self._pending.width_mm, self._pending.height_mm,
+            ))
+            self._next_placement_id += 1
+            self._next_left_mm = left + self._pending.width_mm + float(config.plate_spacing_x_mm)
+            self._row_bottom_mm = bottom
+            self._row_height_mm = row_height
+            self.has_space_for_same_footprint = self._pending.has_space_for_same_footprint
+            self._pending = None
 
     def cancel(self) -> None:
-        self._pending = None
+        with self._lock:
+            self._pending = None
 
-    def _candidate(self, width: float, height: float, right: float) -> tuple[float, float, float]:
-        left = self._next_left_mm
-        bottom = self._row_bottom_mm
-        row_height = self._row_height_mm
-        if left + width > right:
-            left = self._margin_left_mm
-            bottom += row_height + self._spacing_y_mm
-            row_height = 0.0
-        return left, bottom, row_height
+    def _candidate(
+        self, width: float, height: float, right: float, top: float,
+        *, placements: list[PlatePlacement] | None = None,
+    ) -> tuple[float, float, float]:
+        occupied = self._placements if placements is None else placements
+        xs = {self._margin_left_mm}
+        ys = {self._margin_bottom_mm}
+        for item in occupied:
+            xs.add(item.left_mm + item.width_mm + self._spacing_x_mm)
+            ys.add(item.bottom_mm + item.height_mm + self._spacing_y_mm)
+        for bottom in sorted(ys):
+            if bottom + height > top:
+                continue
+            for left in sorted(xs):
+                if left + width > right:
+                    continue
+                candidate = (left, bottom, width, height)
+                if not any(
+                    _rectangles_overlap(
+                        candidate, item,
+                        spacing_x=self._spacing_x_mm,
+                        spacing_y=self._spacing_y_mm,
+                    )
+                    for item in occupied
+                ):
+                    return left, bottom, height
+        return right + 1.0, top + 1.0, 0.0
 
 
 def validate_plate_corners(raw_corners) -> tuple[list[list[float]], str]:
@@ -222,4 +324,20 @@ def _layout_signature(config, corners) -> tuple:
         float(config.plate_margin_bottom_mm), float(config.plate_margin_top_mm),
         float(config.plate_spacing_x_mm), float(config.plate_spacing_y_mm),
         float(config.plate_release_z_offset_mm),
+    )
+
+
+def _rectangles_overlap(
+    candidate: tuple[float, float, float, float],
+    item: PlatePlacement,
+    *,
+    spacing_x: float = 0.0,
+    spacing_y: float = 0.0,
+) -> bool:
+    left, bottom, width, height = candidate
+    return not (
+        left + width + spacing_x <= item.left_mm
+        or item.left_mm + item.width_mm + spacing_x <= left
+        or bottom + height + spacing_y <= item.bottom_mm
+        or item.bottom_mm + item.height_mm + spacing_y <= bottom
     )

@@ -2,6 +2,26 @@
   "__meta__": {
     "display_name": "English"
   },
+  "PaintPlateLayout": {
+    "Manual Dryer Tray": "Manual Dryer Tray",
+    "Press and hold a workpiece to select it": "Press and hold a workpiece to select it",
+    "New Tray": "New Tray",
+    "Remove": "Remove"
+  },
+  "PaintQuickAccessPanel": {
+    "Quick Controls": "Quick Controls",
+    "Relieve Cable": "Relieve Cable",
+    "Auto Dry": "Auto Dry",
+    "Manual Dry": "Manual Dry",
+    "Demo Alternate": "Demo Alternate",
+    "Vacuum Pump": "Vacuum Pump",
+    "Fan": "Fan",
+    "ON": "ON",
+    "OFF": "OFF"
+  },
+  "_PlateCanvas": {
+    "Tray is not configured": "Tray is not configured"
+  },
   "DeviceControlView": {
     "Manage availability, inspect state, and run device commands.": "Manage availability, inspect state, and run device commands."
   },
@@ -59,6 +79,17 @@
     "Cable Relief": "Cable Relief",
     "Manual Control": "Manual Control",
     "Drying Mode": "Drying Mode",
+    "Paint Settings": "Paint Settings",
+    "Tray": "Tray",
+    "New Tray": "New Tray",
+    "Clear all workpieces and start a new tray?": "Clear all workpieces and start a new tray?",
+    "Remove Workpiece": "Remove Workpiece",
+    "Remove the selected workpiece from the tray?": "Remove the selected workpiece from the tray?",
+    "A new tray is ready.": "A new tray is ready.",
+    "Workpiece removed from the tray.": "Workpiece removed from the tray.",
+    "The selected workpiece is no longer on the tray.": "The selected workpiece is no longer on the tray.",
+    "Stop the paint process before editing the tray.": "Stop the paint process before editing the tray.",
+    "Tray layout is not available.": "Tray layout is not available.",
     "Enable Dryer": "Enable Dryer",
     "Automatic drying requires the dryer. Do you want to enable it now?": "Automatic drying requires the dryer. Do you want to enable it now?",
     "Dryer service is not available.": "Dryer service is not available.",

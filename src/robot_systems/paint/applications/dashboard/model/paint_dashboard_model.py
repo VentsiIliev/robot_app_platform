@@ -85,5 +85,14 @@ class PaintDashboardModel(IApplicationModel):
     def enable_dryer_and_set_auto_mode(self, mode: str = "auto"):
         return self._service.enable_dryer_and_set_auto_mode(mode)
 
+    def get_plate_layout_state(self) -> dict[str, object]:
+        return self._service.get_plate_layout_state()
+
+    def clear_plate_layout(self):
+        return self._service.clear_plate_layout()
+
+    def remove_plate_placement(self, placement_id: int):
+        return self._service.remove_plate_placement(placement_id)
+
     def capture_latest_contour_transform_debug(self) -> ContourTransformDebugResult:
         return self._service.capture_latest_contour_transform_debug()

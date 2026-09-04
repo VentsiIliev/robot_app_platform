@@ -167,7 +167,9 @@ def _build_application_specs():
 
 class PaintRobotSystem(BaseRobotSystem):
 
-    ui_config = PaintDashboardUiConfig()
+    ui_config = PaintDashboardUiConfig(
+        show_camera_preview=paint_system_config.SHOW_DASHBOARD_CAMERA_PREVIEW,
+    )
 
 
     movement_groups = [
@@ -573,6 +575,7 @@ class PaintRobotSystem(BaseRobotSystem):
             persist_dryer_enabled=self._persist_dryer_enabled,
             development_mode=self.development_mode,
             paint_process_config_service=self._paint_process_config_service,
+            plate_layout_service=self._paint_path_executor._plate_layout_service,
             target_point_name="camera",
             frame_name="calibration",
         )

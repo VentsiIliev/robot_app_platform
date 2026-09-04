@@ -95,7 +95,13 @@ class TestDropoffMotionCorridor(unittest.TestCase):
             "acc": 40.0,
             "type": "ptp",
         }
-        robot.get_current_position_fresh.return_value = list(next_start["position"])
+        settling_pose = list(next_start["position"])
+        settling_pose[0] += 3.3
+        robot.get_current_position_fresh.side_effect = [
+            settling_pose,
+            list(next_start["position"]),
+            list(next_start["position"]),
+        ]
 
         with patch(
             "src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handlers._resolve_dropoff_align_pose",
@@ -125,6 +131,7 @@ class TestDropoffMotionCorridor(unittest.TestCase):
         )
         self.assertEqual("Magazine Fixed Pickup", owner._last_prepositioned_start_group)
         self.assertEqual(2, motion.move_pickup_phase.call_count)
+        self.assertEqual(3, robot.get_current_position_fresh.call_count)
 
     def test_saved_settings_update_snapshot_and_notify_live_corridor_consumer(self):
         settings_repository = MagicMock()

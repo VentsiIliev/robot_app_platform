@@ -369,6 +369,65 @@ class TestPlateLayoutDropoff(unittest.TestCase):
 
         self.assertEqual(first.release_pose, second.release_pose)
 
+    def test_removed_workpiece_space_is_reused(self) -> None:
+        service = PlateLayoutService()
+        config = PaintDropoffConfig(
+            strategy="plate_layout",
+            plate_corners=_corners(),
+            plate_passage_gate_pose=[200, 100, 180, 180, 0, 0],
+            plate_margin_left_mm=10.0,
+            plate_margin_right_mm=10.0,
+            plate_margin_bottom_mm=10.0,
+            plate_margin_top_mm=10.0,
+            plate_spacing_x_mm=5.0,
+            plate_spacing_y_mm=5.0,
+        )
+        kwargs = dict(
+            config=config,
+            width_mm=20.0,
+            height_mm=30.0,
+            calibration_pose=[0.0, 0.0, 0.0, 180.0, 0.0, 0.0],
+            workpiece_rz_at_calibration_deg=0.0,
+            pose_calculator=calculate_workpiece_dropoff_pose,
+        )
+        first, _ = service.reserve(**kwargs)
+        service.commit(config)
+        second, _ = service.reserve(**kwargs)
+        service.commit(config)
+
+        self.assertNotEqual(first.left_mm, second.left_mm)
+        self.assertTrue(service.remove(first.placement_id))
+        replacement, error = service.reserve(**kwargs)
+
+        self.assertEqual("", error)
+        self.assertEqual(first.left_mm, replacement.left_mm)
+        self.assertEqual(first.bottom_mm, replacement.bottom_mm)
+
+    def test_new_tray_clears_committed_and_pending_workpieces(self) -> None:
+        service = PlateLayoutService()
+        config = PaintDropoffConfig(
+            strategy="plate_layout",
+            plate_corners=_corners(),
+            plate_passage_gate_pose=[200, 100, 180, 180, 0, 0],
+        )
+        kwargs = dict(
+            config=config,
+            width_mm=20.0,
+            height_mm=30.0,
+            calibration_pose=[0.0, 0.0, 0.0, 180.0, 0.0, 0.0],
+            workpiece_rz_at_calibration_deg=0.0,
+            pose_calculator=calculate_workpiece_dropoff_pose,
+        )
+        service.reserve(**kwargs)
+        service.commit(config)
+        service.reserve(**kwargs)
+
+        service.clear()
+        state = service.snapshot(config)
+
+        self.assertEqual([], state["placements"])
+        self.assertIsNone(state["pending"])
+
 
 if __name__ == "__main__":
     unittest.main()

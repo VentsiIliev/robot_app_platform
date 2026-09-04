@@ -68,6 +68,8 @@ class PaintDashboardController(
         )
         self._view.acceleration_scale_requested.connect(self._on_acceleration_scale)
         self._view.drying_mode_requested.connect(self._on_drying_mode)
+        self._view.new_tray_requested.connect(self._on_new_tray)
+        self._view.remove_plate_placement_requested.connect(self._on_remove_plate_placement)
 
     def load(self) -> None:
         self._active = True
@@ -82,6 +84,7 @@ class PaintDashboardController(
         self._view.set_acceleration_scale(self._model.get_acceleration_scale())
         self._run_background(self._model.get_auxiliary_states, self._on_auxiliary_states_loaded)
         self._view.set_drying_mode(self._model.get_drying_mode())
+        self._refresh_plate_layout()
         self._load_application_shortcuts()
         self._retranslate()
         if self._status_timer.parent() is not None or QThread.currentThread().eventDispatcher() is not None:
@@ -267,7 +270,22 @@ class PaintDashboardController(
         self._view.set_drying_mode_busy(False)
         if bool(getattr(result, "success", False)):
             self._view.set_drying_mode(self._model.get_drying_mode())
+            self._refresh_plate_layout()
         self._show_command_result(self._t("Drying Mode"), result)
+
+    def _on_new_tray(self) -> None:
+        result = self._model.clear_plate_layout()
+        self._refresh_plate_layout()
+        self._show_command_result(self._t("New Tray"), result)
+
+    def _on_remove_plate_placement(self, placement_id: int) -> None:
+        result = self._model.remove_plate_placement(placement_id)
+        self._view.clear_plate_selection()
+        self._refresh_plate_layout()
+        self._show_command_result(self._t("Remove Workpiece"), result)
+
+    def _refresh_plate_layout(self) -> None:
+        self._view.set_plate_layout_state(self._model.get_plate_layout_state())
 
     def _on_cable_relief_finished(self, result: object) -> None:
         if not self._view_ok():
@@ -387,6 +405,8 @@ class PaintDashboardController(
             return
         try:
             self._view.apply_dashboard_state(self._model.load())
+            if self._model.get_drying_mode() == "manual":
+                self._refresh_plate_layout()
         except RuntimeError:
             self.stop()
 

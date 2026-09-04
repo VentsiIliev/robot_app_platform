@@ -303,7 +303,7 @@ def execute_dropoff_release_for_executor(
     if next_cycle_start is not None:
         if not ordered_exit_completed and not _move_to_next_cycle_start(executor, next_cycle_start):
             return False, "Dropoff retracted safely, but move to next-cycle start failed"
-        if not _next_cycle_start_pose_reached(executor, next_cycle_start):
+        if not _wait_for_next_cycle_start_pose(executor, next_cycle_start):
             return False, "Dropoff retracted safely, but next-cycle start pose was not reached"
         executor._last_prepositioned_start_group = str(next_cycle_start["group_id"])
         _logger.info(

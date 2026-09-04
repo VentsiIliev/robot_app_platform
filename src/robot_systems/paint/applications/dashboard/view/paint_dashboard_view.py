@@ -11,6 +11,8 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QScrollArea,
+    QStackedWidget,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -25,6 +27,10 @@ from src.robot_systems.paint.applications.dashboard.ui.paint_controls_drawer imp
 )
 from src.robot_systems.paint.applications.dashboard.ui.paint_quick_controls_panel import (
     PaintQuickControlsPanel,
+)
+from src.robot_systems.paint.applications.dashboard.ui.paint_plate_layout import PaintPlateLayout
+from src.robot_systems.paint.applications.dashboard.ui.paint_quick_access_panel import (
+    PaintQuickAccessPanel,
 )
 from src.robot_systems.paint.applications.dashboard.config import PaintDashboardUiConfig
 
@@ -149,6 +155,8 @@ class PaintDashboardView(IApplicationView):
     unmatched_paint_settings_requested = pyqtSignal(object)
     acceleration_scale_requested = pyqtSignal(float)
     drying_mode_requested = pyqtSignal(str)
+    new_tray_requested = pyqtSignal()
+    remove_plate_placement_requested = pyqtSignal(int)
 
     def __init__(
         self,
@@ -178,6 +186,10 @@ class PaintDashboardView(IApplicationView):
         self._controls_drawer = None
         self._controls_widget = None
         self._quick_controls = None
+        self._preview_stack = None
+        self._plate_layout = None
+        self._expanded_tabs = None
+        self._quick_access = None
         super().__init__("PaintDashboard", parent)
 
     @property
@@ -216,6 +228,7 @@ class PaintDashboardView(IApplicationView):
         )
         layout.addWidget(self._dashboard)
         self._dashboard.setStyleSheet(f"background-color: {BG_COLOR};")
+        self._install_manual_plate_layout()
         self._align_preview_and_card_columns()
         self._install_message_panel()
         self._move_reset_below_cards()
@@ -228,12 +241,47 @@ class PaintDashboardView(IApplicationView):
         self._dashboard.action_requested.connect(self._on_inner_action)
         self._install_controls_drawer()
 
+    def _install_manual_plate_layout(self) -> None:
+        try:
+            top_section = self._dashboard.layout_manager.main_layout.itemAt(0).layout()
+            if top_section is None:
+                return
+            preview_container = top_section.itemAt(0).widget()
+            preview_layout = preview_container.layout()
+            camera = self._dashboard.trajectory_widget
+            preview_layout.removeWidget(camera)
+            self._plate_layout = PaintPlateLayout()
+            self._plate_layout.new_tray_requested.connect(self._on_new_tray)
+            self._plate_layout.remove_requested.connect(self._on_remove_plate_placement)
+            if self._ui_config.show_camera_preview:
+                self._preview_stack = QStackedWidget()
+                self._preview_stack.addWidget(camera)
+                self._preview_stack.addWidget(self._plate_layout)
+                preview_layout.insertWidget(0, self._preview_stack)
+            else:
+                camera.hide()
+                self._expanded_tabs = QTabWidget()
+                self._expanded_tabs.addTab(QWidget(), self._translate_text("Paint Settings"))
+                self._expanded_tabs.addTab(self._plate_layout, self._translate_text("Tray"))
+                preview_layout.insertWidget(0, self._expanded_tabs)
+                self._quick_access = PaintQuickAccessPanel(self._auxiliary_toggles)
+                self._quick_access.setMinimumWidth(220)
+                self._quick_access.setMaximumWidth(280)
+                self._quick_access.device_toggle_requested.connect(
+                    self.auxiliary_toggle_requested
+                )
+                self._quick_access.cable_relief_requested.connect(
+                    self.cable_relief_requested
+                )
+                self._quick_access.drying_mode_requested.connect(
+                    self.drying_mode_requested
+                )
+                top_section.insertWidget(1, self._quick_access)
+        except (AttributeError, RuntimeError):
+            self._preview_stack = None
+            self._plate_layout = None
+
     def _install_controls_drawer(self) -> None:
-        self._controls_drawer = DrawerToggle(
-            self,
-            side="left",
-            width=_CONTROLS_DRAWER_WIDTH,
-        )
         self._controls_widget = PaintControlsDrawer(
             self._auxiliary_toggles,
             show_manual_controls=self._ui_config.show_manual_controls,
@@ -241,7 +289,22 @@ class PaintDashboardView(IApplicationView):
             show_acceleration_scale_control=self._ui_config.show_acceleration_scale_control,
             show_shortcuts=self._ui_config.show_application_shortcuts,
         )
-        self._controls_drawer.add_widget(self._controls_widget, fill_height=True)
+        if self._ui_config.show_camera_preview:
+            self._controls_drawer = DrawerToggle(
+                self,
+                side="left",
+                width=_CONTROLS_DRAWER_WIDTH,
+            )
+            self._controls_drawer.add_widget(self._controls_widget, fill_height=True)
+        elif self._expanded_tabs is not None:
+            placeholder = self._expanded_tabs.widget(0)
+            self._expanded_tabs.removeTab(0)
+            placeholder.deleteLater()
+            self._expanded_tabs.insertTab(
+                0,
+                self._controls_widget,
+                self._translate_text("Paint Settings"),
+            )
         self._controls_widget.cable_relief_requested.connect(self.cable_relief_requested)
         self._controls_widget.device_toggle_requested.connect(self.auxiliary_toggle_requested)
         self._controls_widget.application_shortcut_requested.connect(
@@ -253,10 +316,15 @@ class PaintDashboardView(IApplicationView):
         self._controls_widget.acceleration_scale_requested.connect(
             self.acceleration_scale_requested
         )
-        self._controls_drawer.set_visible(self._ui_config.show_left_drawer)
+        self._controls_widget.drying_mode_requested.connect(self.drying_mode_requested)
+        if self._controls_drawer is not None:
+            self._controls_drawer.set_visible(self._ui_config.show_left_drawer)
 
     def _install_bottom_quick_controls(self) -> None:
-        if not self._ui_config.show_bottom_quick_controls:
+        if (
+            not self._ui_config.show_bottom_quick_controls
+            or not self._ui_config.show_camera_preview
+        ):
             return
         try:
             main_layout = self._dashboard.layout_manager.main_layout
@@ -297,7 +365,7 @@ class PaintDashboardView(IApplicationView):
             preview_container.setStyleSheet(f"background-color: {BG_COLOR};")
             aux_grid = preview_container.layout().itemAt(1).widget()
             aux_grid.setStyleSheet(f"background-color: {BG_COLOR};")
-            side_panel = top_section.itemAt(1).widget()
+            side_panel = top_section.itemAt(top_section.count() - 1).widget()
             if side_panel is not None:
                 side_panel.setStyleSheet(f"background-color: {BG_COLOR};")
                 side_panel.setFixedHeight(
@@ -321,7 +389,7 @@ class PaintDashboardView(IApplicationView):
             aux_grid = preview_container.layout().itemAt(1).widget()
             self._clear_layout(aux_grid.layout())
             aux_grid.hide()
-            side_panel = top_section.itemAt(1).widget()
+            side_panel = top_section.itemAt(top_section.count() - 1).widget()
             layout = side_panel.layout()
             if layout is None:
                 return
@@ -410,7 +478,7 @@ class PaintDashboardView(IApplicationView):
             reset_button.setFixedHeight(52)
             main_layout = self._dashboard.layout_manager.main_layout
             top_section = main_layout.itemAt(0).layout()
-            side_panel = top_section.itemAt(1).widget()
+            side_panel = top_section.itemAt(top_section.count() - 1).widget()
             side_layout = side_panel.layout()
             side_layout.addWidget(reset_button, 3, 0)
         except Exception:
@@ -508,24 +576,66 @@ class PaintDashboardView(IApplicationView):
         self._controls_widget.set_device_state(device_id, enabled)
         if self._quick_controls is not None:
             self._quick_controls.set_device_state(device_id, enabled)
+        if self._quick_access is not None:
+            self._quick_access.set_device_state(device_id, enabled)
 
     def set_auxiliary_busy(self, device_id: str, busy: bool) -> None:
         self._controls_widget.set_device_busy(device_id, busy)
         if self._quick_controls is not None:
             self._quick_controls.set_device_busy(device_id, busy)
+        if self._quick_access is not None:
+            self._quick_access.set_device_busy(device_id, busy)
 
     def set_cable_relief_busy(self, busy: bool) -> None:
         self._controls_widget.set_cable_relief_busy(busy)
         if self._quick_controls is not None:
             self._quick_controls.set_cable_relief_busy(busy)
+        if self._quick_access is not None:
+            self._quick_access.set_cable_relief_busy(busy)
 
     def set_drying_mode(self, mode: str) -> None:
         if self._quick_controls is not None:
             self._quick_controls.set_drying_mode(mode)
+        if self._preview_stack is not None:
+            self._preview_stack.setCurrentIndex(1 if str(mode).lower() == "manual" else 0)
+        if self._controls_widget is not None:
+            self._controls_widget.set_drying_mode(mode)
+        if self._quick_access is not None:
+            self._quick_access.set_drying_mode(mode)
+
+    def set_plate_layout_state(self, state: dict[str, object]) -> None:
+        if self._plate_layout is not None:
+            self._plate_layout.set_state(state)
+
+    def _on_new_tray(self) -> None:
+        if ask_yes_no(
+            self,
+            self._translate_text("New Tray"),
+            self._translate_text("Clear all workpieces and start a new tray?"),
+            default_no=True,
+        ):
+            self.new_tray_requested.emit()
+
+    def _on_remove_plate_placement(self, placement_id: int) -> None:
+        if ask_yes_no(
+            self,
+            self._translate_text("Remove Workpiece"),
+            self._translate_text("Remove the selected workpiece from the tray?"),
+            default_no=True,
+        ):
+            self.remove_plate_placement_requested.emit(placement_id)
+
+    def clear_plate_selection(self) -> None:
+        if self._plate_layout is not None:
+            self._plate_layout.clear_selection()
 
     def set_drying_mode_busy(self, busy: bool) -> None:
         if self._quick_controls is not None:
             self._quick_controls.set_drying_mode_busy(busy)
+        if self._controls_widget is not None:
+            self._controls_widget.set_drying_mode_busy(busy)
+        if self._quick_access is not None:
+            self._quick_access.set_drying_mode_busy(busy)
 
     def ask_enable_dryer(self, title: str, message: str) -> bool:
         return ask_yes_no(self, title, message, default_no=True)
@@ -663,6 +773,8 @@ class PaintDashboardView(IApplicationView):
         self.set_acceleration_scale_editable(
             state.process_state in ("idle", "stopped", "error")
         )
+        if self._plate_layout is not None:
+            self._plate_layout.set_editable(state.process_state in ("idle", "stopped", "error"))
 
     @staticmethod
     def _state_signature(state) -> tuple:
@@ -717,6 +829,11 @@ class PaintDashboardView(IApplicationView):
             self._controls_widget.retranslateUi()
         if self._quick_controls is not None:
             self._quick_controls.retranslateUi()
+        if self._quick_access is not None:
+            self._quick_access.retranslateUi()
+        if self._expanded_tabs is not None:
+            self._expanded_tabs.setTabText(0, self._translate_text("Paint Settings"))
+            self._expanded_tabs.setTabText(1, self._translate_text("Tray"))
         self._last_card_states.clear()
         self._last_state_signature = None
         if self._last_state is not None:

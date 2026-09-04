@@ -458,6 +458,35 @@ class TestPaintDashboardService(unittest.TestCase):
 
         self.assertFalse(hasattr(service, "_transform_like_pick_target"))
 
+    def test_tray_edits_update_shared_layout_while_stopped(self) -> None:
+        process = MagicMock(process_id="paint")
+        process.state = ProcessState.STOPPED
+        plate_layout = MagicMock()
+        plate_layout.remove.return_value = True
+        service = PaintDashboardService(process, plate_layout_service=plate_layout)
+
+        clear_result = service.clear_plate_layout()
+        remove_result = service.remove_plate_placement(7)
+
+        self.assertTrue(clear_result.success)
+        self.assertTrue(remove_result.success)
+        plate_layout.clear.assert_called_once_with()
+        plate_layout.remove.assert_called_once_with(7)
+
+    def test_tray_edits_are_rejected_while_process_is_active(self) -> None:
+        process = MagicMock(process_id="paint")
+        process.state = ProcessState.RUNNING
+        plate_layout = MagicMock()
+        service = PaintDashboardService(process, plate_layout_service=plate_layout)
+
+        clear_result = service.clear_plate_layout()
+        remove_result = service.remove_plate_placement(7)
+
+        self.assertFalse(clear_result.success)
+        self.assertFalse(remove_result.success)
+        plate_layout.clear.assert_not_called()
+        plate_layout.remove.assert_not_called()
+
 
 class TestPaintCalibrationCoordinator(unittest.TestCase):
     def test_calibrate_publishes_busy_event_when_calibration_already_running(self) -> None:

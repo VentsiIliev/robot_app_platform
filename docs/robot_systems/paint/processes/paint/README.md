@@ -44,6 +44,13 @@ The production path is:
 3. `DefaultWorkpiecePathPreparationService` builds the execution plan
 4. `PaintWorkpiecePathExecutor` performs pickup, staging, pivot projection, and paint execution
 
+For plate-layout drop-off, `PlateLayoutService` owns explicit runtime placement
+records. A reservation becomes occupied only after `commit()`. The dashboard may
+clear all records for a physically new tray or remove an individual committed
+record while the process is stopped; the allocator then reuses any compatible
+free area. Access is lock-protected because robot execution and dashboard refresh
+run on different threads.
+
 The workpiece editor reuses large parts of the same stack for preview and DXF-assisted authoring.
 
 ---
