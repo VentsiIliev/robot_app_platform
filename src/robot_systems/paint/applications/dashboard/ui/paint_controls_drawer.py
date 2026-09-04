@@ -171,9 +171,14 @@ class PaintControlsDrawer(QWidget):
         self._pass_2_offset = self._make_spin_box(-100.0, 100.0, 0.0, " mm")
         self._pass_2_offset.setSingleStep(0.1)
         self._pass_2_labels = [QLabel(), QLabel(), QLabel()]
-        for label, field in zip(self._pass_2_labels, (self._pass_2_velocity, self._pass_2_acceleration, self._pass_2_offset)):
+        self._pass_2_rows = [
+            self._build_touch_spin_row("pass_2_velocity", self._pass_2_velocity),
+            self._build_touch_spin_row("pass_2_acceleration", self._pass_2_acceleration),
+            self._build_touch_spin_row("pass_2_offset", self._pass_2_offset),
+        ]
+        for label, row in zip(self._pass_2_labels, self._pass_2_rows):
             pass_2_layout.addWidget(label)
-            pass_2_layout.addWidget(field)
+            pass_2_layout.addWidget(row)
         self._unmatched_tabs.addTab(pass_2_widget, "")
         unmatched_layout.addWidget(self._unmatched_tabs)
         self._unmatched_note = QLabel()
@@ -296,16 +301,15 @@ class PaintControlsDrawer(QWidget):
         self._pass_1_layout.addWidget(self._offset_row)
 
     def _compact_pass_two_fields(self) -> None:
-        fields = (self._pass_2_velocity, self._pass_2_acceleration, self._pass_2_offset)
-        for label, field in zip(self._pass_2_labels, fields):
+        for label, row in zip(self._pass_2_labels, self._pass_2_rows):
             self._pass_2_layout.removeWidget(label)
-            self._pass_2_layout.removeWidget(field)
+            self._pass_2_layout.removeWidget(row)
         pair = QHBoxLayout()
-        pair.addWidget(self._field_column(self._pass_2_labels[0], self._pass_2_velocity), 1)
-        pair.addWidget(self._field_column(self._pass_2_labels[1], self._pass_2_acceleration), 1)
+        pair.addWidget(self._field_column(self._pass_2_labels[0], self._pass_2_rows[0]), 1)
+        pair.addWidget(self._field_column(self._pass_2_labels[1], self._pass_2_rows[1]), 1)
         self._pass_2_layout.addLayout(pair)
         self._pass_2_layout.addWidget(self._pass_2_labels[2])
-        self._pass_2_layout.addWidget(self._pass_2_offset)
+        self._pass_2_layout.addWidget(self._pass_2_rows[2])
 
     @staticmethod
     def _field_column(label: QLabel, field: QWidget) -> QWidget:
@@ -371,6 +375,9 @@ class PaintControlsDrawer(QWidget):
             "acceleration": self._unmatched_acceleration,
             "acceleration_scale": self._acceleration_scale,
             "offset": self._unmatched_offset,
+            "pass_2_velocity": self._pass_2_velocity,
+            "pass_2_acceleration": self._pass_2_acceleration,
+            "pass_2_offset": self._pass_2_offset,
         }
         field = fields.get(str(button.property("field_id")))
         if field is None:
@@ -401,6 +408,9 @@ class PaintControlsDrawer(QWidget):
         enabled = not self._pass_2_use_first.isChecked()
         for field in (self._pass_2_velocity, self._pass_2_acceleration, self._pass_2_offset):
             field.setEnabled(enabled)
+        for button in self._unmatched_step_buttons:
+            if str(button.property("field_id")).startswith("pass_2_"):
+                button.setEnabled(enabled)
 
     def set_unmatched_paint_settings(self, settings: dict) -> None:
         if not settings:
@@ -426,13 +436,13 @@ class PaintControlsDrawer(QWidget):
         self._unmatched_apply.setEnabled(editable)
         self._unmatched_pass_count.setEnabled(editable)
         self._pass_2_use_first.setEnabled(editable)
-        if editable:
-            self._sync_pass_2_enabled()
-        else:
+        if not editable:
             for field in (self._pass_2_velocity, self._pass_2_acceleration, self._pass_2_offset):
                 field.setEnabled(False)
         for button in self._unmatched_step_buttons:
             button.setEnabled(editable)
+        if editable:
+            self._sync_pass_2_enabled()
 
     def _on_device_toggle(self, checked: bool) -> None:
         button = self.sender()
