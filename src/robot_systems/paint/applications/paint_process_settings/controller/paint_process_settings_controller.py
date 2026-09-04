@@ -38,6 +38,7 @@ class PaintProcessSettingsController(IApplicationController, BackgroundWorker):
         self._view.set_safe_travel_current_requested.connect(self._on_set_safe_travel_current)
         self._view.set_dropoff_safe_travel_current_requested.connect(self._on_set_dropoff_safe_travel_current)
         self._view.capture_plate_corner_requested.connect(self._on_capture_plate_corner)
+        self._view.move_to_plate_corner_requested.connect(self._on_move_to_plate_corner)
         self._view.move_to_safe_travel_waypoint_requested.connect(self._on_move_to_safe_travel_waypoint)
 
     def stop(self) -> None:
@@ -60,6 +61,10 @@ class PaintProcessSettingsController(IApplicationController, BackgroundWorker):
             pass
         try:
             self._view.capture_plate_corner_requested.disconnect(self._on_capture_plate_corner)
+        except Exception:
+            pass
+        try:
+            self._view.move_to_plate_corner_requested.disconnect(self._on_move_to_plate_corner)
         except Exception:
             pass
         try:
@@ -217,8 +222,11 @@ class PaintProcessSettingsController(IApplicationController, BackgroundWorker):
                 validate_plate_passage_gate,
             )
             from src.robot_systems.paint.applications.paint_process_settings.mapper import PaintProcessSettingsMapper
+            corner_values = flat.get("dropoff_plate_corners") or {}
             corners = [
-                PaintProcessSettingsMapper._pose_from_value(flat.get(key, ""), [])
+                PaintProcessSettingsMapper._pose_from_value(
+                    corner_values.get(key, flat.get(key, "")), []
+                )
                 for key in (
                     "dropoff_plate_bottom_left",
                     "dropoff_plate_bottom_right",
@@ -314,7 +322,11 @@ class PaintProcessSettingsController(IApplicationController, BackgroundWorker):
             "dropoff_plate_top_right",
             "dropoff_plate_top_left",
         )
-        has_existing_corner = any(str(values.get(key, "") or "").strip() for key in captured_pose_keys)
+        corner_values = values.get("dropoff_plate_corners") or {}
+        has_existing_corner = any(
+            str(corner_values.get(key, values.get(key, "")) or "").strip()
+            for key in captured_pose_keys
+        )
         captured_tool = int(values.get("dropoff_plate_robot_tool", -1))
         captured_user = int(values.get("dropoff_plate_robot_user", -1))
         if has_existing_corner and captured_tool >= 0 and captured_user >= 0 and (
@@ -360,6 +372,33 @@ class PaintProcessSettingsController(IApplicationController, BackgroundWorker):
             on_done=self._on_move_to_safe_travel_done,
             on_error=self._on_move_to_safe_travel_failed,
         )
+
+    def _on_move_to_plate_corner(self, waypoint: dict) -> None:
+        normalized = self._normalize_waypoint(waypoint)
+        if normalized is None:
+            show_warning(
+                self._view,
+                self._t("Tray Corner Invalid"),
+                self._t("The selected tray corner is not valid."),
+            )
+            return
+        self._view.set_status(self._t("Moving to selected tray corner..."))
+        self._run_in_thread(
+            fn=lambda: self._model.move_to_waypoint(normalized),
+            on_done=self._on_move_to_plate_corner_done,
+            on_error=self._on_move_to_plate_corner_failed,
+        )
+
+    def _on_move_to_plate_corner_done(self, success: bool) -> None:
+        if bool(success):
+            self._view.set_status(self._t("Moved to selected tray corner."))
+            return
+        self._on_move_to_plate_corner_failed("")
+
+    def _on_move_to_plate_corner_failed(self, message: str) -> None:
+        fallback = self._t("Robot move to the selected tray corner failed.")
+        show_warning(self._view, self._t("Move Failed"), message or fallback)
+        self._view.set_status(fallback)
 
     def _on_move_to_safe_travel_done(self, success: bool) -> None:
         if bool(success):

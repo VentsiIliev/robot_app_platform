@@ -2,6 +2,11 @@
 
 The `features` package provides high-level, business-logic-aware robot capabilities built on top of `IMotionService`. These are not part of the core motion stack — they depend on settings and are optional services.
 
+`ServoUntilConditionConfig.stop_confirmation_timeout_s` controls how long a
+sensor-controlled Fast LIN operation waits for its asynchronously controlled
+stop to become inactive. This differs from `controlled_stop_duration_s`, which
+controls the requested deceleration duration.
+
 ---
 
 ## Classes

@@ -51,6 +51,7 @@ _SENSOR_CONTROLLED_FAST_LIN_KEYS = {
     "pickup_servo_contact_timeout_s",
     "pickup_servo_contact_poll_interval_s",
     "pickup_servo_contact_controlled_stop_duration_s",
+    "pickup_servo_contact_stop_confirmation_timeout_s",
     "pickup_servo_contact_preflight_read_attempts",
     "pickup_servo_contact_read_failure_limit",
     "pickup_servo_contact_fallback_to_planned_descend",
@@ -66,10 +67,7 @@ _VISION_MAGAZINE_ONLY_KEYS = {
     "magazine_camera_settle_s",
 }
 _PLATE_DROPOFF_ONLY_KEYS = {
-    "dropoff_plate_bottom_left", "dropoff_plate_capture_bottom_left",
-    "dropoff_plate_bottom_right", "dropoff_plate_capture_bottom_right",
-    "dropoff_plate_top_right", "dropoff_plate_capture_top_right",
-    "dropoff_plate_top_left", "dropoff_plate_capture_top_left",
+    "dropoff_plate_corners",
     "dropoff_plate_robot_frame", "dropoff_plate_motion_profiles",
     "dropoff_plate_passage_gate", "dropoff_plate_capture_passage_gate",
     "dropoff_plate_use_center_waypoint",
@@ -743,6 +741,126 @@ class _ActionButton(QPushButton):
         self._emit(True)
 
 
+class _PlateCornerTable(QWidget):
+    _ROWS = (
+        ("dropoff_plate_bottom_left", "Bottom Left"),
+        ("dropoff_plate_bottom_right", "Bottom Right"),
+        ("dropoff_plate_top_right", "Top Right"),
+        ("dropoff_plate_top_left", "Top Left"),
+    )
+
+    def __init__(self, emit, parent=None) -> None:
+        super().__init__(parent)
+        self._emit = emit
+        self._corners: dict[str, str] = {}
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
+        self._table = QTableWidget(4, 7)
+        self._table.setHorizontalHeaderLabels(
+            [_t("Point"), "X", "Y", "Z", "RX", "RY", "RZ"]
+        )
+        self._table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self._table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
+        self._table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self._table.setAlternatingRowColors(True)
+        self._table.verticalHeader().setVisible(False)
+        self._table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self._table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        self._table.setMinimumHeight(220)
+        self._table.setStyleSheet(_WaypointTable._table_style())
+        for row, (_key, label) in enumerate(self._ROWS):
+            self._table.setItem(row, 0, QTableWidgetItem(_t(label)))
+        self._table.selectRow(0)
+        layout.addWidget(self._table)
+        actions = QHBoxLayout()
+        actions.addStretch()
+        self._set_current = QPushButton(_t("Set Current"))
+        self._edit = QPushButton(_t("Edit"))
+        self._move_to = QPushButton(_t("Move To"))
+        self._set_current.setStyleSheet(ACTION_BTN_STYLE)
+        self._move_to.setStyleSheet(ACTION_BTN_STYLE)
+        self._edit.setStyleSheet(GHOST_BTN_STYLE)
+        self._set_current.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._edit.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._move_to.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._edit.clicked.connect(self._on_edit)
+        self._move_to.clicked.connect(self._on_move_to)
+        self._set_current.clicked.connect(self._on_set_current)
+        self._table.itemSelectionChanged.connect(self._update_actions)
+        actions.addWidget(self._edit)
+        actions.addWidget(self._move_to)
+        actions.addWidget(self._set_current)
+        layout.addLayout(actions)
+        self._update_actions()
+
+    def set_corners(self, value: object) -> None:
+        self._corners = {
+            str(key): str(pose or "")
+            for key, pose in (value.items() if isinstance(value, dict) else ())
+        }
+        for row, (key, _label) in enumerate(self._ROWS):
+            parts = [part.strip() for part in self._corners.get(key, "").split(",")]
+            for column in range(1, 7):
+                self._table.setItem(
+                    row,
+                    column,
+                    QTableWidgetItem(parts[column - 1] if column <= len(parts) else "—"),
+                )
+        self._update_actions()
+
+    def get_corners(self) -> dict[str, str]:
+        return dict(self._corners)
+
+    def _on_set_current(self) -> None:
+        row = self._table.currentRow()
+        if 0 <= row < len(self._ROWS):
+            self._emit({"action": "set_current", "corner_key": self._ROWS[row][0]})
+
+    def _update_actions(self) -> None:
+        row = self._table.currentRow()
+        selected = 0 <= row < len(self._ROWS)
+        has_pose = selected and _WaypointTable._normalize_pose(
+            self._corners.get(self._ROWS[row][0], "")
+        ) is not None
+        self._set_current.setEnabled(selected)
+        self._edit.setEnabled(selected)
+        self._move_to.setEnabled(has_pose)
+
+    def _on_edit(self) -> None:
+        row = self._table.currentRow()
+        if not 0 <= row < len(self._ROWS):
+            return
+        key = self._ROWS[row][0]
+        dialog = _WaypointDialog(self._corners.get(key, ""), 10.0, 10.0, parent=self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        pose = dialog.waypoint()["position"]
+        self._corners[key] = ", ".join(f"{float(value):.3f}" for value in pose[:6])
+        self.set_corners(self._corners)
+        self._table.selectRow(row)
+        self._emit(self.get_corners())
+
+    def _on_move_to(self) -> None:
+        row = self._table.currentRow()
+        if not 0 <= row < len(self._ROWS):
+            return
+        key = self._ROWS[row][0]
+        pose = _WaypointTable._normalize_pose(self._corners.get(key, ""))
+        if pose is not None:
+            self._emit({
+                "action": "move_to",
+                "corner_key": key,
+                "waypoint": {
+                    "position": pose,
+                    "vel_percent": 10.0,
+                    "acc_percent": 10.0,
+                    "motion_type": "ptp",
+                    "blendR": 0.0,
+                },
+            })
+
+
 class PaintProcessSettingsView(IApplicationView):
     SHOW_JOG_WIDGET = True
     JOG_LIVE_POSITION_ENABLED = True
@@ -752,6 +870,7 @@ class PaintProcessSettingsView(IApplicationView):
     set_safe_travel_current_requested = pyqtSignal()
     set_dropoff_safe_travel_current_requested = pyqtSignal()
     capture_plate_corner_requested = pyqtSignal(str)
+    move_to_plate_corner_requested = pyqtSignal(dict)
     move_to_safe_travel_waypoint_requested = pyqtSignal(dict)
 
     def __init__(self, parent=None):
@@ -795,7 +914,9 @@ class PaintProcessSettingsView(IApplicationView):
 
     def set_plate_corner(self, corner_key: str, position: list[float], tool: int, user: int) -> None:
         values = self.values()
-        values[corner_key] = ", ".join(f"{float(value):.3f}" for value in position[:6])
+        corners = dict(values.get("dropoff_plate_corners") or {})
+        corners[corner_key] = ", ".join(f"{float(value):.3f}" for value in position[:6])
+        values["dropoff_plate_corners"] = corners
         values["dropoff_plate_robot_tool"] = int(tool)
         values["dropoff_plate_robot_user"] = int(user)
         values["dropoff_plate_robot_frame"] = f"Tool {int(tool)}, User {int(user)}"
@@ -840,6 +961,7 @@ class PaintProcessSettingsView(IApplicationView):
             "paint_pose_display",
             "paint_waypoint_table",
             "paint_motion_profile_table",
+            "paint_plate_corner_table",
         )
         if self._custom_widget_original_handlers is None:
             self._custom_widget_original_handlers = {
@@ -868,6 +990,12 @@ class PaintProcessSettingsView(IApplicationView):
             create=self._make_motion_profile_table,
             get_value=lambda widget: widget.get_profiles(),
             set_value=lambda widget, value: widget.set_profiles(value),
+            full_width=True,
+        )
+        widget_factory._REGISTRY["paint_plate_corner_table"] = WidgetHandler(
+            create=self._make_plate_corner_table,
+            get_value=lambda widget: widget.get_corners(),
+            set_value=lambda widget, value: widget.set_corners(value),
             full_width=True,
         )
 
@@ -920,6 +1048,9 @@ class PaintProcessSettingsView(IApplicationView):
         rows = field.default if isinstance(field.default, list) else []
         return _MotionProfileTable(rows, emit)
 
+    def _make_plate_corner_table(self, _field, emit):
+        return _PlateCornerTable(emit)
+
     def _rebuild_settings_view(self) -> None:
         if self._layout is None or self.settings_view is None:
             return
@@ -956,11 +1087,16 @@ class PaintProcessSettingsView(IApplicationView):
         if key == "dropoff_safe_travel_positions" and value == "dropoff_safe_travel_positions_add_current":
             self.set_dropoff_safe_travel_current_requested.emit()
             return
+        if key == "dropoff_plate_corners" and isinstance(value, dict):
+            if value.get("action") == "set_current":
+                self.capture_plate_corner_requested.emit(str(value.get("corner_key") or ""))
+                return
+            if value.get("action") == "move_to":
+                waypoint = value.get("waypoint")
+                if isinstance(waypoint, dict):
+                    self.move_to_plate_corner_requested.emit(waypoint)
+                return
         corner_actions = {
-            "dropoff_plate_capture_bottom_left": "dropoff_plate_bottom_left",
-            "dropoff_plate_capture_bottom_right": "dropoff_plate_bottom_right",
-            "dropoff_plate_capture_top_right": "dropoff_plate_top_right",
-            "dropoff_plate_capture_top_left": "dropoff_plate_top_left",
             "dropoff_plate_capture_passage_gate": "dropoff_plate_passage_gate",
         }
         if key in corner_actions and bool(value):

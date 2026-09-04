@@ -176,3 +176,16 @@ It receives:
 - paint path executor for preview and execution-oriented diagnostics
 
 That makes it the main authoring surface for paint workpieces and the main manual entry point into the same geometry pipeline later used by the background paint process.
+
+The Paint Process Settings application's `Sensor-Controlled Fast LIN` section
+exposes both `Controlled Stop Duration` (the requested deceleration duration)
+and `Stop Confirmation Timeout` (how long pickup waits for the stopped task to
+become inactive). The latter defaults to 3 seconds and applies to normal and
+magazine sensor-controlled pickup.
+
+For the tray/plate dropoff strategy, the four ordered corners are presented in
+a single table (Bottom Left, Bottom Right, Top Right, Top Left). Selecting a row
+and pressing `Set Current` captures the current robot pose and records the tool
+and user configured in Robot Settings; mixed-frame corner captures are rejected.
+Each selected corner can also be edited manually or sent to the robot through a
+low-speed PTP `Move To` action using that configured tool and user.
