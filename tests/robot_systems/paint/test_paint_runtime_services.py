@@ -39,6 +39,50 @@ from src.robot_systems.paint.processes.robot_calibration_process import (
 
 
 class TestPaintDashboardService(unittest.TestCase):
+    def test_fan_control_routes_to_tray_fan_in_manual_drying_mode(self) -> None:
+        process = MagicMock(process_id="paint")
+        process.state = ProcessState.IDLE
+        fan = MagicMock()
+        tray_fan = MagicMock()
+        config_service = MagicMock()
+        config_service.get_snapshot.return_value = PaintProcessConfig(
+            dropoff=PaintDropoffConfig(strategy="plate_layout")
+        )
+        service = PaintDashboardService(
+            process,
+            fan_control=fan,
+            tray_fan_control=tray_fan,
+            paint_process_config_service=config_service,
+        )
+
+        result = service.set_auxiliary_enabled("fan", True)
+
+        self.assertTrue(result.success)
+        tray_fan.turn_on.assert_called_once_with()
+        fan.turn_on.assert_not_called()
+
+    def test_fan_control_routes_to_standard_fan_in_auto_drying_mode(self) -> None:
+        process = MagicMock(process_id="paint")
+        process.state = ProcessState.IDLE
+        fan = MagicMock()
+        tray_fan = MagicMock()
+        config_service = MagicMock()
+        config_service.get_snapshot.return_value = PaintProcessConfig(
+            dropoff=PaintDropoffConfig(strategy="movement_group")
+        )
+        service = PaintDashboardService(
+            process,
+            fan_control=fan,
+            tray_fan_control=tray_fan,
+            paint_process_config_service=config_service,
+        )
+
+        result = service.set_auxiliary_enabled("fan", False)
+
+        self.assertTrue(result.success)
+        fan.turn_off.assert_called_once_with()
+        tray_fan.turn_off.assert_not_called()
+
     def test_enabling_dryer_then_switching_auto_persists_both_settings(self) -> None:
         process = MagicMock(process_id="paint")
         process.state = ProcessState.IDLE

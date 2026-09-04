@@ -174,9 +174,8 @@ SystemBuilder.build(AppClass)
   2. Build SettingsService from app_class.settings_specs (if any)
   3. Build MotionService(robot, SafetyChecker(settings))
   4. Assemble _BuildContext(robot, motion, settings, tool_changer, messaging_service)
-  5. Merge app-level spec.builders into registry (override defaults)
-  6. For each ServiceSpec in app_class.services:
-       builder = registry.get(spec.service_type)
+  5. For each ServiceSpec in app_class.services:
+       builder = spec.builder or registry.get(spec.service_type)
        if builder is None: skip optional / raise for required
        instance = builder(ctx)
        if instance is None: skip optional / raise for required
@@ -197,6 +196,8 @@ SystemBuilder.build(AppClass)
 | `IVisionService` | `build_vision_service` | Shared default builder; requires `CommonSettingsID.VISION_CAMERA_SETTINGS` and standard robot-system storage layout |
 
 Custom services (e.g., `IWeightCellService`) are registered via `ServiceSpec.builder` on the app class.
+Per-spec builders are resolved by named declaration, so multiple services may
+share the same interface while using different builders and hardware bindings.
 
 ### Default Validation
 

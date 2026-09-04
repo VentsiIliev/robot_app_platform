@@ -36,6 +36,7 @@ class PaintDashboardService(IPaintDashboardService):
         vision_service=None,
         vacuum_pump=None,
         fan_control=None,
+        tray_fan_control=None,
         dryer_service=None,
         persist_dryer_enabled=None,
         development_mode: bool = False,
@@ -59,6 +60,7 @@ class PaintDashboardService(IPaintDashboardService):
             "pump": vacuum_pump,
             "fan": fan_control,
         }
+        self._tray_fan_control = tray_fan_control
         self._target_point_name = str(target_point_name or "camera").strip().lower()
         self._frame_name = str(frame_name or "calibration").strip().lower()
         self._geometry_scale_cache = GeometryScaleCache()
@@ -265,6 +267,8 @@ class PaintDashboardService(IPaintDashboardService):
     def get_auxiliary_states(self) -> dict[str, bool]:
         states = {}
         for device_id, device in self._auxiliary_devices.items():
+            if device_id == "fan":
+                device = self._active_fan_control()
             if device is None:
                 continue
             try:
@@ -279,7 +283,11 @@ class PaintDashboardService(IPaintDashboardService):
         return states
 
     def set_auxiliary_enabled(self, device_id: str, enabled: bool) -> DashboardCommandResult:
-        device = self._auxiliary_devices.get(device_id)
+        device = (
+            self._active_fan_control()
+            if device_id == "fan"
+            else self._auxiliary_devices.get(device_id)
+        )
         if device is None:
             self._logger.error(
                 "[DASHBOARD_AUX] %s command=%s rejected: device unavailable",
@@ -308,6 +316,11 @@ class PaintDashboardService(IPaintDashboardService):
             return DashboardCommandResult(False, f"Could not switch {device_id}: {exc}", device_id)
         state = "ON" if enabled else "OFF"
         return DashboardCommandResult(success, f"{device_id.title()} switched {state}.", device_id, enabled)
+
+    def _active_fan_control(self):
+        if self.get_drying_mode() == "manual":
+            return self._tray_fan_control
+        return self._auxiliary_devices.get("fan")
 
     def get_drying_mode(self) -> str:
         service = self._paint_process_config_service

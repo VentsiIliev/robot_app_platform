@@ -238,6 +238,10 @@ class PaintDashboardController(
         self._view.set_drying_mode_busy(False)
         if bool(getattr(result, "success", False)):
             self._view.set_drying_mode(self._model.get_drying_mode())
+            self._run_background(
+                self._model.get_auxiliary_states,
+                self._on_auxiliary_states_loaded,
+            )
             self._refresh_plate_layout()
         self._show_command_result(self._t("Drying Mode"), result)
 

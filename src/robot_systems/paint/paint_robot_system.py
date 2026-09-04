@@ -40,6 +40,7 @@ from src.robot_systems.paint.processes.paint.paint_process_config_serializer imp
 )
 from src.robot_systems.paint.service_builders import (
     build_fan_service,
+    build_tray_fan_service,
     build_dryer_service,
     build_physical_control_buttons_service,
     build_vacuum_pump_service,
@@ -395,6 +396,13 @@ class PaintRobotSystem(BaseRobotSystem):
             builder=build_fan_service,
         ),
         ServiceSpec(
+            name=ServiceID.TRAY_FAN,
+            service_type=IFanControl,
+            required=False,
+            description="Manual dryer tray fan controller",
+            builder=build_tray_fan_service,
+        ),
+        ServiceSpec(
             name=ServiceID.PHYSICAL_CONTROL_BUTTONS,
             service_type=IPhysicalControlButtons,
             required=False,
@@ -494,6 +502,8 @@ class PaintRobotSystem(BaseRobotSystem):
         self.register_managed_resource(self._vacuum_pump)
         self._fan = self.get_optional_service(ServiceID.FAN)
         self.register_managed_resource(self._fan)
+        self._tray_fan = self.get_optional_service(ServiceID.TRAY_FAN)
+        self.register_managed_resource(self._tray_fan)
         self._dryer = self.get_optional_service(ServiceID.DRYER)
         self.register_managed_resource(self._dryer)
         self._pickup_condition = self._build_pickup_condition()
@@ -571,6 +581,7 @@ class PaintRobotSystem(BaseRobotSystem):
             vision_service=self._vision,
             vacuum_pump=self._vacuum_pump,
             fan_control=self._fan,
+            tray_fan_control=self._tray_fan,
             dryer_service=self._dryer,
             persist_dryer_enabled=self._persist_dryer_enabled,
             development_mode=self.development_mode,

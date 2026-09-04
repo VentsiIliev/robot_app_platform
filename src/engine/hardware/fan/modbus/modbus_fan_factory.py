@@ -10,10 +10,11 @@ from src.engine.hardware.peripherals import PeripheralConfig
 def build_modbus_fan_control(
     modbus_config: ModbusConfig,
     peripheral_config: PeripheralConfig,
+    peripheral_key: str = "fan",
 ) -> IFanControl | None:
     # Construct configured hardware even when its runtime enabled flag is off;
     # Device Control needs the controller in order to perform the enable check.
-    binding = peripheral_config.peripherals.get("fan")
+    binding = peripheral_config.peripherals.get(peripheral_key)
     if binding is None:
         return None
     slave_name = modbus_config.find_slave_name(binding.slave_id)

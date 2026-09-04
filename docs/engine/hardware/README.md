@@ -73,6 +73,12 @@ Minimal `ILaserControl` interface (`turn_on()` / `turn_off()`). No engine-level 
 
 → See [vacuum_pump/README.md](vacuum_pump/README.md)
 
+### Fan (`fan/`)
+
+Binary fan controllers use a named peripheral binding. The Modbus factory
+defaults to the `fan` binding and accepts a different peripheral key when a
+robot system has multiple independently addressed fans.
+
 ---
 
 ## Integration Pattern
