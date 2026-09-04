@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
 
 from src.robot_systems.paint.applications.dashboard.controller.paint_dashboard_controller import (
     PaintDashboardController,
@@ -99,7 +99,7 @@ class TestPaintDashboardController(unittest.TestCase):
         view.isVisible.return_value = True
         return view
 
-    def test_auto_dry_prompts_before_enabling_disabled_dryer(self):
+    def test_auto_mode_selection_does_not_require_connected_dryer(self):
         model = MagicMock()
         model.get_dryer_state.return_value = {
             "available": True,
@@ -108,7 +108,6 @@ class TestPaintDashboardController(unittest.TestCase):
             "message": "",
         }
         view = self._make_view()
-        view.ask_enable_dryer.return_value = True
         broker = MagicMock()
         with (
             patch.object(PaintDashboardController, "_init_dashboard_camera_feed"),
@@ -119,14 +118,16 @@ class TestPaintDashboardController(unittest.TestCase):
         with patch.object(controller, "_run_background") as run_background:
             controller._on_drying_mode("auto")
 
-        view.ask_enable_dryer.assert_called_once()
+        view.ask_enable_dryer.assert_not_called()
         view.set_drying_mode_busy.assert_called_once_with(True)
         run_background.assert_called_once_with(
-            model.enable_dryer_and_set_auto_mode,
+            ANY,
             controller._on_drying_mode_finished,
         )
+        run_background.call_args.args[0]()
+        model.set_drying_mode.assert_called_once_with("auto")
 
-    def test_auto_dry_does_not_prompt_while_dryer_is_initializing(self):
+    def test_auto_mode_selection_ignores_initializing_dryer(self):
         model = MagicMock()
         model.get_dryer_state.return_value = {
             "available": True,
@@ -142,12 +143,12 @@ class TestPaintDashboardController(unittest.TestCase):
         ):
             controller = PaintDashboardController(model, view, broker)
 
-        controller._on_drying_mode("auto")
+        with patch.object(controller, "_run_background") as run_background:
+            controller._on_drying_mode("auto")
 
         view.ask_enable_dryer.assert_not_called()
-        view.show_warning.assert_called_once_with(
-            "Drying Mode", "Dryer initialization is in progress"
-        )
+        view.show_warning.assert_not_called()
+        run_background.assert_called_once()
 
     def test_start_in_auto_mode_prompts_for_disabled_dryer(self):
         model = MagicMock()
