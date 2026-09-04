@@ -21,6 +21,9 @@ from src.robot_systems.paint.applications.dashboard.ui.paint_info_card import (
 from src.robot_systems.paint.applications.dashboard.ui.paint_quick_controls_panel import (
     PaintQuickControlsPanel,
 )
+from src.robot_systems.paint.applications.dashboard.ui.paint_quick_access_panel import (
+    PaintQuickAccessPanel,
+)
 from src.robot_systems.paint.applications.dashboard.ui.paint_plate_layout import (
     PaintPlateLayout,
     _PlateCanvas,
@@ -91,6 +94,25 @@ class _FakeDashboardWidget(QWidget):
 
 
 class TestPaintDashboardUi(unittest.TestCase):
+    def test_quick_access_pump_is_off_only_while_fan_remains_toggleable(self) -> None:
+        panel = PaintQuickAccessPanel([
+            AuxiliaryToggleConfig("pump", "Vacuum Pump"),
+            AuxiliaryToggleConfig("fan", "Fan"),
+        ])
+        callback = MagicMock()
+        panel.device_toggle_requested.connect(callback)
+
+        panel.set_device_state("pump", True)
+        self.assertFalse(panel._buttons["pump"].isCheckable())
+        self.assertEqual(panel._buttons["pump"].text(), "Vacuum Pump: OFF")
+        panel._buttons["pump"].click()
+        callback.assert_called_once_with("pump", False)
+
+        callback.reset_mock()
+        self.assertTrue(panel._buttons["fan"].isCheckable())
+        panel._buttons["fan"].click()
+        callback.assert_called_once_with("fan", True)
+
     def test_tray_selection_shows_painted_time_and_live_drying_duration(self) -> None:
         tray = PaintPlateLayout()
         tray.set_state({

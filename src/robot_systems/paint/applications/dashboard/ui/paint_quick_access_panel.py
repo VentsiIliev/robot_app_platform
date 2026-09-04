@@ -33,7 +33,7 @@ class PaintQuickAccessPanel(QWidget):
         self._layout.addWidget(self._drying_mode_button)
         for config in self._configs:
             button = self._button()
-            button.setCheckable(True)
+            button.setCheckable(config.device_id != "pump")
             button.setProperty("device_id", config.device_id)
             button.clicked.connect(self._on_device_toggle)
             self._layout.addWidget(button)
@@ -57,7 +57,8 @@ class PaintQuickAccessPanel(QWidget):
         self.drying_mode_requested.emit(next_mode[self._drying_mode])
 
     def _on_device_toggle(self, checked: bool) -> None:
-        self.device_toggle_requested.emit(str(self.sender().property("device_id")), checked)
+        device_id = str(self.sender().property("device_id"))
+        self.device_toggle_requested.emit(device_id, False if device_id == "pump" else checked)
 
     def _on_cable_relief(self) -> None:
         self.cable_relief_requested.emit()
@@ -75,6 +76,9 @@ class PaintQuickAccessPanel(QWidget):
         if button is None:
             return
         self._states[device_id] = bool(enabled)
+        if device_id == "pump":
+            self._render_device(device_id)
+            return
         button.blockSignals(True)
         button.setChecked(bool(enabled))
         button.blockSignals(False)
@@ -109,6 +113,10 @@ class PaintQuickAccessPanel(QWidget):
         if button is None or config is None:
             return
         enabled = self._states[device_id]
+        if device_id == "pump":
+            button.setText(f"{self.tr(config.label)}: {self.tr('OFF')}")
+            button.setStyleSheet(GHOST_BTN_STYLE)
+            return
         state = self.tr("ON") if enabled else self.tr("OFF")
         button.setText(f"{self.tr(config.label)}: {state}")
         button.setStyleSheet(ACTION_BTN_STYLE if enabled else GHOST_BTN_STYLE)
