@@ -33,7 +33,7 @@ COMBINED_PAINT_SPEED_MAXIMUM_PERCENT = 100.0
 
 # Independently map UI Speed 1..100 onto this curved acceleration range.
 COMBINED_PAINT_ACCELERATION_MINIMUM_PERCENT = 1.0
-COMBINED_PAINT_ACCELERATION_MAXIMUM_PERCENT = 100.0
+COMBINED_PAINT_ACCELERATION_MAXIMUM_PERCENT = 80.0
 
 # Testing aid: show the Velocity and Acceleration percentages derived from Speed.
 # This has no effect when USE_COMBINED_PAINT_SPEED_CONTROL is False.
