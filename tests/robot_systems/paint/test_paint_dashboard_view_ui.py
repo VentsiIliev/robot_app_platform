@@ -30,6 +30,7 @@ from src.robot_systems.paint.applications.dashboard.view.paint_dashboard_view im
 )
 from src.robot_systems.paint.applications.dashboard.config import (
     AuxiliaryToggleConfig,
+    PAINT_DASHBOARD_ACTIONS,
     PaintDashboardConfig,
     PaintDashboardUiConfig,
 )
@@ -113,7 +114,7 @@ class TestPaintDashboardUi(unittest.TestCase):
     def test_camera_disabled_uses_expanded_settings_and_tray_tabs(self) -> None:
         view = PaintDashboardView(
             config=PaintDashboardConfig(),
-            action_buttons=[],
+            action_buttons=PAINT_DASHBOARD_ACTIONS,
             cards=[],
             auxiliary_toggles=[],
             ui_config=PaintDashboardUiConfig(show_camera_preview=False),
@@ -138,6 +139,11 @@ class TestPaintDashboardUi(unittest.TestCase):
         self.assertIsNone(view._quick_controls)
         self.assertIsNone(view._controls_drawer)
         self.assertIsNotNone(view._quick_access)
+        bottom_container = view._dashboard.layout_manager.main_layout.itemAt(1).widget()
+        self.assertEqual(bottom_container.height(), 300)
+        reset_button = view._dashboard._action_buttons["reset_errors"]
+        self.assertIs(view._quick_access._reset_errors_button, reset_button)
+        self.assertIs(reset_button.parent(), view._quick_access._box)
 
     @classmethod
     def setUpClass(cls) -> None:

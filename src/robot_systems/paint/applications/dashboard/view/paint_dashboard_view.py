@@ -49,6 +49,7 @@ _CONTROLS_DRAWER_WIDTH = 400
 _MESSAGE_DRAWER_HANDLE_CLEARANCE = 38
 _PROCESS_CONTROLS_TOP_MARGIN = 19
 _PROCESS_CONTROLS_BOTTOM_MARGIN = 5
+_EXPANDED_PROCESS_SECTION_HEIGHT = 300
 _PROCESS_CONTROLS_PANEL_STYLE = f"""
 QFrame#paintProcessControlsPanel {{
     background-color: white;
@@ -437,13 +438,14 @@ class PaintDashboardView(IApplicationView):
                 0,
             )
             panel_host_layout.addWidget(panel)
-            message_row = max(4, layout.rowCount())
+            message_row = 3 if self._quick_access is not None else max(4, layout.rowCount())
             layout.addWidget(panel_host, message_row, 0)
             for row in range(3):
                 layout.setRowMinimumHeight(row, 75)
                 layout.setRowStretch(row, 0)
-            layout.setRowMinimumHeight(3, 52)
-            layout.setRowStretch(3, 0)
+            if self._quick_access is None:
+                layout.setRowMinimumHeight(3, 52)
+                layout.setRowStretch(3, 0)
             layout.setRowStretch(message_row, 1)
             layout.setColumnStretch(0, 1)
             self._message_panel = panel
@@ -508,6 +510,9 @@ class PaintDashboardView(IApplicationView):
             reset_button = self._dashboard._action_buttons.get("reset_errors")
             if reset_button is None:
                 return
+            if self._quick_access is not None:
+                self._quick_access.add_reset_errors_button(reset_button)
+                return
             reset_button.setFixedHeight(52)
             main_layout = self._dashboard.layout_manager.main_layout
             top_section = main_layout.itemAt(0).layout()
@@ -521,6 +526,8 @@ class PaintDashboardView(IApplicationView):
         try:
             main_layout = self._dashboard.layout_manager.main_layout
             bottom_container = main_layout.itemAt(1).widget()
+            if not self._ui_config.show_camera_preview:
+                bottom_container.setFixedHeight(_EXPANDED_PROCESS_SECTION_HEIGHT)
             bottom_layout = bottom_container.layout()
             action_area = bottom_layout.itemAt(0).widget()
             controls = bottom_layout.itemAt(1).widget()

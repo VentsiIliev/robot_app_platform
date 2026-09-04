@@ -109,6 +109,7 @@
     "Fan switched OFF.": "Вентилаторът е изключен.",
     "Could not switch {device}: {error}": "Неуспешно превключване на {device}: {error}",
     "Reset Errors": "Нулирай грешките",
+    "Reset": "Нулирай",
     "Pause": "Пауза",
     "Resume": "Продължи",
     "Robot Status": "Статус на робота",
