@@ -4,7 +4,7 @@ from datetime import datetime
 
 from PyQt6.QtCore import QEvent, QPointF, QRectF, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QColor, QPainter, QPen, QPolygonF
-from PyQt6.QtWidgets import QAbstractSpinBox, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QAbstractSpinBox, QGroupBox, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from pl_gui.settings.settings_view.styles import (
     ACTION_BTN_STYLE,
@@ -12,6 +12,7 @@ from pl_gui.settings.settings_view.styles import (
     BORDER,
     ERROR_COLOR,
     GHOST_BTN_STYLE,
+    GROUP_STYLE,
     LABEL_STYLE,
     PRIMARY,
     TEXT_COLOR,
@@ -204,18 +205,26 @@ class PaintPlateLayout(QWidget):
         header = QHBoxLayout()
         self._hint = QLabel()
         self._hint.setStyleSheet(LABEL_STYLE)
-        self._drying_duration_label = QLabel()
+        self._drying_duration_box = QGroupBox()
+        self._drying_duration_box.setStyleSheet(GROUP_STYLE)
+        duration_layout = QHBoxLayout(self._drying_duration_box)
+        duration_layout.setContentsMargins(10, 18, 10, 8)
+        duration_layout.setSpacing(8)
         self._drying_duration = KeyboardSpinBox()
         self._drying_duration.setRange(1, 1440)
         self._drying_duration.setValue(max(1, int(drying_duration_minutes)))
         self._drying_duration.setSuffix(" min")
         self._drying_duration.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
         self._drying_duration.setMinimumHeight(44)
+        self._drying_duration.setMinimumWidth(105)
         self._drying_duration.valueChanged.connect(self._on_drying_duration_changed)
-        self._drying_duration_label.setVisible(self._use_dry_duration)
-        self._drying_duration.setVisible(self._use_dry_duration)
-        header.addWidget(self._drying_duration_label)
-        header.addWidget(self._drying_duration)
+        self._drying_duration_minus = self._make_duration_step_button("−", -1)
+        self._drying_duration_plus = self._make_duration_step_button("+", 1)
+        duration_layout.addWidget(self._drying_duration_minus)
+        duration_layout.addWidget(self._drying_duration)
+        duration_layout.addWidget(self._drying_duration_plus)
+        self._drying_duration_box.setVisible(self._use_dry_duration)
+        header.addWidget(self._drying_duration_box)
         self._new_tray = QPushButton()
         self._new_tray.setStyleSheet(ACTION_BTN_STYLE)
         self._new_tray.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -289,6 +298,22 @@ class PaintPlateLayout(QWidget):
         if hasattr(self, "_canvas"):
             self._canvas.set_drying_duration(duration)
 
+    def _make_duration_step_button(self, text: str, direction: int) -> QPushButton:
+        button = QPushButton(text)
+        button.setProperty("step_direction", int(direction))
+        button.setFixedSize(44, 44)
+        button.setStyleSheet(GHOST_BTN_STYLE)
+        button.setCursor(Qt.CursorShape.PointingHandCursor)
+        button.setAutoRepeat(True)
+        button.setAutoRepeatDelay(400)
+        button.setAutoRepeatInterval(75)
+        button.clicked.connect(self._on_drying_duration_step)
+        return button
+
+    def _on_drying_duration_step(self) -> None:
+        direction = int(self.sender().property("step_direction") or 0)
+        self._drying_duration.setValue(self._drying_duration.value() + direction)
+
     def _on_drying_timer(self) -> None:
         self._canvas.update()
         if self._selected_id is not None:
@@ -346,7 +371,7 @@ class PaintPlateLayout(QWidget):
             self._render_selection_metadata()
         self._new_tray.setText(self.tr("New Tray"))
         self._remove.setText(self.tr("Remove"))
-        self._drying_duration_label.setText(self.tr("Drying Duration"))
+        self._drying_duration_box.setTitle(self.tr("Drying Duration"))
 
     def changeEvent(self, event: QEvent) -> None:
         if event.type() == QEvent.Type.LanguageChange:
