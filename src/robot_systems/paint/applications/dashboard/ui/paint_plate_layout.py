@@ -253,9 +253,16 @@ class PaintPlateLayout(QWidget):
         else:
             self._render_selection_metadata()
 
-    def set_editable(self, editable: bool) -> None:
+    def set_editable(
+        self,
+        editable: bool,
+        *,
+        removal_editable: bool | None = None,
+    ) -> None:
         self._new_tray.setEnabled(editable)
-        self._remove.setEnabled(editable)
+        self._remove.setEnabled(
+            editable if removal_editable is None else bool(removal_editable)
+        )
 
     def set_new_tray_button_visible(self, visible: bool) -> None:
         self._new_tray.setVisible(bool(visible))

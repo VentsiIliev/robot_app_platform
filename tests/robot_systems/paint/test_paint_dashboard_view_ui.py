@@ -283,6 +283,9 @@ class TestPaintDashboardUi(unittest.TestCase):
         self.assertIsNone(disabled._canvas._drying_duration_seconds)
         self.assertFalse(enabled._drying_duration.isHidden())
         self.assertEqual(enabled._canvas._drying_duration_seconds, 15 * 60)
+        enabled.set_editable(False, removal_editable=True)
+        self.assertFalse(enabled._new_tray.isEnabled())
+        self.assertTrue(enabled._remove.isEnabled())
 
     def test_tray_marks_workpiece_dried_after_configured_duration(self) -> None:
         from datetime import timedelta

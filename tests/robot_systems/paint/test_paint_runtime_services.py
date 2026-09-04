@@ -586,19 +586,20 @@ class TestPaintDashboardService(unittest.TestCase):
         plate_layout.clear.assert_called_once_with()
         plate_layout.remove.assert_called_once_with(7)
 
-    def test_tray_edits_are_rejected_while_process_is_active(self) -> None:
+    def test_new_tray_is_rejected_but_removal_updates_layout_while_active(self) -> None:
         process = MagicMock(process_id="paint")
         process.state = ProcessState.RUNNING
         plate_layout = MagicMock()
+        plate_layout.remove.return_value = True
         service = PaintDashboardService(process, plate_layout_service=plate_layout)
 
         clear_result = service.clear_plate_layout()
         remove_result = service.remove_plate_placement(7)
 
         self.assertFalse(clear_result.success)
-        self.assertFalse(remove_result.success)
+        self.assertTrue(remove_result.success)
         plate_layout.clear.assert_not_called()
-        plate_layout.remove.assert_not_called()
+        plate_layout.remove.assert_called_once_with(7)
 
 
 class TestPaintCalibrationCoordinator(unittest.TestCase):
