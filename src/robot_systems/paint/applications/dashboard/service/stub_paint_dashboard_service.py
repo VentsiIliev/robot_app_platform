@@ -33,6 +33,7 @@ class StubPaintDashboardService(IPaintDashboardService):
         }
         self._acceleration_scale = 100.0
         self._drying_mode = "auto"
+        self._plate_layout = {"width_mm": 200.0, "height_mm": 200.0, "placements": [], "pending": None}
 
     def get_process_id(self) -> str:
         return self._process_id
@@ -135,6 +136,22 @@ class StubPaintDashboardService(IPaintDashboardService):
     def enable_dryer_and_set_auto_mode(self, mode: str = "auto") -> DashboardCommandResult:
         self._drying_mode = mode
         return DashboardCommandResult(True, f"Drying mode changed to {mode}.")
+
+    def get_plate_layout_state(self) -> dict[str, object]:
+        return dict(self._plate_layout)
+
+    def clear_plate_layout(self) -> DashboardCommandResult:
+        self._plate_layout["placements"] = []
+        self._plate_layout["pending"] = None
+        return DashboardCommandResult(True, "A new tray is ready.")
+
+    def remove_plate_placement(self, placement_id: int) -> DashboardCommandResult:
+        items = list(self._plate_layout["placements"])
+        remaining = [item for item in items if item.get("placement_id") != placement_id]
+        if len(remaining) == len(items):
+            return DashboardCommandResult(False, "The selected workpiece is no longer on the tray.")
+        self._plate_layout["placements"] = remaining
+        return DashboardCommandResult(True, "Workpiece removed from the tray.")
 
     def capture_latest_contour_transform_debug(self) -> ContourTransformDebugResult:
         return ContourTransformDebugResult(False, "No usable contour detected (stub service).")

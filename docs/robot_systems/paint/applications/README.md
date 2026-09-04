@@ -43,6 +43,13 @@ The dashboard is a thin UI over `PaintDashboardService`, which is built in `Pain
 Primary responsibility:
 
 - display paint-process state and operator-facing runtime status
+- show the live camera preview in automatic/demo drying modes
+- show the shared plate-layout state in manual drying mode, including committed and pending workpieces
+- allow stopped-state operators to confirm a new tray or press-and-hold a committed workpiece to remove it
+
+Tray edits are routed through `PaintDashboardService` to the same `PlateLayoutService`
+instance used by robot drop-off. They are rejected while the process is running or
+paused. Tray occupancy is runtime state and is not restored after an application restart.
 
 ---
 

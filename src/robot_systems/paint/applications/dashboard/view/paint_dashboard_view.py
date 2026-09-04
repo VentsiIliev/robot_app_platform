@@ -11,6 +11,7 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QScrollArea,
+    QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -26,6 +27,7 @@ from src.robot_systems.paint.applications.dashboard.ui.paint_controls_drawer imp
 from src.robot_systems.paint.applications.dashboard.ui.paint_quick_controls_panel import (
     PaintQuickControlsPanel,
 )
+from src.robot_systems.paint.applications.dashboard.ui.paint_plate_layout import PaintPlateLayout
 from src.robot_systems.paint.applications.dashboard.config import PaintDashboardUiConfig
 
 
@@ -149,6 +151,8 @@ class PaintDashboardView(IApplicationView):
     unmatched_paint_settings_requested = pyqtSignal(object)
     acceleration_scale_requested = pyqtSignal(float)
     drying_mode_requested = pyqtSignal(str)
+    new_tray_requested = pyqtSignal()
+    remove_plate_placement_requested = pyqtSignal(int)
 
     def __init__(
         self,
@@ -178,6 +182,8 @@ class PaintDashboardView(IApplicationView):
         self._controls_drawer = None
         self._controls_widget = None
         self._quick_controls = None
+        self._preview_stack = None
+        self._plate_layout = None
         super().__init__("PaintDashboard", parent)
 
     @property
@@ -216,6 +222,7 @@ class PaintDashboardView(IApplicationView):
         )
         layout.addWidget(self._dashboard)
         self._dashboard.setStyleSheet(f"background-color: {BG_COLOR};")
+        self._install_manual_plate_layout()
         self._align_preview_and_card_columns()
         self._install_message_panel()
         self._move_reset_below_cards()
@@ -227,6 +234,26 @@ class PaintDashboardView(IApplicationView):
         self._dashboard.pause_requested.connect(self.pause_requested)
         self._dashboard.action_requested.connect(self._on_inner_action)
         self._install_controls_drawer()
+
+    def _install_manual_plate_layout(self) -> None:
+        try:
+            top_section = self._dashboard.layout_manager.main_layout.itemAt(0).layout()
+            if top_section is None:
+                return
+            preview_container = top_section.itemAt(0).widget()
+            preview_layout = preview_container.layout()
+            camera = self._dashboard.trajectory_widget
+            preview_layout.removeWidget(camera)
+            self._preview_stack = QStackedWidget()
+            self._preview_stack.addWidget(camera)
+            self._plate_layout = PaintPlateLayout()
+            self._plate_layout.new_tray_requested.connect(self._on_new_tray)
+            self._plate_layout.remove_requested.connect(self._on_remove_plate_placement)
+            self._preview_stack.addWidget(self._plate_layout)
+            preview_layout.insertWidget(0, self._preview_stack)
+        except (AttributeError, RuntimeError):
+            self._preview_stack = None
+            self._plate_layout = None
 
     def _install_controls_drawer(self) -> None:
         self._controls_drawer = DrawerToggle(
@@ -522,6 +549,34 @@ class PaintDashboardView(IApplicationView):
     def set_drying_mode(self, mode: str) -> None:
         if self._quick_controls is not None:
             self._quick_controls.set_drying_mode(mode)
+        if self._preview_stack is not None:
+            self._preview_stack.setCurrentIndex(1 if str(mode).lower() == "manual" else 0)
+
+    def set_plate_layout_state(self, state: dict[str, object]) -> None:
+        if self._plate_layout is not None:
+            self._plate_layout.set_state(state)
+
+    def _on_new_tray(self) -> None:
+        if ask_yes_no(
+            self,
+            self._translate_text("New Tray"),
+            self._translate_text("Clear all workpieces and start a new tray?"),
+            default_no=True,
+        ):
+            self.new_tray_requested.emit()
+
+    def _on_remove_plate_placement(self, placement_id: int) -> None:
+        if ask_yes_no(
+            self,
+            self._translate_text("Remove Workpiece"),
+            self._translate_text("Remove the selected workpiece from the tray?"),
+            default_no=True,
+        ):
+            self.remove_plate_placement_requested.emit(placement_id)
+
+    def clear_plate_selection(self) -> None:
+        if self._plate_layout is not None:
+            self._plate_layout.clear_selection()
 
     def set_drying_mode_busy(self, busy: bool) -> None:
         if self._quick_controls is not None:
@@ -663,6 +718,8 @@ class PaintDashboardView(IApplicationView):
         self.set_acceleration_scale_editable(
             state.process_state in ("idle", "stopped", "error")
         )
+        if self._plate_layout is not None:
+            self._plate_layout.set_editable(state.process_state in ("idle", "stopped", "error"))
 
     @staticmethod
     def _state_signature(state) -> tuple:

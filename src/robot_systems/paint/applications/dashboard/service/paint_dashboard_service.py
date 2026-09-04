@@ -40,6 +40,7 @@ class PaintDashboardService(IPaintDashboardService):
         persist_dryer_enabled=None,
         development_mode: bool = False,
         paint_process_config_service=None,
+        plate_layout_service=None,
         target_point_name: str = "camera",
         frame_name: str = "calibration",
     ) -> None:
@@ -50,6 +51,7 @@ class PaintDashboardService(IPaintDashboardService):
         self._robot_service = robot_service
         self._vision_service = vision_service
         self._paint_process_config_service = paint_process_config_service
+        self._plate_layout_service = plate_layout_service
         self._dryer_service = dryer_service
         self._persist_dryer_enabled = persist_dryer_enabled
         self._development_mode = bool(development_mode)
@@ -343,6 +345,37 @@ class PaintDashboardService(IPaintDashboardService):
             self._logger.exception("Could not save drying mode")
             return DashboardCommandResult(False, f"Could not save drying mode: {exc}")
         return DashboardCommandResult(True, f"Drying mode changed to {normalized}.")
+
+    def get_plate_layout_state(self) -> dict[str, object]:
+        if self._plate_layout_service is None or self._paint_process_config_service is None:
+            return {"width_mm": 0.0, "height_mm": 0.0, "placements": [], "pending": None}
+        config = self._paint_process_config_service.get_snapshot().dropoff
+        return self._plate_layout_service.snapshot(config)
+
+    def clear_plate_layout(self) -> DashboardCommandResult:
+        blocked = self._plate_edit_blocked_result()
+        if blocked is not None:
+            return blocked
+        if self._plate_layout_service is None:
+            return DashboardCommandResult(False, "Plate layout is not available.")
+        self._plate_layout_service.clear()
+        return DashboardCommandResult(True, "A new tray is ready.")
+
+    def remove_plate_placement(self, placement_id: int) -> DashboardCommandResult:
+        blocked = self._plate_edit_blocked_result()
+        if blocked is not None:
+            return blocked
+        if self._plate_layout_service is None:
+            return DashboardCommandResult(False, "Plate layout is not available.")
+        if not self._plate_layout_service.remove(placement_id):
+            return DashboardCommandResult(False, "The selected workpiece is no longer on the tray.")
+        return DashboardCommandResult(True, "Workpiece removed from the tray.")
+
+    def _plate_edit_blocked_result(self) -> DashboardCommandResult | None:
+        state = str(getattr(getattr(self._process, "state", None), "value", ""))
+        if state in {ProcessState.RUNNING.value, ProcessState.PAUSED.value}:
+            return DashboardCommandResult(False, "Stop the paint process before editing the tray.")
+        return None
 
     def get_dryer_state(self) -> dict[str, object]:
         dryer = self._dryer_service

@@ -98,6 +98,7 @@
   },
   "dropoff": {
     "strategy": "plate_layout",
+    "alternate_drying_demo": false,
     "allow_sub_zero_dropoff": true,
     "corridor_x_margin_mm": 70.0,
     "corridor_y_margin_mm": 70.0,
