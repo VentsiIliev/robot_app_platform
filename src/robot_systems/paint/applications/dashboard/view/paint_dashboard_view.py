@@ -317,6 +317,7 @@ class PaintDashboardView(IApplicationView):
             show_unmatched_paint_controls=self._ui_config.show_unmatched_paint_controls,
             show_acceleration_scale_control=self._ui_config.show_acceleration_scale_control,
             show_shortcuts=self._ui_config.show_application_shortcuts,
+            compact_layout=not self._ui_config.show_camera_preview,
         )
         if self._ui_config.show_camera_preview:
             self._controls_drawer = DrawerToggle(

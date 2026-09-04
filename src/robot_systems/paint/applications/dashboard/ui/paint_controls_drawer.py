@@ -48,6 +48,7 @@ class PaintControlsDrawer(QWidget):
         show_unmatched_paint_controls: bool = True,
         show_acceleration_scale_control: bool = True,
         show_shortcuts: bool = True,
+        compact_layout: bool = False,
         parent=None,
     ) -> None:
         super().__init__(parent)
@@ -56,6 +57,7 @@ class PaintControlsDrawer(QWidget):
         self._buttons: dict[str, QPushButton] = {}
         self._drying_mode = "auto"
         self._shortcuts = []
+        self._compact_layout = bool(compact_layout)
         self._shortcut_buttons: dict[str, QPushButton] = {}
         self._title = QLabel()
         self._title.setStyleSheet(LABEL_STYLE)
@@ -74,6 +76,7 @@ class PaintControlsDrawer(QWidget):
         content_widget = QWidget()
         content_widget.setStyleSheet("background: transparent;")
         layout = QVBoxLayout(content_widget)
+        self._content_layout = layout
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(12)
 
@@ -82,6 +85,7 @@ class PaintControlsDrawer(QWidget):
         self._unmatched_box.setVisible(show_unmatched_paint_controls)
         self._unmatched_box.setMinimumHeight(430)
         unmatched_layout = QVBoxLayout(self._unmatched_box)
+        self._unmatched_layout = unmatched_layout
         unmatched_layout.setContentsMargins(14, 20, 14, 14)
         unmatched_layout.setSpacing(10)
         self._unmatched_step_buttons: list[QPushButton] = []
@@ -93,9 +97,10 @@ class PaintControlsDrawer(QWidget):
         self._unmatched_pass_count.valueChanged.connect(self._on_pass_count_changed)
         self._unmatched_pass_count_label = QLabel()
         unmatched_layout.addWidget(self._unmatched_pass_count_label)
-        unmatched_layout.addWidget(
-            self._build_touch_spin_row("pass_count", self._unmatched_pass_count)
+        self._pass_count_row = self._build_touch_spin_row(
+            "pass_count", self._unmatched_pass_count
         )
+        unmatched_layout.addWidget(self._pass_count_row)
         self._unmatched_tabs = QTabWidget()
         self._unmatched_tabs.setStyleSheet(f"""
             QTabWidget::pane {{
@@ -131,6 +136,7 @@ class PaintControlsDrawer(QWidget):
         """)
         pass_1_widget = QWidget()
         pass_1_layout = QVBoxLayout(pass_1_widget)
+        self._pass_1_layout = pass_1_layout
         self._unmatched_velocity = self._make_spin_box(0.1, 100.0, 1.0, "%")
         self._unmatched_acceleration = self._make_spin_box(0.1, 100.0, 1.0, "%")
         self._unmatched_offset = self._make_spin_box(-100.0, 100.0, 0.0, " mm")
@@ -145,20 +151,18 @@ class PaintControlsDrawer(QWidget):
         ):
             label.setMinimumHeight(24)
         pass_1_layout.addWidget(self._unmatched_velocity_label)
-        pass_1_layout.addWidget(
-            self._build_touch_spin_row("velocity", self._unmatched_velocity)
-        )
+        self._velocity_row = self._build_touch_spin_row("velocity", self._unmatched_velocity)
+        pass_1_layout.addWidget(self._velocity_row)
         pass_1_layout.addWidget(self._unmatched_acceleration_label)
-        pass_1_layout.addWidget(
-            self._build_touch_spin_row("acceleration", self._unmatched_acceleration)
-        )
+        self._acceleration_row = self._build_touch_spin_row("acceleration", self._unmatched_acceleration)
+        pass_1_layout.addWidget(self._acceleration_row)
         pass_1_layout.addWidget(self._unmatched_offset_label)
-        pass_1_layout.addWidget(
-            self._build_touch_spin_row("offset", self._unmatched_offset)
-        )
+        self._offset_row = self._build_touch_spin_row("offset", self._unmatched_offset)
+        pass_1_layout.addWidget(self._offset_row)
         self._unmatched_tabs.addTab(pass_1_widget, "")
         pass_2_widget = QWidget()
         pass_2_layout = QVBoxLayout(pass_2_widget)
+        self._pass_2_layout = pass_2_layout
         self._pass_2_use_first = QCheckBox()
         self._pass_2_use_first.stateChanged.connect(self._sync_pass_2_enabled)
         pass_2_layout.addWidget(self._pass_2_use_first)
@@ -245,9 +249,74 @@ class PaintControlsDrawer(QWidget):
         self._shortcuts_box.setVisible(show_shortcuts)
         layout.addWidget(self._shortcuts_box)
         layout.addStretch(1)
+        if self._compact_layout:
+            self._apply_compact_layout()
         self._scroll.setWidget(content_widget)
         root.addWidget(self._scroll, 1)
         self.retranslateUi()
+
+    def _apply_compact_layout(self) -> None:
+        self._unmatched_box.setMinimumHeight(300)
+        summary = QWidget()
+        summary.setStyleSheet("background: transparent;")
+        summary_layout = QHBoxLayout(summary)
+        summary_layout.setContentsMargins(0, 0, 0, 0)
+        summary_layout.setSpacing(10)
+
+        pass_count_box = QGroupBox()
+        self._pass_count_box = pass_count_box
+        pass_count_box.setStyleSheet(GROUP_STYLE)
+        pass_count_layout = QVBoxLayout(pass_count_box)
+        pass_count_layout.setContentsMargins(12, 20, 12, 10)
+        self._unmatched_layout.removeWidget(self._unmatched_pass_count_label)
+        self._unmatched_layout.removeWidget(self._pass_count_row)
+        self._unmatched_pass_count_label.hide()
+        pass_count_layout.addWidget(self._pass_count_row)
+        self._content_layout.removeWidget(self._acceleration_scale_box)
+        self._acceleration_scale_label.hide()
+        summary_layout.addWidget(pass_count_box, 1)
+        summary_layout.addWidget(self._acceleration_scale_box, 1)
+        self._content_layout.insertWidget(0, summary)
+
+        self._compact_pass_one_fields()
+        self._compact_pass_two_fields()
+
+    def _compact_pass_one_fields(self) -> None:
+        for widget in (
+            self._unmatched_velocity_label, self._velocity_row,
+            self._unmatched_acceleration_label, self._acceleration_row,
+            self._unmatched_offset_label, self._offset_row,
+        ):
+            self._pass_1_layout.removeWidget(widget)
+        pair = QHBoxLayout()
+        pair.addWidget(self._field_column(self._unmatched_velocity_label, self._velocity_row), 1)
+        pair.addWidget(self._field_column(self._unmatched_acceleration_label, self._acceleration_row), 1)
+        self._pass_1_layout.addLayout(pair)
+        self._pass_1_layout.addWidget(self._unmatched_offset_label)
+        self._pass_1_layout.addWidget(self._offset_row)
+
+    def _compact_pass_two_fields(self) -> None:
+        fields = (self._pass_2_velocity, self._pass_2_acceleration, self._pass_2_offset)
+        for label, field in zip(self._pass_2_labels, fields):
+            self._pass_2_layout.removeWidget(label)
+            self._pass_2_layout.removeWidget(field)
+        pair = QHBoxLayout()
+        pair.addWidget(self._field_column(self._pass_2_labels[0], self._pass_2_velocity), 1)
+        pair.addWidget(self._field_column(self._pass_2_labels[1], self._pass_2_acceleration), 1)
+        self._pass_2_layout.addLayout(pair)
+        self._pass_2_layout.addWidget(self._pass_2_labels[2])
+        self._pass_2_layout.addWidget(self._pass_2_offset)
+
+    @staticmethod
+    def _field_column(label: QLabel, field: QWidget) -> QWidget:
+        column = QWidget()
+        column.setStyleSheet("background: transparent;")
+        layout = QVBoxLayout(column)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(4)
+        layout.addWidget(label)
+        layout.addWidget(field)
+        return column
 
     @staticmethod
     def _make_spin_box(minimum: float, maximum: float, value: float, suffix: str) -> KeyboardDoubleSpinBox:
@@ -457,6 +526,8 @@ class PaintControlsDrawer(QWidget):
         self._title.setText(self.tr("Manual Controls"))
         self._unmatched_box.setTitle(self.tr("Painting"))
         self._unmatched_pass_count_label.setText(self.tr("Number of Passes"))
+        if hasattr(self, "_pass_count_box"):
+            self._pass_count_box.setTitle(self.tr("Number of Passes"))
         self._acceleration_scale_label.setText(self.tr("Process Acceleration Scale"))
         self._acceleration_scale_box.setTitle(self.tr("Process Scaling"))
         self._acceleration_scale_apply.setText(self.tr("Apply"))
