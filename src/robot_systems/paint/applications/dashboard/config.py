@@ -29,6 +29,8 @@ class PaintDashboardUiConfig:
     combined_paint_acceleration_maximum_percent: float = 100.0
     show_resolved_paint_speed_values: bool = False
     allow_running_paint_settings_updates: bool = False
+    use_tray_dry_duration: bool = False
+    tray_dry_duration_minutes: int = 30
     show_application_shortcuts: bool = False
     shortcut_application_names: tuple[str, ...] = ()
 

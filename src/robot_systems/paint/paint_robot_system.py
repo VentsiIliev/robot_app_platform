@@ -191,6 +191,8 @@ class PaintRobotSystem(BaseRobotSystem):
         allow_running_paint_settings_updates=(
             paint_system_config.ALLOW_RUNNING_PAINT_SETTINGS_UPDATES
         ),
+        use_tray_dry_duration=paint_system_config.USE_TRAY_DRY_DURATION,
+        tray_dry_duration_minutes=paint_system_config.TRAY_DRY_DURATION_MINUTES,
     )
 
 

@@ -43,6 +43,11 @@ SHOW_RESOLVED_PAINT_SPEED_VALUES = True
 # process runs. Each update is captured at the start of the next workpiece cycle.
 ALLOW_RUNNING_PAINT_SETTINGS_UPDATES = True
 
+# Optional Tray Dry timer visualization. When disabled, no duration control is
+# shown and tray workpieces retain their existing colors.
+USE_TRAY_DRY_DURATION = True
+TRAY_DRY_DURATION_MINUTES = 30
+
 # Lists saved workpieces and provides actions for managing the library.
 WORKPIECE_LIBRARY_APP = False
 

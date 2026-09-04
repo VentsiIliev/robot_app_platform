@@ -272,6 +272,29 @@ class TestPaintDashboardUi(unittest.TestCase):
         self.assertIn("Passes: 2", tray._hint.text())
         self.assertTrue(tray._drying_timer.isActive())
 
+    def test_tray_dry_duration_control_is_feature_gated(self) -> None:
+        disabled = PaintPlateLayout(use_dry_duration=False)
+        enabled = PaintPlateLayout(
+            use_dry_duration=True,
+            drying_duration_minutes=15,
+        )
+
+        self.assertTrue(disabled._drying_duration.isHidden())
+        self.assertIsNone(disabled._canvas._drying_duration_seconds)
+        self.assertFalse(enabled._drying_duration.isHidden())
+        self.assertEqual(enabled._canvas._drying_duration_seconds, 15 * 60)
+
+    def test_tray_marks_workpiece_dried_after_configured_duration(self) -> None:
+        from datetime import timedelta
+
+        tray = PaintPlateLayout(use_dry_duration=True, drying_duration_minutes=10)
+        now = datetime.now().astimezone()
+        old = {"painted_at": (now - timedelta(minutes=11)).isoformat()}
+        recent = {"painted_at": (now - timedelta(minutes=9)).isoformat()}
+
+        self.assertTrue(tray._canvas._is_dried(old))
+        self.assertFalse(tray._canvas._is_dried(recent))
+
     def test_tray_canvas_preserves_physical_aspect_ratio(self) -> None:
         canvas = _PlateCanvas()
         canvas.resize(600, 300)

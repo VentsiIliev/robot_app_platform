@@ -4,7 +4,7 @@ from datetime import datetime
 
 from PyQt6.QtCore import QEvent, QPointF, QRectF, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QColor, QPainter, QPen, QPolygonF
-from PyQt6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QAbstractSpinBox, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from pl_gui.settings.settings_view.styles import (
     ACTION_BTN_STYLE,
@@ -17,6 +17,9 @@ from pl_gui.settings.settings_view.styles import (
     TEXT_COLOR,
     TEXT_ON_PRIMARY,
 )
+from src.applications.base.widgets.custom_virtual_keyboard import KeyboardSpinBox
+
+_DRIED_COLOR = "#2E7D32"
 
 
 class _PlateCanvas(QWidget):
@@ -27,6 +30,7 @@ class _PlateCanvas(QWidget):
         self._state: dict[str, object] = {}
         self._rects: dict[int, QRectF] = {}
         self._selected_id: int | None = None
+        self._drying_duration_seconds: int | None = None
         self.setMinimumSize(420, 300)
 
     def set_state(self, state: dict[str, object]) -> None:
@@ -38,6 +42,12 @@ class _PlateCanvas(QWidget):
 
     def clear_selection(self) -> None:
         self._selected_id = None
+        self.update()
+
+    def set_drying_duration(self, duration_seconds: int | None) -> None:
+        self._drying_duration_seconds = (
+            max(1, int(duration_seconds)) if duration_seconds is not None else None
+        )
         self.update()
 
     def paintEvent(self, _event) -> None:
@@ -96,7 +106,7 @@ class _PlateCanvas(QWidget):
             self._rects[placement_id] = rect
         selected = placement_id == self._selected_id
         painter.setPen(QPen(QColor(ERROR_COLOR if selected else PRIMARY), 3 if selected else 2))
-        fill = QColor(PRIMARY)
+        fill = QColor(_DRIED_COLOR if self._is_dried(item) else PRIMARY)
         if pending:
             fill.setAlpha(55)
         painter.setBrush(fill)
@@ -121,6 +131,18 @@ class _PlateCanvas(QWidget):
             painter.drawRoundedRect(rect, 5, 5)
         painter.setPen(QColor(TEXT_COLOR if pending else TEXT_ON_PRIMARY))
         painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, str(placement_id))
+
+    def _is_dried(self, item: dict) -> bool:
+        if self._drying_duration_seconds is None:
+            return False
+        try:
+            painted_at = datetime.fromisoformat(str(item.get("painted_at", "") or ""))
+            if painted_at.tzinfo is None:
+                painted_at = painted_at.astimezone()
+            elapsed = (datetime.now().astimezone() - painted_at).total_seconds()
+            return elapsed >= self._drying_duration_seconds
+        except (TypeError, ValueError):
+            return False
 
     @staticmethod
     def _to_canvas_point(
@@ -162,19 +184,38 @@ class PaintPlateLayout(QWidget):
     new_tray_requested = pyqtSignal()
     remove_requested = pyqtSignal(int)
 
-    def __init__(self, parent=None) -> None:
+    def __init__(
+        self,
+        parent=None,
+        *,
+        use_dry_duration: bool = False,
+        drying_duration_minutes: int = 30,
+    ) -> None:
         super().__init__(parent)
         self._selected_id: int | None = None
         self._state: dict[str, object] = {}
         self._drying_timer = QTimer(self)
         self._drying_timer.setInterval(1000)
-        self._drying_timer.timeout.connect(self._render_selection_metadata)
+        self._use_dry_duration = bool(use_dry_duration)
+        self._drying_timer.timeout.connect(self._on_drying_timer)
         self.setStyleSheet(f"background-color: {BG_COLOR};")
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         header = QHBoxLayout()
         self._hint = QLabel()
         self._hint.setStyleSheet(LABEL_STYLE)
+        self._drying_duration_label = QLabel()
+        self._drying_duration = KeyboardSpinBox()
+        self._drying_duration.setRange(1, 1440)
+        self._drying_duration.setValue(max(1, int(drying_duration_minutes)))
+        self._drying_duration.setSuffix(" min")
+        self._drying_duration.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
+        self._drying_duration.setMinimumHeight(44)
+        self._drying_duration.valueChanged.connect(self._on_drying_duration_changed)
+        self._drying_duration_label.setVisible(self._use_dry_duration)
+        self._drying_duration.setVisible(self._use_dry_duration)
+        header.addWidget(self._drying_duration_label)
+        header.addWidget(self._drying_duration)
         self._new_tray = QPushButton()
         self._new_tray.setStyleSheet(ACTION_BTN_STYLE)
         self._new_tray.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -183,6 +224,7 @@ class PaintPlateLayout(QWidget):
         header.addWidget(self._new_tray)
         layout.addLayout(header)
         self._canvas = _PlateCanvas()
+        self._on_drying_duration_changed()
         self._canvas.placement_held.connect(self._on_placement_held)
         layout.addWidget(self._canvas, 1)
         footer = QHBoxLayout()
@@ -196,6 +238,8 @@ class PaintPlateLayout(QWidget):
         footer.addWidget(self._remove)
         layout.addLayout(footer)
         self.retranslateUi()
+        if self._use_dry_duration:
+            self._drying_timer.start()
 
     def set_state(self, state: dict[str, object]) -> None:
         self._state = dict(state or {})
@@ -218,7 +262,8 @@ class PaintPlateLayout(QWidget):
 
     def clear_selection(self) -> None:
         self._selected_id = None
-        self._drying_timer.stop()
+        if not self._use_dry_duration:
+            self._drying_timer.stop()
         self._remove.hide()
         self._canvas.clear_selection()
         self._hint.setText(self.tr("Press a workpiece to select it"))
@@ -231,6 +276,16 @@ class PaintPlateLayout(QWidget):
         self._remove.show()
         self._render_selection_metadata()
         self._drying_timer.start()
+
+    def _on_drying_duration_changed(self) -> None:
+        duration = self._drying_duration.value() * 60 if self._use_dry_duration else None
+        if hasattr(self, "_canvas"):
+            self._canvas.set_drying_duration(duration)
+
+    def _on_drying_timer(self) -> None:
+        self._canvas.update()
+        if self._selected_id is not None:
+            self._render_selection_metadata()
 
     def _render_selection_metadata(self) -> None:
         placement = next(
@@ -284,6 +339,7 @@ class PaintPlateLayout(QWidget):
             self._render_selection_metadata()
         self._new_tray.setText(self.tr("New Tray"))
         self._remove.setText(self.tr("Remove"))
+        self._drying_duration_label.setText(self.tr("Drying Duration"))
 
     def changeEvent(self, event: QEvent) -> None:
         if event.type() == QEvent.Type.LanguageChange:
