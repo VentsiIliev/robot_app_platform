@@ -19,7 +19,6 @@ class PaintQuickAccessPanel(QWidget):
         self._states = {item.device_id: False for item in self._configs}
         self._buttons: dict[str, QPushButton] = {}
         self._drying_mode = "auto"
-        self._reset_errors_button: QPushButton | None = None
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -88,12 +87,6 @@ class PaintQuickAccessPanel(QWidget):
 
     def set_cable_relief_busy(self, busy: bool) -> None:
         self._cable_relief.setEnabled(not busy)
-
-    def add_reset_errors_button(self, button: QPushButton) -> None:
-        """Place the dashboard-owned reset action above the panel stretch."""
-        self._reset_errors_button = button
-        button.setFixedHeight(52)
-        self._layout.insertWidget(self._layout.count() - 1, button)
 
     def retranslateUi(self) -> None:
         self._box.setTitle(self.tr("Quick Controls"))

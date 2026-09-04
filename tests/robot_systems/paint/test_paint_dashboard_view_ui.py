@@ -149,8 +149,21 @@ class TestPaintDashboardUi(unittest.TestCase):
         bottom_container = view._dashboard.layout_manager.main_layout.itemAt(1).widget()
         self.assertEqual(bottom_container.height(), 300)
         reset_button = view._dashboard._action_buttons["reset_errors"]
-        self.assertIs(view._quick_access._reset_errors_button, reset_button)
-        self.assertIs(reset_button.parent(), view._quick_access._box)
+        control_buttons = view._dashboard.control_buttons
+        top_frame = control_buttons.layout().itemAt(0).widget()
+        self.assertIs(reset_button.parent(), top_frame)
+        self.assertEqual(top_frame.layout().count(), 3)
+        self.assertIs(top_frame.layout().itemAt(2).widget(), reset_button)
+        for index in range(3):
+            button = top_frame.layout().itemAt(index).widget()
+            self.assertEqual(
+                button.sizePolicy().horizontalPolicy(),
+                QSizePolicy.Policy.Ignored,
+            )
+            self.assertEqual(top_frame.layout().stretch(index), 1)
+        bottom_frame = control_buttons.layout().itemAt(1).widget()
+        self.assertEqual(bottom_frame.layout().count(), 1)
+        self.assertIs(bottom_frame.layout().itemAt(0).widget(), control_buttons.stop_btn)
 
     @classmethod
     def setUpClass(cls) -> None:
