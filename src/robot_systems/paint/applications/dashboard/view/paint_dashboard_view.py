@@ -11,6 +11,7 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QScrollArea,
+    QSizePolicy,
     QStackedWidget,
     QTabBar,
     QTabWidget,
@@ -402,16 +403,21 @@ class PaintDashboardView(IApplicationView):
             side_panel = top_section.itemAt(top_section.count() - 1).widget()
             if side_panel is not None:
                 side_panel.setStyleSheet(f"background-color: {BG_COLOR};")
-                side_panel.setFixedHeight(
-                    int(
-                        getattr(
-                            self._config,
-                            "status_column_height",
-                            int(getattr(self._config, "trajectory_height", 450)) + 8,
+                if self._ui_config.show_camera_preview:
+                    side_panel.setFixedHeight(
+                        int(
+                            getattr(
+                                self._config,
+                                "status_column_height",
+                                int(getattr(self._config, "trajectory_height", 450)) + 8,
+                            )
                         )
                     )
-                )
-                top_section.setAlignment(side_panel, Qt.AlignmentFlag.AlignTop)
+                    top_section.setAlignment(side_panel, Qt.AlignmentFlag.AlignTop)
+                else:
+                    policy = side_panel.sizePolicy()
+                    policy.setVerticalPolicy(QSizePolicy.Policy.Expanding)
+                    side_panel.setSizePolicy(policy)
         except Exception:
             pass
 
