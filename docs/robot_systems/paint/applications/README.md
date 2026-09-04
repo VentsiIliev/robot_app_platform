@@ -44,6 +44,7 @@ Primary responsibility:
 
 - display paint-process state and operator-facing runtime status
 - show the live camera preview in automatic/demo drying modes
+- place the Reset action in the always-visible Quick Controls column when the camera preview is disabled, allowing the message panel to use the freed status-column space
 - show the shared plate-layout state in manual drying mode, including committed and pending workpieces
 - allow stopped-state operators to confirm a new tray or press-and-hold a committed workpiece to remove it
 

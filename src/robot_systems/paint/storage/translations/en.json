@@ -109,6 +109,7 @@
     "Fan switched OFF.": "Fan switched OFF.",
     "Could not switch {device}: {error}": "Could not switch {device}: {error}",
     "Reset Errors": "Reset Errors",
+    "Reset": "Reset",
     "Pause": "Pause",
     "Resume": "Resume",
     "Robot Status": "Robot Status",

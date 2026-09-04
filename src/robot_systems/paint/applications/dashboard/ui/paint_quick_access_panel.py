@@ -19,29 +19,30 @@ class PaintQuickAccessPanel(QWidget):
         self._states = {item.device_id: False for item in self._configs}
         self._buttons: dict[str, QPushButton] = {}
         self._drying_mode = "auto"
+        self._reset_errors_button: QPushButton | None = None
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         self._box = QGroupBox()
         self._box.setStyleSheet(GROUP_STYLE)
-        layout = QVBoxLayout(self._box)
-        layout.setContentsMargins(12, 20, 12, 12)
-        layout.setSpacing(10)
+        self._layout = QVBoxLayout(self._box)
+        self._layout.setContentsMargins(12, 20, 12, 12)
+        self._layout.setSpacing(10)
 
         self._drying_mode_button = self._button()
         self._drying_mode_button.clicked.connect(self._on_drying_mode)
-        layout.addWidget(self._drying_mode_button)
+        self._layout.addWidget(self._drying_mode_button)
         for config in self._configs:
             button = self._button()
             button.setCheckable(True)
             button.setProperty("device_id", config.device_id)
             button.clicked.connect(self._on_device_toggle)
-            layout.addWidget(button)
+            self._layout.addWidget(button)
             self._buttons[config.device_id] = button
         self._cable_relief = self._button()
         self._cable_relief.clicked.connect(self._on_cable_relief)
-        layout.addWidget(self._cable_relief)
-        layout.addStretch(1)
+        self._layout.addWidget(self._cable_relief)
+        self._layout.addStretch(1)
         root.addWidget(self._box, 1)
         self.retranslateUi()
 
@@ -87,6 +88,12 @@ class PaintQuickAccessPanel(QWidget):
 
     def set_cable_relief_busy(self, busy: bool) -> None:
         self._cable_relief.setEnabled(not busy)
+
+    def add_reset_errors_button(self, button: QPushButton) -> None:
+        """Place the dashboard-owned reset action above the panel stretch."""
+        self._reset_errors_button = button
+        button.setFixedHeight(52)
+        self._layout.insertWidget(self._layout.count() - 1, button)
 
     def retranslateUi(self) -> None:
         self._box.setTitle(self.tr("Quick Controls"))

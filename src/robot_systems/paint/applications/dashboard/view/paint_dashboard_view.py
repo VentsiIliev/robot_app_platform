@@ -437,13 +437,14 @@ class PaintDashboardView(IApplicationView):
                 0,
             )
             panel_host_layout.addWidget(panel)
-            message_row = max(4, layout.rowCount())
+            message_row = 3 if self._quick_access is not None else max(4, layout.rowCount())
             layout.addWidget(panel_host, message_row, 0)
             for row in range(3):
                 layout.setRowMinimumHeight(row, 75)
                 layout.setRowStretch(row, 0)
-            layout.setRowMinimumHeight(3, 52)
-            layout.setRowStretch(3, 0)
+            if self._quick_access is None:
+                layout.setRowMinimumHeight(3, 52)
+                layout.setRowStretch(3, 0)
             layout.setRowStretch(message_row, 1)
             layout.setColumnStretch(0, 1)
             self._message_panel = panel
@@ -507,6 +508,9 @@ class PaintDashboardView(IApplicationView):
         try:
             reset_button = self._dashboard._action_buttons.get("reset_errors")
             if reset_button is None:
+                return
+            if self._quick_access is not None:
+                self._quick_access.add_reset_errors_button(reset_button)
                 return
             reset_button.setFixedHeight(52)
             main_layout = self._dashboard.layout_manager.main_layout
