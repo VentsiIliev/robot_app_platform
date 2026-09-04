@@ -16,6 +16,7 @@ class PlateDropoffReservation:
     placement_id: int = 0
     left_mm: float = 0.0
     bottom_mm: float = 0.0
+    outlines_mm: tuple[tuple[tuple[float, float], ...], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -25,6 +26,7 @@ class PlatePlacement:
     bottom_mm: float
     width_mm: float
     height_mm: float
+    outlines_mm: tuple[tuple[tuple[float, float], ...], ...] = ()
 
 
 class PlateLayoutService:
@@ -67,6 +69,7 @@ class PlateLayoutService:
                     "bottom_mm": pending.bottom_mm,
                     "width_mm": pending.width_mm,
                     "height_mm": pending.height_mm,
+                    "outlines_mm": pending.outlines_mm,
                 } if pending is not None else None),
             }
 
@@ -97,6 +100,7 @@ class PlateLayoutService:
         calibration_pose: list[float],
         workpiece_rz_at_calibration_deg: float,
         pose_calculator,
+        outlines_mm=(),
     ) -> tuple[PlateDropoffReservation | None, str]:
         with self._lock:
             return self._reserve_locked(
@@ -106,12 +110,13 @@ class PlateLayoutService:
                 calibration_pose=calibration_pose,
                 workpiece_rz_at_calibration_deg=workpiece_rz_at_calibration_deg,
                 pose_calculator=pose_calculator,
+                outlines_mm=outlines_mm,
             )
 
     def _reserve_locked(
         self, config, *, width_mm: float, height_mm: float,
         calibration_pose: list[float], workpiece_rz_at_calibration_deg: float,
-        pose_calculator,
+        pose_calculator, outlines_mm=(),
     ) -> tuple[PlateDropoffReservation | None, str]:
         corners, error = validate_plate_corners(config.plate_corners)
         if error:
@@ -218,6 +223,10 @@ class PlateLayoutService:
             placement_id=self._next_placement_id,
             left_mm=left,
             bottom_mm=bottom,
+            outlines_mm=tuple(
+                tuple((float(x), float(y)) for x, y in outline)
+                for outline in outlines_mm
+            ),
         )
         self._pending_state = (left, bottom, max(row_height, height))
         return self._pending, ""
@@ -230,6 +239,7 @@ class PlateLayoutService:
             self._placements.append(PlatePlacement(
                 self._pending.placement_id, left, bottom,
                 self._pending.width_mm, self._pending.height_mm,
+                self._pending.outlines_mm,
             ))
             self._next_placement_id += 1
             self._next_left_mm = left + self._pending.width_mm + float(config.plate_spacing_x_mm)

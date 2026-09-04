@@ -51,6 +51,11 @@ record while the process is stopped; the allocator then reuses any compatible
 free area. Access is lock-protected because robot execution and dashboard refresh
 run on different threads.
 
+Each reservation also captures the execution plan's normalized XY outlines.
+The dashboard draws those outlines at the reserved tray location, while the
+minimum-area rectangle remains the allocator's conservative collision footprint
+and the visual fallback for plans without usable outline geometry.
+
 The workpiece editor reuses large parts of the same stack for preview and DXF-assisted authoring.
 
 ---
