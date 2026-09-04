@@ -279,9 +279,9 @@ class TestPaintDashboardUi(unittest.TestCase):
             drying_duration_minutes=15,
         )
 
-        self.assertTrue(disabled._drying_duration.isHidden())
+        self.assertTrue(disabled._drying_duration_box.isHidden())
         self.assertIsNone(disabled._canvas._drying_duration_seconds)
-        self.assertFalse(enabled._drying_duration.isHidden())
+        self.assertFalse(enabled._drying_duration_box.isHidden())
         self.assertEqual(enabled._canvas._drying_duration_seconds, 15 * 60)
         enabled.set_editable(False, removal_editable=True)
         self.assertFalse(enabled._new_tray.isEnabled())
