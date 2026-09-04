@@ -180,7 +180,7 @@ class PaintQuickControlsPanel(QWidget):
         speed = float(self._velocity.value())
         self._resolved_speed.setText(
             f"{self.tr('Velocity')}: {speed:.1f}%  ·  "
-            f"{self.tr('Acceleration')}: {speed * speed / 100.0:.1f}%"
+            f"{self.tr('Acceleration')}: {speed * speed / 100.0:.2f}%"
         )
 
     def _on_device_off(self) -> None:
