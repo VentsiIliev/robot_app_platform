@@ -110,6 +110,35 @@ class TestPaintDashboardUi(unittest.TestCase):
         self.assertEqual(payload["pass_2"]["velocity_percent"], 50.0)
         self.assertEqual(payload["pass_2"]["acceleration_percent"], 25.0)
 
+    def test_combined_speed_control_optionally_shows_live_resolved_values(self) -> None:
+        drawer = PaintControlsDrawer(
+            [],
+            use_combined_speed_control=True,
+            show_resolved_speed_values=True,
+        )
+
+        drawer._unmatched_velocity.setValue(80.0)
+        drawer._pass_2_velocity.setValue(50.0)
+
+        self.assertFalse(drawer._pass_1_resolved_speed.isHidden())
+        self.assertEqual(
+            drawer._pass_1_resolved_speed.text(),
+            "Velocity: 80.0%  ·  Acceleration: 64.0%",
+        )
+        self.assertEqual(
+            drawer._pass_2_resolved_speed.text(),
+            "Velocity: 50.0%  ·  Acceleration: 25.0%",
+        )
+
+    def test_resolved_speed_values_stay_hidden_without_combined_control(self) -> None:
+        drawer = PaintControlsDrawer(
+            [],
+            use_combined_speed_control=False,
+            show_resolved_speed_values=True,
+        )
+
+        self.assertTrue(drawer._pass_1_resolved_speed.isHidden())
+
     def test_separate_velocity_and_acceleration_controls_remain_configurable(self) -> None:
         drawer = PaintControlsDrawer([], use_combined_speed_control=False)
         drawer._unmatched_velocity.setValue(80.0)
@@ -134,6 +163,20 @@ class TestPaintDashboardUi(unittest.TestCase):
         self.assertEqual(panel._velocity_label.text(), "Speed")
         self.assertEqual(payload["pass_1"]["velocity_percent"], 80.0)
         self.assertEqual(payload["pass_1"]["acceleration_percent"], 64.0)
+
+    def test_camera_quick_controls_show_live_resolved_speed_values(self) -> None:
+        panel = PaintQuickControlsPanel(
+            [],
+            use_combined_speed_control=True,
+            show_resolved_speed_values=True,
+        )
+
+        panel._velocity.setValue(80.0)
+
+        self.assertEqual(
+            panel._resolved_speed.text(),
+            "Velocity: 80.0%  ·  Acceleration: 64.0%",
+        )
 
     def test_quick_access_pump_is_off_only_while_fan_remains_toggleable(self) -> None:
         panel = PaintQuickAccessPanel([

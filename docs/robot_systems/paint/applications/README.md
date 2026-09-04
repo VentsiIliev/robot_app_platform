@@ -57,6 +57,7 @@ Primary responsibility:
 - keep the Quick Controls vacuum-pump action OFF-only while retaining the fan's ON/OFF toggle
 - label manual drying as Tray Dry and show its New Tray action in Quick Controls only while that mode is active
 - optionally replace separate paint velocity/acceleration inputs with Speed (1–100), mapping velocity to Speed and acceleration to Speed²/100 while preserving the existing service payload
+- optionally show the resolved Velocity and Acceleration percentages below each combined Speed input as a commissioning aid
 - expose the independently addressed tray fan in the Device Control application
 - show the shared plate-layout state in manual drying mode, including committed and pending workpieces
 - allow stopped-state operators to confirm a new tray or press-and-hold a committed workpiece to remove it
@@ -87,6 +88,11 @@ are persisted immediately but the active workpiece keeps its immutable settings
 snapshot; the updated settings are captured at the start of the next workpiece
 cycle. When disabled, the previous stopped-state-only editing behavior is kept.
 Drying-mode and tray-state edits remain locked during an active process.
+
+`PaintDashboardUiConfig.show_resolved_paint_speed_values`, configured by
+`paint_system_config.SHOW_RESOLVED_PAINT_SPEED_VALUES`, displays the live
+Velocity and Acceleration values derived from each combined Speed input. It is
+ignored when combined Speed control is disabled.
 
 Drying-mode selection only persists the requested workflow mode; it does not
 gate navigation through Auto/Manual/Demo on live dryer availability. Automatic

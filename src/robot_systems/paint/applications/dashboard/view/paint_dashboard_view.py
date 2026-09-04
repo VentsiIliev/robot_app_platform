@@ -323,6 +323,7 @@ class PaintDashboardView(IApplicationView):
             show_shortcuts=self._ui_config.show_application_shortcuts,
             compact_layout=not self._ui_config.show_camera_preview,
             use_combined_speed_control=self._ui_config.use_combined_paint_speed_control,
+            show_resolved_speed_values=self._ui_config.show_resolved_paint_speed_values,
         )
         if self._ui_config.show_camera_preview:
             self._controls_drawer = DrawerToggle(
@@ -374,6 +375,9 @@ class PaintDashboardView(IApplicationView):
                 self._auxiliary_toggles,
                 use_combined_speed_control=(
                     self._ui_config.use_combined_paint_speed_control
+                ),
+                show_resolved_speed_values=(
+                    self._ui_config.show_resolved_paint_speed_values
                 ),
             )
             action_layout.addWidget(self._quick_controls, 0, 0)

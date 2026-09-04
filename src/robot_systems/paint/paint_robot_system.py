@@ -173,6 +173,9 @@ class PaintRobotSystem(BaseRobotSystem):
         use_combined_paint_speed_control=(
             paint_system_config.USE_COMBINED_PAINT_SPEED_CONTROL
         ),
+        show_resolved_paint_speed_values=(
+            paint_system_config.SHOW_RESOLVED_PAINT_SPEED_VALUES
+        ),
         allow_running_paint_settings_updates=(
             paint_system_config.ALLOW_RUNNING_PAINT_SETTINGS_UPDATES
         ),
