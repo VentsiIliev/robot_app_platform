@@ -414,6 +414,10 @@ class TestPaintDashboardUi(unittest.TestCase):
         view._message_toggle.click()
         self.assertFalse(view._message_scroll.isHidden())
         self.assertFalse(view._message_toggle.icon().isNull())
+        view._message_header.clicked.emit()
+        self.assertTrue(view._message_scroll.isHidden())
+        view._message_header.clicked.emit()
+        self.assertFalse(view._message_scroll.isHidden())
         self.assertEqual(
             status_column.sizePolicy().verticalPolicy(),
             QSizePolicy.Policy.Expanding,

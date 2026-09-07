@@ -160,6 +160,17 @@ QScrollBar::sub-page:vertical {{
     background: transparent;
 }}
 """
+
+
+class _ClickableHeader(QWidget):
+    clicked = pyqtSignal()
+
+    def mouseReleaseEvent(self, event) -> None:
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit()
+        super().mouseReleaseEvent(event)
+
+
 class PaintDashboardView(IApplicationView):
     SHOW_JOG_WIDGET = True
     JOG_DRAWER_SIDE = "right"
@@ -200,6 +211,7 @@ class PaintDashboardView(IApplicationView):
         self._message_rows: list[QLabel] = []
         self._message_empty_label: QLabel | None = None
         self._message_title_label: QLabel | None = None
+        self._message_header: _ClickableHeader | None = None
         self._message_toggle: QToolButton | None = None
         self._message_panel: QFrame | None = None
         self._message_scroll: QScrollArea | None = None
@@ -509,13 +521,19 @@ class PaintDashboardView(IApplicationView):
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(4)
 
-        header = QWidget()
+        header = _ClickableHeader()
         header.setStyleSheet("background: transparent; border: none;")
+        header.setCursor(Qt.CursorShape.PointingHandCursor)
+        header.clicked.connect(self._toggle_message_panel)
+        self._message_header = header
         header_layout = QHBoxLayout(header)
         header_layout.setContentsMargins(0, 0, 0, 0)
         header_layout.setSpacing(4)
 
         self._message_title_label = QLabel()
+        self._message_title_label.setAttribute(
+            Qt.WidgetAttribute.WA_TransparentForMouseEvents
+        )
         self._message_title_label.setStyleSheet(_MESSAGE_TITLE_STYLE)
         header_layout.addWidget(self._message_title_label)
         header_layout.addStretch(1)
