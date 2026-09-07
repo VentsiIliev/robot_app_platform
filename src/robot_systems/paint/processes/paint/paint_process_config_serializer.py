@@ -172,7 +172,18 @@ def _normalize_magazine_sources(value: object) -> list[dict]:
         if not isinstance(item, dict):
             continue
         group_id = str(item.get("movement_group_id", "") or "").strip()
-        if group_id and group_id not in seen:
-            result.append({"movement_group_id": group_id, "enabled": bool(item.get("enabled", True))})
-            seen.add(group_id)
+        position = item.get("position")
+        try:
+            pose = [float(component) for component in list(position)[:6]]
+        except (TypeError, ValueError):
+            pose = []
+        identity = group_id or repr(pose)
+        if (group_id or len(pose) == 6) and identity not in seen:
+            source = {"enabled": bool(item.get("enabled", True))}
+            if group_id:
+                source["movement_group_id"] = group_id
+            if len(pose) == 6:
+                source["position"] = pose
+            result.append(source)
+            seen.add(identity)
     return result

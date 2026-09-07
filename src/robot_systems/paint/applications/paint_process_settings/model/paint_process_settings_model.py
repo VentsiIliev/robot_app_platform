@@ -36,9 +36,6 @@ class PaintProcessSettingsModel(IApplicationModel):
     def get_pickup_safety_enabled(self) -> tuple[bool, bool]:
         return self._service.get_pickup_safety_enabled()
 
-    def get_fixed_magazine_group_ids(self) -> list[str]:
-        return self._service.get_fixed_magazine_group_ids()
-
     @property
     def current_settings(self) -> PaintProcessConfig:
         if self._settings is None:

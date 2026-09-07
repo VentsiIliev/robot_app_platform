@@ -32,14 +32,12 @@ class PaintProcessSettingsController(IApplicationController, BackgroundWorker):
 
     def load(self) -> None:
         settings = self._model.load()
-        self._view.set_available_magazine_groups(
-            self._model.get_fixed_magazine_group_ids()
-        )
         self._view.set_values(PaintProcessSettingsMapper.to_flat_dict(settings))
         self._view.value_changed.connect(self._on_value_changed)
         self._view.save_requested.connect(self._on_save)
         self._view.set_safe_travel_current_requested.connect(self._on_set_safe_travel_current)
         self._view.set_dropoff_safe_travel_current_requested.connect(self._on_set_dropoff_safe_travel_current)
+        self._view.add_fixed_magazine_current_requested.connect(self._on_add_fixed_magazine_current)
         self._view.capture_plate_corner_requested.connect(self._on_capture_plate_corner)
         self._view.move_to_plate_corner_requested.connect(self._on_move_to_plate_corner)
         self._view.move_to_safe_travel_waypoint_requested.connect(self._on_move_to_safe_travel_waypoint)
@@ -60,6 +58,10 @@ class PaintProcessSettingsController(IApplicationController, BackgroundWorker):
             pass
         try:
             self._view.set_dropoff_safe_travel_current_requested.disconnect(self._on_set_dropoff_safe_travel_current)
+        except Exception:
+            pass
+        try:
+            self._view.add_fixed_magazine_current_requested.disconnect(self._on_add_fixed_magazine_current)
         except Exception:
             pass
         try:
@@ -316,6 +318,18 @@ class PaintProcessSettingsController(IApplicationController, BackgroundWorker):
         self._view.set_dropoff_safe_travel_position(position)
         self._view.set_status(
             self._t("Paint-to-dropoff safe travel pose set. Waypoint added from current robot position. Save settings to keep it.")
+        )
+
+    def _on_add_fixed_magazine_current(self) -> None:
+        position = self._model.get_current_robot_position()
+        if position is None:
+            message = self._t("Could not read the current robot position for the magazine pickup pose.")
+            show_warning(self._view, self._t("Robot Position Not Available"), message)
+            self._view.set_status(message)
+            return
+        self._view.add_fixed_magazine_position(position)
+        self._view.set_status(
+            self._t("Magazine pickup pose added from the current robot position. Save settings to keep it.")
         )
 
     def _on_capture_plate_corner(self, corner_key: str) -> None:

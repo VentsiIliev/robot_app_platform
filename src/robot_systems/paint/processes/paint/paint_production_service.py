@@ -113,15 +113,16 @@ class PaintProductionService:
 
         if self._magazine_load_service is not None and magazine_config is not None and magazine_config.enabled:
             fixed_groups = self._fixed_magazine_groups(magazine_config)
+            fixed_sources = self._fixed_magazine_sources(magazine_config)
             pickup_mode = str(getattr(magazine_config, "pickup_mode", "") or "").strip().lower()
-            if pickup_mode == "fixed_group_sensor_controlled_fast_lin" and not fixed_groups:
+            if pickup_mode == "fixed_group_sensor_controlled_fast_lin" and not fixed_sources:
                 return False, "No fixed magazines are enabled"
             if run_while_found:
                 return self._run_magazine_loop(
                     magazine_config,
                     process_config,
                     should_stop,
-                    fixed_groups=fixed_groups,
+                    fixed_sources=fixed_sources,
                 )
 
             ok, msg = self._run_single_cycle(
@@ -129,6 +130,7 @@ class PaintProductionService:
                 process_config=process_config,
                 magazine_config=magazine_config,
                 magazine_group=fixed_groups[0] if fixed_groups else None,
+                magazine_source=fixed_sources[0] if fixed_sources else None,
                 cycle_index=1,
             )
 
@@ -208,20 +210,22 @@ class PaintProductionService:
         process_config,
         should_stop: Callable[[], bool],
         *,
-        fixed_groups: tuple[str, ...] | None = None,
+        fixed_sources: tuple[dict, ...] | None = None,
     ) -> tuple[bool, str]:
         total_start = perf_counter()
         completed_cycles = 0
-        groups = fixed_groups if fixed_groups is not None else self._fixed_magazine_groups(magazine_config)
+        sources = fixed_sources if fixed_sources is not None else self._fixed_magazine_sources(magazine_config)
         group_index = 0
         consecutive_empty_groups = 0
         while not should_stop():
-            active_group = groups[group_index] if groups else None
+            active_source = sources[group_index] if sources else None
+            active_group = self._magazine_source_group(active_source, magazine_config)
             ok, msg = self._run_single_cycle(
                 should_stop,
                 process_config=process_config,
                 magazine_config=magazine_config,
                 magazine_group=active_group,
+                magazine_source=active_source,
                 magazine_index=group_index,
                 cycle_index=completed_cycles + 1,
                 repeats_after_success=True,
@@ -229,9 +233,9 @@ class PaintProductionService:
 
             if not ok and msg == NO_WORKPIECE_AT_MAGAZINE:
                 consecutive_empty_groups += 1
-                if groups and consecutive_empty_groups < len(groups):
-                    next_index = (group_index + 1) % len(groups)
-                    next_group = groups[next_index]
+                if sources and consecutive_empty_groups < len(sources):
+                    next_index = (group_index + 1) % len(sources)
+                    next_group = self._magazine_source_group(sources[next_index], magazine_config)
                     _logger.info(
                         "[MAGAZINE_LOAD] Magazine group '%s' is empty; advancing to '%s'",
                         active_group,
@@ -248,7 +252,7 @@ class PaintProductionService:
                 )
                 _logger.info(
                     "[MAGAZINE_LOAD] All %d configured magazine(s) are empty",
-                    len(groups) or 1,
+                    len(sources) or 1,
                 )
                 return True, ALL_MAGAZINES_EMPTY
             if not ok and msg == "Drop-off plate is full":
@@ -285,6 +289,22 @@ class PaintProductionService:
         legacy = str(getattr(magazine_config, "fixed_pickup_group_id", "") or "").strip()
         return (legacy,) if legacy else ()
 
+    @staticmethod
+    def _fixed_magazine_sources(magazine_config) -> tuple[dict, ...]:
+        mode = str(getattr(magazine_config, "pickup_mode", "") or "").strip().lower()
+        if mode != "fixed_group_sensor_controlled_fast_lin":
+            return ()
+        getter = getattr(magazine_config, "effective_fixed_pickup_sources", None)
+        return tuple(getter()) if callable(getter) else ()
+
+    @staticmethod
+    def _magazine_source_group(source: dict | None, magazine_config) -> str:
+        if isinstance(source, dict):
+            group_id = str(source.get("movement_group_id", "") or "").strip()
+            if group_id:
+                return group_id
+        return str(getattr(magazine_config, "fixed_pickup_group_id", "") or "").strip()
+
     def _run_single_cycle(
         self,
         should_stop: Callable[[], bool],
@@ -292,6 +312,7 @@ class PaintProductionService:
         process_config,
         magazine_config,
         magazine_group: str | None = None,
+        magazine_source: dict | None = None,
         magazine_index: int = 0,
         cycle_index: int,
         repeats_after_success: bool = False,
@@ -327,6 +348,10 @@ class PaintProductionService:
             repeats_after_success=repeats_after_success,
             total_started_at=perf_counter(),
         )
+        if isinstance(magazine_source, dict) and "position" in magazine_source:
+            context.magazine_fixed_pickup_pose = [
+                float(value) for value in list(magazine_source["position"])[:6]
+            ]
         with self._active_context_lock:
             self._active_execution_context = context
         try:
@@ -386,7 +411,9 @@ class PaintProductionService:
         if navigation is None:
             navigation = getattr(self._navigation_service, "_nav", None)
         getter = getattr(navigation, "get_group_position", None)
-        pose = getter(group_id) if callable(getter) and group_id else None
+        pose = ctx.magazine_fixed_pickup_pose
+        if pose is None:
+            pose = getter(group_id) if callable(getter) and group_id else None
         if pose is None or len(pose) < 6:
             _logger.error("[NEXT_CYCLE] Cannot resolve start movement group '%s'", group_id)
             return None
@@ -408,6 +435,7 @@ class PaintProductionService:
         self,
         group_id: str,
         *,
+        expected_position: list[float] | None = None,
         position_tolerance_mm: float = 2.0,
         orientation_tolerance_deg: float = 2.0,
     ) -> bool:
@@ -419,7 +447,9 @@ class PaintProductionService:
         if navigation is None:
             navigation = getattr(self._navigation_service, "_nav", None)
         getter = getattr(navigation, "get_group_position", None)
-        expected = getter(expected_group) if callable(getter) else None
+        expected = expected_position
+        if expected is None:
+            expected = getter(expected_group) if callable(getter) else None
         pose_getter = getattr(self._path_executor._robot_service, "get_current_position_fresh", None)
         if not callable(pose_getter):
             pose_getter = getattr(self._path_executor._robot_service, "get_current_position", None)

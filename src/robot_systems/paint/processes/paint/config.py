@@ -272,6 +272,21 @@ class PaintMagazineLoadConfig:
         legacy_group = str(self.fixed_pickup_group_id or "").strip()
         return (legacy_group,) if legacy_group else ()
 
+    def effective_fixed_pickup_sources(self) -> tuple[dict, ...]:
+        configured = tuple(
+            dict(source)
+            for source in self.fixed_pickup_sources or ()
+            if isinstance(source, dict) and bool(source.get("enabled", True))
+        )
+        if configured:
+            return configured
+        if self.fixed_pickup_sources:
+            return ()
+        return tuple(
+            {"movement_group_id": group_id, "enabled": True}
+            for group_id in self.effective_fixed_pickup_group_ids()
+        )
+
 
 @dataclass(frozen=True)
 class PaintSafeTravelConfig:

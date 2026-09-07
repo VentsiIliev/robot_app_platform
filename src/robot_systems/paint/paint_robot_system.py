@@ -262,30 +262,6 @@ class PaintRobotSystem(BaseRobotSystem):
             group_type=MovementGroupType.SINGLE_POSITION,
             has_trajectory_execution=True,
         ),
-        MovementGroupDefinition(
-            id="Magazine Fixed Pickup 1",
-            label="Magazine Fixed Pickup 1",
-            group_type=MovementGroupType.SINGLE_POSITION,
-            has_trajectory_execution=True,
-        ),
-        MovementGroupDefinition(
-            id="Magazine Fixed Pickup 2",
-            label="Magazine Fixed Pickup 2",
-            group_type=MovementGroupType.SINGLE_POSITION,
-            has_trajectory_execution=True,
-        ),
-        MovementGroupDefinition(
-            id="Magazine Fixed Pickup 3",
-            label="Magazine Fixed Pickup 3",
-            group_type=MovementGroupType.SINGLE_POSITION,
-            has_trajectory_execution=True,
-        ),
-        MovementGroupDefinition(
-            id="Magazine Fixed Pickup 4",
-            label="Magazine Fixed Pickup 4",
-            group_type=MovementGroupType.SINGLE_POSITION,
-            has_trajectory_execution=True,
-        ),
 
 
     ]

@@ -194,7 +194,7 @@ def build_process_groups() -> list[SettingGroup]:
             ),
             SettingField(
                 "magazine_fixed_pickup_sources",
-                _t("Fixed Magazine Order"),
+                _t("Fixed Magazine Positions"),
                 "paint_magazine_order_table",
                 default=[],
             ),

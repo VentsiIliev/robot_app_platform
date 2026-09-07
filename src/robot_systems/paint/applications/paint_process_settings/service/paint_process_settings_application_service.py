@@ -20,7 +20,6 @@ class PaintProcessSettingsApplicationService(IPaintProcessSettingsService):
         robot_tool: int = 0,
         robot_user: int = 0,
         peripherals_provider: Callable[[], object | None] | None = None,
-        movement_group_ids_provider: Callable[[], object] | None = None,
     ):
         self._process_config_service = process_config_service
         self._dropoff_group_provider = dropoff_group_provider
@@ -30,7 +29,6 @@ class PaintProcessSettingsApplicationService(IPaintProcessSettingsService):
         self._robot_tool = int(robot_tool)
         self._robot_user = int(robot_user)
         self._peripherals_provider = peripherals_provider
-        self._movement_group_ids_provider = movement_group_ids_provider
 
     def load_settings(self) -> PaintProcessConfig:
         return self._process_config_service.get_snapshot()
@@ -107,19 +105,6 @@ class PaintProcessSettingsApplicationService(IPaintProcessSettingsService):
             )
         except Exception:
             return False, False
-
-    def get_fixed_magazine_group_ids(self) -> list[str]:
-        if self._movement_group_ids_provider is None:
-            return []
-        try:
-            values = list(self._movement_group_ids_provider() or [])
-        except Exception:
-            return []
-        return [
-            group_id
-            for group_id in (str(value or "").strip() for value in values)
-            if group_id.lower().startswith("magazine fixed pickup")
-        ]
 
     def move_to_waypoint(self, waypoint: dict) -> bool:
         if self._robot_service_provider is None:

@@ -395,6 +395,10 @@ class TestPaintProcessConfig(unittest.TestCase):
                     "Magazine Fixed Pickup",
                     "Magazine Fixed Pickup 1",
                 ],
+                fixed_pickup_sources=[
+                    {"position": [1, 2, 3, 4, 5, 6], "enabled": True},
+                    {"position": [11, 12, 13, 14, 15, 16], "enabled": False},
+                ],
                 magazine_group_id="Magazine",
                 calibration_group_id="CALIBRATION",
                 move_to_magazine_vel_percent=21.0,
@@ -413,6 +417,13 @@ class TestPaintProcessConfig(unittest.TestCase):
         self.assertEqual(
             ["Magazine Fixed Pickup", "Magazine Fixed Pickup 1"],
             restored.magazine_load.fixed_pickup_group_ids,
+        )
+        self.assertEqual(
+            [
+                {"position": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0], "enabled": True},
+                {"position": [11.0, 12.0, 13.0, 14.0, 15.0, 16.0], "enabled": False},
+            ],
+            restored.magazine_load.fixed_pickup_sources,
         )
         self.assertFalse(restored.run_while_workpiece_found)
         self.assertEqual("Magazine", restored.magazine_load.magazine_group_id)

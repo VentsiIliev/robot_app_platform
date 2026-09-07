@@ -38,12 +38,16 @@ class PaintProcessSettingsMapper:
             if not isinstance(item, dict):
                 continue
             group_id = str(item.get("movement_group_id", "") or "").strip()
-            if group_id and group_id not in seen:
-                result.append({
-                    "movement_group_id": group_id,
-                    "enabled": bool(item.get("enabled", True)),
-                })
-                seen.add(group_id)
+            position = PaintProcessSettingsMapper._pose_from_value(item.get("position"), [])
+            identity = group_id or repr(position)
+            if (group_id or position) and identity not in seen:
+                source = {"enabled": bool(item.get("enabled", True))}
+                if group_id:
+                    source["movement_group_id"] = group_id
+                if position:
+                    source["position"] = position
+                result.append(source)
+                seen.add(identity)
         return result
 
     @staticmethod

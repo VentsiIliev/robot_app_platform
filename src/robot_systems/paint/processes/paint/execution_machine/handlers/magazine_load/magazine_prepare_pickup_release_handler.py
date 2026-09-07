@@ -23,7 +23,11 @@ def handle_magazine_prepare_pickup_release(ctx: PaintExecutionContext) -> PaintE
     started = perf_counter()
 
     magazine_pose_started = perf_counter()
-    ctx.magazine_pose = load_service._navigation.get_group_position(ctx.magazine_group)
+    ctx.magazine_pose = (
+        list(ctx.magazine_fixed_pickup_pose)
+        if ctx.magazine_fixed_pickup_pose is not None
+        else load_service._navigation.get_group_position(ctx.magazine_group)
+    )
     magazine_pose_elapsed = perf_counter() - magazine_pose_started
     if ctx.magazine_pose is None:
         ctx.set_result(False, f"Magazine movement group '{ctx.magazine_group}' is not configured")

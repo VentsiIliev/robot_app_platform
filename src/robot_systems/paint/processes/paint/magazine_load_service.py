@@ -146,6 +146,28 @@ class PaintMagazineLoadService:
             blendR=blendR,
         )
 
+    def _move_to_pose_with_pause_resume_recovery(
+        self,
+        context: MagazineLoadContext,
+        state,
+        pose: list[float],
+        group_name: str,
+        *,
+        velocity: float,
+        acceleration: float,
+        motion_type: str | None = None,
+        blendR: float | None = None,
+    ) -> bool:
+        return self._navigation.move_to_position(
+            pose,
+            group_name,
+            wait_cancelled=context.motion_cancel_requested,
+            velocity=velocity,
+            acceleration=acceleration,
+            motion_type=motion_type,
+            blendR=blendR,
+        )
+
     def _wait_after_pause_resume(self, context: MagazineLoadContext) -> bool:
         return self._wait(1.0, context.motion_cancel_requested)
 

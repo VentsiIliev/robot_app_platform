@@ -57,10 +57,15 @@ def handle_magazine_move_to_magazine(ctx: PaintExecutionContext) -> PaintExecuti
         if pickup_mode == MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN
         else 2.0
     )
+    verification_kwargs = {
+        "position_tolerance_mm": position_tolerance,
+        "orientation_tolerance_deg": orientation_tolerance,
+    }
+    if ctx.magazine_fixed_pickup_pose is not None:
+        verification_kwargs["expected_position"] = ctx.magazine_fixed_pickup_pose
     if service._consume_verified_prepositioned_start_group(
         ctx.magazine_group,
-        position_tolerance_mm=position_tolerance,
-        orientation_tolerance_deg=orientation_tolerance,
+        **verification_kwargs,
     ) is True:
         _logger.info("[MAGAZINE_LOAD] Reusing verified prepositioned group '%s'", ctx.magazine_group)
         if pickup_mode == MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN:
@@ -68,15 +73,27 @@ def handle_magazine_move_to_magazine(ctx: PaintExecutionContext) -> PaintExecuti
         service._restore_capture_view("after verifying prepositioned magazine pickup")
         return PaintExecutionState.MAGAZINE_WAIT_CAMERA_SETTLE
 
-    ok = load_service._move_to_group_with_pause_resume_recovery(
-        ctx,
-        PaintExecutionState.MAGAZINE_MOVE_TO_MAGAZINE,
-        ctx.magazine_group,
+    move_kwargs = dict(
         velocity=float(config.move_to_magazine_vel_percent),
         acceleration=float(config.move_to_magazine_acc_percent),
         motion_type=config.move_to_magazine_motion_type,
         blendR=float(config.move_to_magazine_blendR),
     )
+    if ctx.magazine_fixed_pickup_pose is not None:
+        ok = load_service._move_to_pose_with_pause_resume_recovery(
+            ctx,
+            PaintExecutionState.MAGAZINE_MOVE_TO_MAGAZINE,
+            ctx.magazine_fixed_pickup_pose,
+            ctx.magazine_group,
+            **move_kwargs,
+        )
+    else:
+        ok = load_service._move_to_group_with_pause_resume_recovery(
+            ctx,
+            PaintExecutionState.MAGAZINE_MOVE_TO_MAGAZINE,
+            ctx.magazine_group,
+            **move_kwargs,
+        )
     if (
         not ok
         and pickup_mode == MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN
@@ -87,15 +104,17 @@ def handle_magazine_move_to_magazine(ctx: PaintExecutionContext) -> PaintExecuti
             "commanding one exact correction move",
             ctx.magazine_group,
         )
-        ok = load_service._move_to_group_with_pause_resume_recovery(
-            ctx,
-            PaintExecutionState.MAGAZINE_MOVE_TO_MAGAZINE,
-            ctx.magazine_group,
-            velocity=float(config.move_to_magazine_vel_percent),
-            acceleration=float(config.move_to_magazine_acc_percent),
-            motion_type=config.move_to_magazine_motion_type,
-            blendR=0.0,
-        )
+        correction_kwargs = {**move_kwargs, "blendR": 0.0}
+        if ctx.magazine_fixed_pickup_pose is not None:
+            ok = load_service._move_to_pose_with_pause_resume_recovery(
+                ctx, PaintExecutionState.MAGAZINE_MOVE_TO_MAGAZINE,
+                ctx.magazine_fixed_pickup_pose, ctx.magazine_group, **correction_kwargs,
+            )
+        else:
+            ok = load_service._move_to_group_with_pause_resume_recovery(
+                ctx, PaintExecutionState.MAGAZINE_MOVE_TO_MAGAZINE,
+                ctx.magazine_group, **correction_kwargs,
+            )
     if not ok:
         return interrupted_or_error(
             ctx,

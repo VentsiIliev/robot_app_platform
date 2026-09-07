@@ -129,6 +129,29 @@ class TestFixedMagazinePickup(unittest.TestCase):
             load_service._move_to_group_with_pause_resume_recovery.call_args.args[2],
         )
 
+    def test_fixed_mode_moves_to_process_defined_magazine_pose(self):
+        pose = [10.0, 20.0, 100.0, 180.0, 0.0, 0.0]
+        load_service = MagicMock()
+        load_service._move_to_pose_with_pause_resume_recovery.return_value = True
+        service = MagicMock()
+        service._magazine_load_service = load_service
+        config = PaintMagazineLoadConfig(
+            enabled=True,
+            pickup_mode=MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN,
+            fixed_pickup_group_id="Magazine Fixed Pickup",
+        )
+        ctx = self._context(service, config)
+        ctx.magazine_group = "Magazine Fixed Pickup"
+        ctx.magazine_fixed_pickup_pose = pose
+
+        next_state = handle_magazine_move_to_magazine(ctx)
+
+        self.assertEqual(PaintExecutionState.MAGAZINE_PREPARE_PICKUP_RELEASE, next_state)
+        call = load_service._move_to_pose_with_pause_resume_recovery.call_args
+        self.assertEqual(pose, call.args[2])
+        self.assertEqual("Magazine Fixed Pickup", call.args[3])
+        load_service._move_to_group_with_pause_resume_recovery.assert_not_called()
+
     def test_fixed_mode_retries_one_exact_move_after_endpoint_miss(self):
         load_service = MagicMock()
         load_service._move_to_group_with_pause_resume_recovery.side_effect = [False, True]

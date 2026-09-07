@@ -100,13 +100,10 @@ class TestPaintDashboardUi(unittest.TestCase):
     def test_magazine_order_table_reorders_and_disables_available_groups(self) -> None:
         emitted = []
         table = _MagazineOrderTable(emitted.append)
-        table.set_available_groups([
-            "Magazine Fixed Pickup",
-            "Magazine Fixed Pickup 1",
-            "Magazine Fixed Pickup 2",
-        ])
         table.set_sources([
             {"movement_group_id": "Magazine Fixed Pickup", "enabled": True},
+            {"position": [1, 2, 3, 4, 5, 6], "enabled": False},
+            {"position": [11, 12, 13, 14, 15, 16], "enabled": False},
         ])
 
         self.assertTrue(table._table.alternatingRowColors())
@@ -123,13 +120,14 @@ class TestPaintDashboardUi(unittest.TestCase):
         self.assertEqual(
             [
                 "Magazine Fixed Pickup",
-                "Magazine Fixed Pickup 2",
-                "Magazine Fixed Pickup 1",
+                "",
+                "",
             ],
-            [source["movement_group_id"] for source in table.get_sources()],
+            [source.get("movement_group_id", "") for source in table.get_sources()],
         )
         self.assertTrue(table.get_sources()[1]["enabled"])
         self.assertFalse(table.get_sources()[2]["enabled"])
+        self.assertEqual([11.0, 12.0, 13.0, 14.0, 15.0, 16.0], table.get_sources()[1]["position"])
 
     def test_combined_speed_control_maps_speed_to_velocity_and_acceleration(self) -> None:
         drawer = PaintControlsDrawer([], use_combined_speed_control=True)

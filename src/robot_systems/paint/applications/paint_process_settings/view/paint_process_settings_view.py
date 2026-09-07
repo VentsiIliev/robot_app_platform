@@ -100,14 +100,18 @@ class _MagazineOrderTable(QWidget):
     def __init__(self, emit, parent=None) -> None:
         super().__init__(parent)
         self._emit = emit
-        self._available_groups: list[str] = []
         self._sources: list[dict] = []
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        self._table = QTableWidget(0, 2)
-        self._table.setHorizontalHeaderLabels([_t("Enabled"), _t("Movement Group")])
+        self._table = QTableWidget(0, 9)
+        self._table.setHorizontalHeaderLabels(
+            [_t("Enabled"), "#", _t("Source"), "X", "Y", "Z", "RX", "RY", "RZ"]
+        )
         self._table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
-        self._table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        self._table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        self._table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        for column in range(3, 9):
+            self._table.horizontalHeader().setSectionResizeMode(column, QHeaderView.ResizeMode.Stretch)
         self._table.verticalHeader().setVisible(False)
         self._table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self._table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
@@ -119,21 +123,21 @@ class _MagazineOrderTable(QWidget):
         self._table.itemSelectionChanged.connect(self._update_buttons)
         layout.addWidget(self._table)
         buttons = QHBoxLayout()
+        self._add_current = self._make_button(_t("Add Current"), self._on_add_current, primary=True)
+        self._add = self._make_button(_t("Add"), self._on_add)
+        self._edit = self._make_button(_t("Edit"), self._on_edit)
+        self._delete = self._make_button(_t("Delete"), self._on_delete)
         self._up = self._make_button(_t("Move Up"), self._move_up)
         self._down = self._make_button(_t("Move Down"), self._move_down)
+        buttons.addWidget(self._add_current)
+        buttons.addWidget(self._add)
+        buttons.addWidget(self._edit)
+        buttons.addWidget(self._delete)
         buttons.addWidget(self._up)
         buttons.addWidget(self._down)
         buttons.addStretch()
         layout.addLayout(buttons)
         self._update_buttons()
-
-    def set_available_groups(self, groups: object) -> None:
-        self._available_groups = []
-        for value in groups or ():
-            group_id = str(value or "").strip()
-            if group_id and group_id not in self._available_groups:
-                self._available_groups.append(group_id)
-        self._merge_and_reload(self._sources)
 
     def set_sources(self, value: object) -> None:
         sources = []
@@ -141,26 +145,21 @@ class _MagazineOrderTable(QWidget):
             for item in value:
                 if not isinstance(item, dict):
                     continue
+                position = _WaypointTable._normalize_pose(item.get("position"))
                 group_id = str(item.get("movement_group_id", "") or "").strip()
-                if group_id and not any(row["movement_group_id"] == group_id for row in sources):
-                    sources.append({
-                        "movement_group_id": group_id,
-                        "enabled": bool(item.get("enabled", True)),
-                    })
-        self._merge_and_reload(sources)
+                if position is None and not group_id:
+                    continue
+                source = {"enabled": bool(item.get("enabled", True))}
+                if position is not None:
+                    source["position"] = position
+                if group_id:
+                    source["movement_group_id"] = group_id
+                sources.append(source)
+        self._sources = sources
+        self._reload()
 
     def get_sources(self) -> list[dict]:
         return [dict(source) for source in self._sources]
-
-    def _merge_and_reload(self, configured: list[dict]) -> None:
-        known = {source["movement_group_id"] for source in configured}
-        self._sources = [dict(source) for source in configured]
-        self._sources.extend(
-            {"movement_group_id": group_id, "enabled": False}
-            for group_id in self._available_groups
-            if group_id not in known
-        )
-        self._reload()
 
     def _reload(self, selected_row: int | None = None) -> None:
         self._table.setRowCount(len(self._sources))
@@ -168,7 +167,7 @@ class _MagazineOrderTable(QWidget):
             checkbox = QCheckBox()
             checkbox.setChecked(bool(source["enabled"]))
             checkbox.setCursor(Qt.CursorShape.PointingHandCursor)
-            checkbox.setProperty("movement_group_id", source["movement_group_id"])
+            checkbox.setProperty("source_row", row)
             checkbox.stateChanged.connect(self._on_enabled_changed)
             holder = QWidget()
             holder.setStyleSheet("background: transparent;")
@@ -177,20 +176,58 @@ class _MagazineOrderTable(QWidget):
             holder_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
             holder_layout.addWidget(checkbox)
             self._table.setCellWidget(row, 0, holder)
-            item = QTableWidgetItem(source["movement_group_id"])
-            item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-            self._table.setItem(row, 1, item)
+            self._table.setItem(row, 1, QTableWidgetItem(str(row + 1)))
+            self._table.setItem(
+                row,
+                2,
+                QTableWidgetItem(str(source.get("movement_group_id") or self.tr("Custom Position"))),
+            )
+            for column, component in enumerate(source.get("position", [None] * 6), start=3):
+                text = "—" if component is None else f"{float(component):.3f}"
+                self._table.setItem(row, column, QTableWidgetItem(text))
         if selected_row is not None and 0 <= selected_row < len(self._sources):
             self._table.selectRow(selected_row)
         self._update_buttons()
 
     def _on_enabled_changed(self, state: int) -> None:
-        group_id = str(self.sender().property("movement_group_id") or "")
-        for source in self._sources:
-            if source["movement_group_id"] == group_id:
-                source["enabled"] = state == Qt.CheckState.Checked.value
-                self._emit(self.get_sources())
-                return
+        row = int(self.sender().property("source_row"))
+        if 0 <= row < len(self._sources):
+            self._sources[row]["enabled"] = state == Qt.CheckState.Checked.value
+            self._emit(self.get_sources())
+
+    def add_current_position(self, position: list[float]) -> None:
+        normalized = _WaypointTable._normalize_pose(position)
+        if normalized is None:
+            return
+        self._sources.append({"position": normalized, "enabled": True})
+        self._reload(len(self._sources) - 1)
+        self._emit(self.get_sources())
+
+    def _on_add_current(self) -> None:
+        self._emit("add_current")
+
+    def _on_add(self) -> None:
+        dialog = _WaypointDialog(parent=self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self.add_current_position(dialog.pose())
+
+    def _on_edit(self) -> None:
+        row = self._table.currentRow()
+        if not 0 <= row < len(self._sources) or "position" not in self._sources[row]:
+            return
+        dialog = _WaypointDialog(self._sources[row]["position"], parent=self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self._sources[row]["position"] = dialog.pose()
+            self._reload(row)
+            self._emit(self.get_sources())
+
+    def _on_delete(self) -> None:
+        row = self._table.currentRow()
+        if not 0 <= row < len(self._sources):
+            return
+        self._sources.pop(row)
+        self._reload(min(row, len(self._sources) - 1))
+        self._emit(self.get_sources())
 
     def _move_up(self) -> None:
         self._move_selected(-1)
@@ -200,6 +237,9 @@ class _MagazineOrderTable(QWidget):
 
     def _update_buttons(self) -> None:
         row = self._table.currentRow()
+        selected = 0 <= row < len(self._sources)
+        self._edit.setEnabled(selected and "position" in self._sources[row])
+        self._delete.setEnabled(selected)
         self._up.setEnabled(0 < row < len(self._sources))
         self._down.setEnabled(0 <= row < len(self._sources) - 1)
 
@@ -213,9 +253,9 @@ class _MagazineOrderTable(QWidget):
         self._emit(self.get_sources())
 
     @staticmethod
-    def _make_button(text: str, callback) -> QPushButton:
+    def _make_button(text: str, callback, *, primary: bool = False) -> QPushButton:
         button = QPushButton(text)
-        button.setStyleSheet(GHOST_BTN_STYLE)
+        button.setStyleSheet(ACTION_BTN_STYLE if primary else GHOST_BTN_STYLE)
         button.setCursor(Qt.CursorShape.PointingHandCursor)
         button.clicked.connect(callback)
         return button
@@ -995,6 +1035,7 @@ class PaintProcessSettingsView(IApplicationView):
     value_changed = pyqtSignal(str, object)
     set_safe_travel_current_requested = pyqtSignal()
     set_dropoff_safe_travel_current_requested = pyqtSignal()
+    add_fixed_magazine_current_requested = pyqtSignal()
     capture_plate_corner_requested = pyqtSignal(str)
     move_to_plate_corner_requested = pyqtSignal(dict)
     move_to_safe_travel_waypoint_requested = pyqtSignal(dict)
@@ -1004,7 +1045,6 @@ class PaintProcessSettingsView(IApplicationView):
         self._status_label: QLabel | None = None
         self._layout: QVBoxLayout | None = None
         self._current_values: dict = {}
-        self._available_magazine_groups: list[str] = []
         self._magazine_order_table: _MagazineOrderTable | None = None
         self._custom_widget_original_handlers: dict[str, WidgetHandler | None] | None = None
         super().__init__("PaintProcessSettings", parent)
@@ -1034,10 +1074,9 @@ class PaintProcessSettingsView(IApplicationView):
             self._update_sensor_controlled_fast_lin_visibility(values)
             self._update_dropoff_strategy_visibility(values.get(_DROPOFF_STRATEGY_KEY, "movement_group"))
 
-    def set_available_magazine_groups(self, groups: list[str]) -> None:
-        self._available_magazine_groups = list(groups)
+    def add_fixed_magazine_position(self, position: list[float]) -> None:
         if self._magazine_order_table is not None:
-            self._magazine_order_table.set_available_groups(groups)
+            self._magazine_order_table.add_current_position(position)
 
     def set_safe_travel_position(self, position: list[float]) -> None:
         self._append_waypoint("safe_travel_positions", position)
@@ -1193,7 +1232,6 @@ class PaintProcessSettingsView(IApplicationView):
 
     def _make_magazine_order_table(self, _field, emit):
         self._magazine_order_table = _MagazineOrderTable(emit)
-        self._magazine_order_table.set_available_groups(self._available_magazine_groups)
         return self._magazine_order_table
 
     def _rebuild_settings_view(self) -> None:
@@ -1231,6 +1269,9 @@ class PaintProcessSettingsView(IApplicationView):
             return
         if key == "dropoff_safe_travel_positions" and value == "dropoff_safe_travel_positions_add_current":
             self.set_dropoff_safe_travel_current_requested.emit()
+            return
+        if key == "magazine_fixed_pickup_sources" and value == "add_current":
+            self.add_fixed_magazine_current_requested.emit()
             return
         if key == "dropoff_plate_corners" and isinstance(value, dict):
             if value.get("action") == "set_current":

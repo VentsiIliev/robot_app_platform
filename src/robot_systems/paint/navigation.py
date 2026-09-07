@@ -172,8 +172,27 @@ class PaintNavigationService:
         position: list,
         group_name: str,
         wait_cancelled: Callable[[], bool] | None = None,
+        velocity: float | None = None,
+        acceleration: float | None = None,
+        motion_type: str | None = None,
+        blendR: float | None = None,
     ) -> bool:
-        ok = self._nav.move_to_position(position, group_name, wait_cancelled=wait_cancelled)
+        motion_options = {
+            key: value
+            for key, value in {
+                "velocity": velocity,
+                "acceleration": acceleration,
+                "motion_type": motion_type,
+                "blendR": blendR,
+            }.items()
+            if value is not None
+        }
+        ok = self._nav.move_to_position(
+            position,
+            group_name,
+            wait_cancelled=wait_cancelled,
+            **motion_options,
+        )
         if ok:
             self._set_observed_area_for_group(group_name)
         return ok
