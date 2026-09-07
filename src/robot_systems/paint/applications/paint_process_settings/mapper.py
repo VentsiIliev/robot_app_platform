@@ -29,6 +29,24 @@ class PaintProcessSettingsMapper:
         return result
 
     @staticmethod
+    def _magazine_sources_from_value(value: object) -> list[dict]:
+        if not isinstance(value, (list, tuple)):
+            return []
+        result: list[dict] = []
+        seen: set[str] = set()
+        for item in value:
+            if not isinstance(item, dict):
+                continue
+            group_id = str(item.get("movement_group_id", "") or "").strip()
+            if group_id and group_id not in seen:
+                result.append({
+                    "movement_group_id": group_id,
+                    "enabled": bool(item.get("enabled", True)),
+                })
+                seen.add(group_id)
+        return result
+
+    @staticmethod
     def _pose_to_text(position: object) -> str:
         if not position:
             return ""
@@ -367,6 +385,17 @@ class PaintProcessSettingsMapper:
             "magazine_fixed_pickup_group_id": magazine.fixed_pickup_group_id,
             "magazine_fixed_pickup_group_ids": ", ".join(
                 magazine.fixed_pickup_group_ids
+            ),
+            "magazine_fixed_pickup_sources": (
+                [dict(source) for source in magazine.fixed_pickup_sources]
+                if magazine.fixed_pickup_sources
+                else [
+                    {"movement_group_id": group_id, "enabled": True}
+                    for group_id in (
+                        magazine.fixed_pickup_group_ids
+                        or ([magazine.fixed_pickup_group_id] if magazine.fixed_pickup_group_id else [])
+                    )
+                ]
             ),
             "magazine_fixed_pickup_position_tolerance_mm": magazine.fixed_pickup_position_tolerance_mm,
             "magazine_fixed_pickup_orientation_tolerance_deg": magazine.fixed_pickup_orientation_tolerance_deg,
@@ -739,6 +768,12 @@ class PaintProcessSettingsMapper:
                 flat.get(
                     "magazine_fixed_pickup_group_ids",
                     base.magazine_load.fixed_pickup_group_ids,
+                )
+            ),
+            fixed_pickup_sources=PaintProcessSettingsMapper._magazine_sources_from_value(
+                flat.get(
+                    "magazine_fixed_pickup_sources",
+                    base.magazine_load.fixed_pickup_sources,
                 )
             ),
             fixed_pickup_position_tolerance_mm=float(

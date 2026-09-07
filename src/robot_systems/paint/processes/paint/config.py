@@ -231,6 +231,7 @@ class PaintMagazineLoadConfig:
     # Ordered fixed pickup positions. An empty list preserves the legacy
     # single-position behavior through ``fixed_pickup_group_id``.
     fixed_pickup_group_ids: list[str] = field(default_factory=list)  # [LIVE SETTINGS]
+    fixed_pickup_sources: list[dict] = field(default_factory=list)  # [LIVE SETTINGS]
     fixed_pickup_position_tolerance_mm: float = 2.0  # [LIVE SETTINGS]
     fixed_pickup_orientation_tolerance_deg: float = 1.0  # [LIVE SETTINGS]
     full_retract_before_release: bool = True  # [LIVE SETTINGS]
@@ -252,6 +253,15 @@ class PaintMagazineLoadConfig:
     def effective_fixed_pickup_group_ids(self) -> tuple[str, ...]:
         ordered: list[str] = []
         seen: set[str] = set()
+        for source in self.fixed_pickup_sources or ():
+            if not isinstance(source, dict) or not bool(source.get("enabled", True)):
+                continue
+            group_id = str(source.get("movement_group_id", "") or "").strip()
+            if group_id and group_id not in seen:
+                ordered.append(group_id)
+                seen.add(group_id)
+        if self.fixed_pickup_sources:
+            return tuple(ordered)
         for value in self.fixed_pickup_group_ids or ():
             group_id = str(value or "").strip()
             if group_id and group_id not in seen:

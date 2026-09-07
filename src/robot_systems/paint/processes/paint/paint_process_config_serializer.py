@@ -116,6 +116,9 @@ class PaintProcessConfigSerializer(ISettingsSerializer[PaintProcessConfig]):
             fixed_pickup_group_ids=_normalize_group_ids(
                 magazine_load.fixed_pickup_group_ids
             ),
+            fixed_pickup_sources=_normalize_magazine_sources(
+                magazine_load.fixed_pickup_sources
+            ),
         )
         values["safe_travel"] = _build_dataclass(
             PaintSafeTravelConfig,
@@ -157,4 +160,19 @@ def _normalize_group_ids(value: object) -> list[str]:
         group_id = str(item or "").strip()
         if group_id and group_id not in result:
             result.append(group_id)
+    return result
+
+
+def _normalize_magazine_sources(value: object) -> list[dict]:
+    if not isinstance(value, (list, tuple)):
+        return []
+    result: list[dict] = []
+    seen: set[str] = set()
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        group_id = str(item.get("movement_group_id", "") or "").strip()
+        if group_id and group_id not in seen:
+            result.append({"movement_group_id": group_id, "enabled": bool(item.get("enabled", True))})
+            seen.add(group_id)
     return result

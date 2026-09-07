@@ -176,6 +176,7 @@
     "pickup_mode": "fixed_group_sensor_controlled_fast_lin",
     "fixed_pickup_group_id": "Magazine Fixed Pickup",
     "fixed_pickup_group_ids": [],
+    "fixed_pickup_sources": [],
     "fixed_pickup_position_tolerance_mm": 1.0,
     "fixed_pickup_orientation_tolerance_deg": 0.5,
     "full_retract_before_release": true,

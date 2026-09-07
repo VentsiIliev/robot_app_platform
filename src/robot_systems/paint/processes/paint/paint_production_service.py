@@ -113,6 +113,9 @@ class PaintProductionService:
 
         if self._magazine_load_service is not None and magazine_config is not None and magazine_config.enabled:
             fixed_groups = self._fixed_magazine_groups(magazine_config)
+            pickup_mode = str(getattr(magazine_config, "pickup_mode", "") or "").strip().lower()
+            if pickup_mode == "fixed_group_sensor_controlled_fast_lin" and not fixed_groups:
+                return False, "No fixed magazines are enabled"
             if run_while_found:
                 return self._run_magazine_loop(
                     magazine_config,

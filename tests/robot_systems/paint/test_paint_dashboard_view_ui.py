@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QTabBar
-from PyQt6.QtWidgets import QApplication, QLabel, QSizePolicy, QWidget
+from PyQt6.QtWidgets import QApplication, QCheckBox, QLabel, QSizePolicy, QWidget
 
 from pl_gui.dashboard.config import CardConfig
 from src.robot_systems.paint.applications.dashboard.dashboard_state import DashboardCardState, DashboardState
@@ -40,6 +40,9 @@ from src.robot_systems.paint.applications.dashboard.config import (
     PAINT_DASHBOARD_ACTIONS,
     PaintDashboardConfig,
     PaintDashboardUiConfig,
+)
+from src.robot_systems.paint.applications.paint_process_settings.view.paint_process_settings_view import (
+    _MagazineOrderTable,
 )
 from src.shared_contracts.events.shell_events import ApplicationShortcut
 
@@ -94,6 +97,40 @@ class _FakeDashboardWidget(QWidget):
 
 
 class TestPaintDashboardUi(unittest.TestCase):
+    def test_magazine_order_table_reorders_and_disables_available_groups(self) -> None:
+        emitted = []
+        table = _MagazineOrderTable(emitted.append)
+        table.set_available_groups([
+            "Magazine Fixed Pickup",
+            "Magazine Fixed Pickup 1",
+            "Magazine Fixed Pickup 2",
+        ])
+        table.set_sources([
+            {"movement_group_id": "Magazine Fixed Pickup", "enabled": True},
+        ])
+
+        self.assertTrue(table._table.alternatingRowColors())
+        self.assertGreaterEqual(table._table.minimumHeight(), 180)
+        self.assertIn("QTableWidget::item", table._table.styleSheet())
+        self.assertFalse(table._up.isEnabled())
+        self.assertFalse(table._down.isEnabled())
+
+        table._table.selectRow(2)
+        table._move_up()
+        checkbox = table._table.cellWidget(1, 0).findChild(QCheckBox)
+        checkbox.setChecked(True)
+
+        self.assertEqual(
+            [
+                "Magazine Fixed Pickup",
+                "Magazine Fixed Pickup 2",
+                "Magazine Fixed Pickup 1",
+            ],
+            [source["movement_group_id"] for source in table.get_sources()],
+        )
+        self.assertTrue(table.get_sources()[1]["enabled"])
+        self.assertFalse(table.get_sources()[2]["enabled"])
+
     def test_combined_speed_control_maps_speed_to_velocity_and_acceleration(self) -> None:
         drawer = PaintControlsDrawer([], use_combined_speed_control=True)
         drawer._unmatched_velocity.setValue(80.0)

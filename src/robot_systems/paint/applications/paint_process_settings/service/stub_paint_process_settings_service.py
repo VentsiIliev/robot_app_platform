@@ -14,6 +14,7 @@ class StubPaintProcessSettingsService(IPaintProcessSettingsService):
         vacuum_sensor_enabled: bool = True,
         robot_tool: int = 0,
         robot_user: int = 0,
+        fixed_magazine_group_ids: list[str] | None = None,
     ):
         self._settings = initial_settings or PAINT_PROCESS_CONFIG
         self._dropoff_movement_group_configured = bool(dropoff_movement_group_configured)
@@ -23,6 +24,13 @@ class StubPaintProcessSettingsService(IPaintProcessSettingsService):
         self._robot_tool = int(robot_tool)
         self._robot_user = int(robot_user)
         self.last_moved_waypoint: dict | None = None
+        self._fixed_magazine_group_ids = list(fixed_magazine_group_ids or [
+            "Magazine Fixed Pickup",
+            "Magazine Fixed Pickup 1",
+            "Magazine Fixed Pickup 2",
+            "Magazine Fixed Pickup 3",
+            "Magazine Fixed Pickup 4",
+        ])
 
     def load_settings(self) -> PaintProcessConfig:
         return self._settings
@@ -52,3 +60,6 @@ class StubPaintProcessSettingsService(IPaintProcessSettingsService):
 
     def get_pickup_safety_enabled(self) -> tuple[bool, bool]:
         return self._vacuum_pump_enabled, self._vacuum_sensor_enabled
+
+    def get_fixed_magazine_group_ids(self) -> list[str]:
+        return list(self._fixed_magazine_group_ids)

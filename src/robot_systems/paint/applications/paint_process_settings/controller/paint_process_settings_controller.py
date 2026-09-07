@@ -32,6 +32,9 @@ class PaintProcessSettingsController(IApplicationController, BackgroundWorker):
 
     def load(self) -> None:
         settings = self._model.load()
+        self._view.set_available_magazine_groups(
+            self._model.get_fixed_magazine_group_ids()
+        )
         self._view.set_values(PaintProcessSettingsMapper.to_flat_dict(settings))
         self._view.value_changed.connect(self._on_value_changed)
         self._view.save_requested.connect(self._on_save)
@@ -110,6 +113,14 @@ class PaintProcessSettingsController(IApplicationController, BackgroundWorker):
         ).strip().lower()
         if mode != MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN:
             return True
+        sources = flat.get("magazine_fixed_pickup_sources")
+        if isinstance(sources, (list, tuple)):
+            return any(
+                isinstance(source, dict)
+                and bool(source.get("enabled", True))
+                and bool(str(source.get("movement_group_id", "") or "").strip())
+                for source in sources
+            )
         group_id = str(
             flat.get(
                 "magazine_fixed_pickup_group_id",

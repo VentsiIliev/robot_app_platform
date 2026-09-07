@@ -28,3 +28,6 @@ class IPaintProcessSettingsService(ABC):
     @abstractmethod
     def get_pickup_safety_enabled(self) -> tuple[bool, bool]:
         """Return persisted (vacuum pump enabled, vacuum sensor enabled) flags."""
+
+    @abstractmethod
+    def get_fixed_magazine_group_ids(self) -> list[str]: ...

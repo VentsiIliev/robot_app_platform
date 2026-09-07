@@ -5,6 +5,7 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QLabel,
+    QCheckBox,
     QComboBox,
     QPushButton,
     QScrollArea,
@@ -59,8 +60,7 @@ _SENSOR_CONTROLLED_FAST_LIN_KEYS = {
     "pickup_servo_contact_dummy_detect_after_s",
 }
 _FIXED_MAGAZINE_ONLY_KEYS = {
-    "magazine_fixed_pickup_group_id",
-    "magazine_fixed_pickup_group_ids",
+    "magazine_fixed_pickup_sources",
     "magazine_fixed_pickup_position_tolerance_mm",
     "magazine_fixed_pickup_orientation_tolerance_deg",
 }
@@ -94,6 +94,131 @@ _NON_PLATE_DROPOFF_KEYS = {
 def _t(text: str) -> str:
     translated = QCoreApplication.translate("PaintProcessSettings", text)
     return translated or text
+
+
+class _MagazineOrderTable(QWidget):
+    def __init__(self, emit, parent=None) -> None:
+        super().__init__(parent)
+        self._emit = emit
+        self._available_groups: list[str] = []
+        self._sources: list[dict] = []
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self._table = QTableWidget(0, 2)
+        self._table.setHorizontalHeaderLabels([_t("Enabled"), _t("Movement Group")])
+        self._table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        self._table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        self._table.verticalHeader().setVisible(False)
+        self._table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self._table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
+        self._table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self._table.setAlternatingRowColors(True)
+        self._table.setShowGrid(True)
+        self._table.setMinimumHeight(180)
+        self._table.setStyleSheet(_WaypointTable._table_style())
+        self._table.itemSelectionChanged.connect(self._update_buttons)
+        layout.addWidget(self._table)
+        buttons = QHBoxLayout()
+        self._up = self._make_button(_t("Move Up"), self._move_up)
+        self._down = self._make_button(_t("Move Down"), self._move_down)
+        buttons.addWidget(self._up)
+        buttons.addWidget(self._down)
+        buttons.addStretch()
+        layout.addLayout(buttons)
+        self._update_buttons()
+
+    def set_available_groups(self, groups: object) -> None:
+        self._available_groups = []
+        for value in groups or ():
+            group_id = str(value or "").strip()
+            if group_id and group_id not in self._available_groups:
+                self._available_groups.append(group_id)
+        self._merge_and_reload(self._sources)
+
+    def set_sources(self, value: object) -> None:
+        sources = []
+        if isinstance(value, (list, tuple)):
+            for item in value:
+                if not isinstance(item, dict):
+                    continue
+                group_id = str(item.get("movement_group_id", "") or "").strip()
+                if group_id and not any(row["movement_group_id"] == group_id for row in sources):
+                    sources.append({
+                        "movement_group_id": group_id,
+                        "enabled": bool(item.get("enabled", True)),
+                    })
+        self._merge_and_reload(sources)
+
+    def get_sources(self) -> list[dict]:
+        return [dict(source) for source in self._sources]
+
+    def _merge_and_reload(self, configured: list[dict]) -> None:
+        known = {source["movement_group_id"] for source in configured}
+        self._sources = [dict(source) for source in configured]
+        self._sources.extend(
+            {"movement_group_id": group_id, "enabled": False}
+            for group_id in self._available_groups
+            if group_id not in known
+        )
+        self._reload()
+
+    def _reload(self, selected_row: int | None = None) -> None:
+        self._table.setRowCount(len(self._sources))
+        for row, source in enumerate(self._sources):
+            checkbox = QCheckBox()
+            checkbox.setChecked(bool(source["enabled"]))
+            checkbox.setCursor(Qt.CursorShape.PointingHandCursor)
+            checkbox.setProperty("movement_group_id", source["movement_group_id"])
+            checkbox.stateChanged.connect(self._on_enabled_changed)
+            holder = QWidget()
+            holder.setStyleSheet("background: transparent;")
+            holder_layout = QHBoxLayout(holder)
+            holder_layout.setContentsMargins(0, 0, 0, 0)
+            holder_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            holder_layout.addWidget(checkbox)
+            self._table.setCellWidget(row, 0, holder)
+            item = QTableWidgetItem(source["movement_group_id"])
+            item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            self._table.setItem(row, 1, item)
+        if selected_row is not None and 0 <= selected_row < len(self._sources):
+            self._table.selectRow(selected_row)
+        self._update_buttons()
+
+    def _on_enabled_changed(self, state: int) -> None:
+        group_id = str(self.sender().property("movement_group_id") or "")
+        for source in self._sources:
+            if source["movement_group_id"] == group_id:
+                source["enabled"] = state == Qt.CheckState.Checked.value
+                self._emit(self.get_sources())
+                return
+
+    def _move_up(self) -> None:
+        self._move_selected(-1)
+
+    def _move_down(self) -> None:
+        self._move_selected(1)
+
+    def _update_buttons(self) -> None:
+        row = self._table.currentRow()
+        self._up.setEnabled(0 < row < len(self._sources))
+        self._down.setEnabled(0 <= row < len(self._sources) - 1)
+
+    def _move_selected(self, direction: int) -> None:
+        row = self._table.currentRow()
+        target = row + direction
+        if row < 0 or not 0 <= target < len(self._sources):
+            return
+        self._sources[row], self._sources[target] = self._sources[target], self._sources[row]
+        self._reload(target)
+        self._emit(self.get_sources())
+
+    @staticmethod
+    def _make_button(text: str, callback) -> QPushButton:
+        button = QPushButton(text)
+        button.setStyleSheet(GHOST_BTN_STYLE)
+        button.setCursor(Qt.CursorShape.PointingHandCursor)
+        button.clicked.connect(callback)
+        return button
 
 
 class _WaypointTable(QWidget):
@@ -879,6 +1004,8 @@ class PaintProcessSettingsView(IApplicationView):
         self._status_label: QLabel | None = None
         self._layout: QVBoxLayout | None = None
         self._current_values: dict = {}
+        self._available_magazine_groups: list[str] = []
+        self._magazine_order_table: _MagazineOrderTable | None = None
         self._custom_widget_original_handlers: dict[str, WidgetHandler | None] | None = None
         super().__init__("PaintProcessSettings", parent)
 
@@ -906,6 +1033,11 @@ class PaintProcessSettingsView(IApplicationView):
             )
             self._update_sensor_controlled_fast_lin_visibility(values)
             self._update_dropoff_strategy_visibility(values.get(_DROPOFF_STRATEGY_KEY, "movement_group"))
+
+    def set_available_magazine_groups(self, groups: list[str]) -> None:
+        self._available_magazine_groups = list(groups)
+        if self._magazine_order_table is not None:
+            self._magazine_order_table.set_available_groups(groups)
 
     def set_safe_travel_position(self, position: list[float]) -> None:
         self._append_waypoint("safe_travel_positions", position)
@@ -963,6 +1095,7 @@ class PaintProcessSettingsView(IApplicationView):
             "paint_waypoint_table",
             "paint_motion_profile_table",
             "paint_plate_corner_table",
+            "paint_magazine_order_table",
         )
         if self._custom_widget_original_handlers is None:
             self._custom_widget_original_handlers = {
@@ -997,6 +1130,12 @@ class PaintProcessSettingsView(IApplicationView):
             create=self._make_plate_corner_table,
             get_value=lambda widget: widget.get_corners(),
             set_value=lambda widget, value: widget.set_corners(value),
+            full_width=True,
+        )
+        widget_factory._REGISTRY["paint_magazine_order_table"] = WidgetHandler(
+            create=self._make_magazine_order_table,
+            get_value=lambda widget: widget.get_sources(),
+            set_value=lambda widget, value: widget.set_sources(value),
             full_width=True,
         )
 
@@ -1051,6 +1190,11 @@ class PaintProcessSettingsView(IApplicationView):
 
     def _make_plate_corner_table(self, _field, emit):
         return _PlateCornerTable(emit)
+
+    def _make_magazine_order_table(self, _field, emit):
+        self._magazine_order_table = _MagazineOrderTable(emit)
+        self._magazine_order_table.set_available_groups(self._available_magazine_groups)
+        return self._magazine_order_table
 
     def _rebuild_settings_view(self) -> None:
         if self._layout is None or self.settings_view is None:
