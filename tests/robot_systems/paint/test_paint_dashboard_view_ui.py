@@ -392,6 +392,28 @@ class TestPaintDashboardUi(unittest.TestCase):
         self.assertTrue(view._plate_layout._new_tray.isHidden())
         top_section = view._dashboard.layout_manager.main_layout.itemAt(0).layout()
         status_column = top_section.itemAt(top_section.count() - 1).widget()
+        status_layout = status_column.layout()
+        quick_access_position = status_layout.getItemPosition(
+            status_layout.indexOf(view._quick_access)
+        )
+        message_host = view._message_panel.parentWidget()
+        self.assertEqual(
+            message_host.layout().itemAt(0).alignment(),
+            Qt.AlignmentFlag.AlignTop,
+        )
+        message_position = status_layout.getItemPosition(
+            status_layout.indexOf(message_host)
+        )
+        self.assertEqual(quick_access_position, (1, 0, 1, 1))
+        self.assertEqual(message_position, (1, 1, 1, 2))
+        self.assertGreaterEqual(status_column.minimumWidth(), 650)
+        self.assertFalse(view._message_scroll.isHidden())
+        view._message_toggle.click()
+        self.assertTrue(view._message_scroll.isHidden())
+        self.assertFalse(view._message_toggle.icon().isNull())
+        view._message_toggle.click()
+        self.assertFalse(view._message_scroll.isHidden())
+        self.assertFalse(view._message_toggle.icon().isNull())
         self.assertEqual(
             status_column.sizePolicy().verticalPolicy(),
             QSizePolicy.Policy.Expanding,
@@ -469,7 +491,7 @@ class TestPaintDashboardUi(unittest.TestCase):
 
         self.assertEqual(
             [label.text() for label in card.findChildren(QLabel)],
-            ["Paint", "Running", "Current state"],
+            ["Paint", "Running"],
         )
 
     def test_info_card_content_can_be_updated(self) -> None:
@@ -479,7 +501,7 @@ class TestPaintDashboardUi(unittest.TestCase):
 
         self.assertEqual(
             [label.text() for label in card.findChildren(QLabel)],
-            ["Robot Status", "IDLE", "Robot service healthy"],
+            ["Robot Status", "IDLE"],
         )
 
     def test_dashboard_view_wires_inner_dashboard_and_applies_state(self) -> None:

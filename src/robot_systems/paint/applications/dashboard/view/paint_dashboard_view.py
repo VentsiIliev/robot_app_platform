@@ -15,6 +15,7 @@ from PyQt6.QtWidgets import (
     QStackedWidget,
     QTabBar,
     QTabWidget,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -51,6 +52,8 @@ _MESSAGE_DRAWER_HANDLE_CLEARANCE = 38
 _PROCESS_CONTROLS_TOP_MARGIN = 19
 _PROCESS_CONTROLS_BOTTOM_MARGIN = 5
 _EXPANDED_PROCESS_SECTION_HEIGHT = 300
+_EXPANDED_STATUS_MIN_WIDTH = 650
+_MESSAGE_COLLAPSED_HEIGHT = 45
 _PROCESS_CONTROLS_PANEL_STYLE = f"""
 QFrame#paintProcessControlsPanel {{
     background-color: white;
@@ -197,6 +200,7 @@ class PaintDashboardView(IApplicationView):
         self._message_rows: list[QLabel] = []
         self._message_empty_label: QLabel | None = None
         self._message_title_label: QLabel | None = None
+        self._message_toggle: QToolButton | None = None
         self._message_panel: QFrame | None = None
         self._message_scroll: QScrollArea | None = None
         self._last_state = None
@@ -248,9 +252,9 @@ class PaintDashboardView(IApplicationView):
         self._dashboard.setStyleSheet(f"background-color: {BG_COLOR};")
         self._install_manual_plate_layout()
         self._align_preview_and_card_columns()
+        self._install_bottom_quick_controls()
         self._install_message_panel()
         self._place_reset_action()
-        self._install_bottom_quick_controls()
         self._expand_process_controls()
 
         self._dashboard.start_requested.connect(self.start_requested)
@@ -312,7 +316,11 @@ class PaintDashboardView(IApplicationView):
                 )
                 self._quick_access.new_tray_requested.connect(self._on_new_tray)
                 self._plate_layout.set_new_tray_button_visible(False)
-                top_section.insertWidget(1, self._quick_access)
+                side_panel = top_section.itemAt(top_section.count() - 1).widget()
+                side_layout = side_panel.layout()
+                side_layout.addWidget(self._quick_access, 1, 0)
+                side_panel.setMinimumWidth(_EXPANDED_STATUS_MIN_WIDTH)
+                side_panel.setMaximumWidth(16777215)
         except (AttributeError, RuntimeError):
             self._preview_stack = None
             self._plate_layout = None
@@ -376,8 +384,6 @@ class PaintDashboardView(IApplicationView):
             main_layout = self._dashboard.layout_manager.main_layout
             bottom_container = main_layout.itemAt(1).widget()
             bottom_layout = bottom_container.layout()
-            action_area = bottom_layout.itemAt(0).widget()
-            action_layout = action_area.layout()
             self._quick_controls = PaintQuickControlsPanel(
                 self._auxiliary_toggles,
                 use_combined_speed_control=(
@@ -399,7 +405,10 @@ class PaintDashboardView(IApplicationView):
                     self._ui_config.show_resolved_paint_speed_values
                 ),
             )
-            action_layout.addWidget(self._quick_controls, 0, 0)
+            top_section = main_layout.itemAt(0).layout()
+            side_panel = top_section.itemAt(top_section.count() - 1).widget()
+            side_layout = side_panel.layout()
+            side_layout.addWidget(self._quick_controls, 1, 0, 1, 3)
             self._quick_controls.unmatched_paint_settings_requested.connect(
                 self._on_quick_unmatched_paint_settings
             )
@@ -474,17 +483,19 @@ class PaintDashboardView(IApplicationView):
                 _MESSAGE_DRAWER_HANDLE_CLEARANCE,
                 0,
             )
-            panel_host_layout.addWidget(panel)
-            message_row = 3 if self._quick_access is not None else max(4, layout.rowCount())
-            layout.addWidget(panel_host, message_row, 0)
-            for row in range(3):
-                layout.setRowMinimumHeight(row, 75)
-                layout.setRowStretch(row, 0)
-            if self._quick_access is None:
-                layout.setRowMinimumHeight(3, 52)
-                layout.setRowStretch(3, 0)
+            panel_host_layout.addWidget(panel, alignment=Qt.AlignmentFlag.AlignTop)
+            if self._quick_access is not None:
+                message_row = 1
+                layout.addWidget(panel_host, message_row, 1, 1, 2)
+            else:
+                message_row = 2
+                layout.addWidget(panel_host, message_row, 0, 1, 3)
+            layout.setRowMinimumHeight(0, 82)
+            layout.setRowStretch(0, 0)
+            layout.setRowStretch(1, int(message_row == 1))
             layout.setRowStretch(message_row, 1)
-            layout.setColumnStretch(0, 1)
+            for column in range(3):
+                layout.setColumnStretch(column, 1)
             self._message_panel = panel
             self._render_messages()
         except Exception:
@@ -498,9 +509,29 @@ class PaintDashboardView(IApplicationView):
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(4)
 
+        header = QWidget()
+        header.setStyleSheet("background: transparent; border: none;")
+        header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(0, 0, 0, 0)
+        header_layout.setSpacing(4)
+
         self._message_title_label = QLabel()
         self._message_title_label.setStyleSheet(_MESSAGE_TITLE_STYLE)
-        layout.addWidget(self._message_title_label)
+        header_layout.addWidget(self._message_title_label)
+        header_layout.addStretch(1)
+
+        self._message_toggle = QToolButton()
+        self._message_toggle.setAutoRaise(True)
+        self._message_toggle.setIconSize(QSize(18, 18))
+        self._message_toggle.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._message_toggle.setFixedSize(32, 28)
+        self._message_toggle.setStyleSheet(
+            f"QToolButton {{ color: {PRIMARY}; background: transparent; border: none; }}"
+            f"QToolButton:hover {{ background: {BG_COLOR}; border-radius: 6px; }}"
+        )
+        self._message_toggle.clicked.connect(self._toggle_message_panel)
+        header_layout.addWidget(self._message_toggle)
+        layout.addWidget(header)
 
         self._message_scroll = QScrollArea()
         self._message_scroll.setWidgetResizable(True)
@@ -532,6 +563,22 @@ class PaintDashboardView(IApplicationView):
         layout.addWidget(self._message_scroll, 1)
         self.retranslateUi()
         return panel
+
+    def _toggle_message_panel(self) -> None:
+        if self._message_panel is None or self._message_scroll is None:
+            return
+        collapsed = not self._message_scroll.isHidden()
+        self._message_scroll.setVisible(not collapsed)
+        if collapsed:
+            self._message_panel.setMaximumHeight(_MESSAGE_COLLAPSED_HEIGHT)
+            vertical_policy = QSizePolicy.Policy.Fixed
+        else:
+            self._message_panel.setMaximumHeight(16777215)
+            vertical_policy = QSizePolicy.Policy.Expanding
+        policy = self._message_panel.sizePolicy()
+        policy.setVerticalPolicy(vertical_policy)
+        self._message_panel.setSizePolicy(policy)
+        self._retranslate_message_toggle(collapsed)
 
     @staticmethod
     def _clear_layout(layout) -> None:
@@ -565,7 +612,7 @@ class PaintDashboardView(IApplicationView):
             top_section = main_layout.itemAt(0).layout()
             side_panel = top_section.itemAt(top_section.count() - 1).widget()
             side_layout = side_panel.layout()
-            side_layout.addWidget(reset_button, 3, 0)
+            side_layout.addWidget(reset_button, 3, 0, 1, 3)
         except Exception:
             pass
 
@@ -579,14 +626,9 @@ class PaintDashboardView(IApplicationView):
             action_area = bottom_layout.itemAt(0).widget()
             controls = bottom_layout.itemAt(1).widget()
             controls = self._wrap_process_controls(bottom_layout, controls)
-            if self._quick_controls is None:
-                action_area.hide()
-                bottom_layout.setStretchFactor(action_area, 0)
-                bottom_layout.setStretchFactor(controls, 1)
-            else:
-                action_area.show()
-                bottom_layout.setStretchFactor(action_area, 1)
-                bottom_layout.setStretchFactor(controls, 1)
+            action_area.hide()
+            bottom_layout.setStretchFactor(action_area, 0)
+            bottom_layout.setStretchFactor(controls, 1)
         except Exception:
             pass
 
@@ -916,6 +958,10 @@ class PaintDashboardView(IApplicationView):
                 self.set_action_button_text(action.action_id, action.label)
         if self._message_title_label is not None:
             self._message_title_label.setText(self._translate_text("Messages"))
+        if self._message_toggle is not None:
+            self._retranslate_message_toggle(
+                self._message_scroll is not None and self._message_scroll.isHidden()
+            )
         if self._message_empty_label is not None:
             self._message_empty_label.setText(self._translate_text("No process messages"))
         if self._controls_widget is not None:
@@ -931,6 +977,16 @@ class PaintDashboardView(IApplicationView):
         if self._last_state is not None:
             self.apply_dashboard_state(self._last_state)
         self._render_messages()
+
+    def _retranslate_message_toggle(self, collapsed: bool) -> None:
+        if self._message_toggle is None:
+            return
+        source = "Expand Messages" if collapsed else "Collapse Messages"
+        text = self._translate_text(source)
+        self._message_toggle.setToolTip(text)
+        self._message_toggle.setAccessibleName(text)
+        icon_name = "fa5s.chevron-right" if collapsed else "fa5s.chevron-down"
+        self._message_toggle.setIcon(load_icon(icon_name, color=PRIMARY))
 
     def _retranslate_expanded_tabs(self) -> None:
         if self._expanded_tabs is None or self._expanded_tabs.count() < 2:

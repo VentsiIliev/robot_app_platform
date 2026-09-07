@@ -12,7 +12,7 @@ if str(REPOSITORY_ROOT) not in sys.path:
 from src.engine.vision.implementation.plvision.PLVision.Camera import Camera
 
 
-DEFAULT_CAMERA_INDEX = 2
+DEFAULT_CAMERA_INDEX = 1
 DEFAULT_WIDTH = 1280
 DEFAULT_HEIGHT = 720
 REQUESTED_FPS = 60.0

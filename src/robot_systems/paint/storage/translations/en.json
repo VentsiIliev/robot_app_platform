@@ -86,6 +86,8 @@
     "Unmatched paint settings saved.": "Unmatched paint settings saved.",
     "Could not save unmatched paint settings: {error}": "Could not save unmatched paint settings: {error}",
     "Messages": "Messages",
+    "Collapse Messages": "Collapse Messages",
+    "Expand Messages": "Expand Messages",
     "No process messages": "No process messages",
     "Cable Relief": "Cable Relief",
     "Manual Control": "Manual Control",

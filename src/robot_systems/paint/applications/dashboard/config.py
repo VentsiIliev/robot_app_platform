@@ -44,10 +44,10 @@ PAINT_DASHBOARD_AUXILIARY_TOGGLES = [
 @dataclass
 class PaintDashboardConfig(DashboardConfig):
     show_placeholders: bool = False
-    card_grid_rows: int = 4
-    card_grid_cols: int = 1
-    card_grid_min_width: int = 360
-    card_grid_max_width: int = 430
+    card_grid_rows: int = 1
+    card_grid_cols: int = 3
+    card_grid_min_width: int = 400
+    card_grid_max_width: int = 460
     action_grid_rows: int = 1
     action_grid_cols: int = 1
     bottom_section_height: int = 380

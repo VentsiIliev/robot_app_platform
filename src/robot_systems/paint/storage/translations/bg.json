@@ -86,6 +86,8 @@
     "Unmatched paint settings saved.": "Настройките за боядисване без съпоставяне са запазени.",
     "Could not save unmatched paint settings: {error}": "Настройките за боядисване без съпоставяне не можаха да бъдат запазени: {error}",
     "Messages": "Съобщения",
+    "Collapse Messages": "Свиване на съобщенията",
+    "Expand Messages": "Разгъване на съобщенията",
     "No process messages": "Няма съобщения от процеса",
     "Cable Relief": "Освобождаване на кабела",
     "Manual Control": "Ръчно управление",

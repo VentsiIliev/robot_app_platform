@@ -3,10 +3,7 @@ from __future__ import annotations
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QFrame, QLabel, QVBoxLayout, QWidget
 
-from pl_gui.settings.settings_view.styles import BG_COLOR, BORDER, PRIMARY, TEXT_COLOR
-
-
-_MUTED = "#6B7280"
+from pl_gui.settings.settings_view.styles import BORDER, PRIMARY, TEXT_COLOR
 
 
 _CARD_STYLE = f"""
@@ -50,11 +47,6 @@ class PaintInfoCard(QWidget):
         self._value_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._value_label.setStyleSheet("font-size: 16pt; font-weight: bold;")
 
-        self._note_label = QLabel(note)
-        self._note_label.setWordWrap(True)
-        self._note_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._note_label.setStyleSheet(f"font-size: 9pt; color: {_MUTED};")
-
         line = QFrame()
         line.setFixedHeight(1)
         line.setStyleSheet(f"QFrame {{ background: {BORDER}; border: none; }}")
@@ -63,10 +55,8 @@ class PaintInfoCard(QWidget):
         layout.addWidget(line)
         layout.addStretch(1)
         layout.addWidget(self._value_label)
-        layout.addWidget(self._note_label)
         layout.addStretch(1)
 
     def set_content(self, title: str, value: str, note: str) -> None:
         self._title_label.setText(title)
         self._value_label.setText(value)
-        self._note_label.setText(note)
