@@ -18,9 +18,11 @@ from src.robot_systems.paint.processes.paint.execution_machine import (
 )
 from src.robot_systems.paint.processes.paint.magazine_load_result import (
     ALL_MAGAZINES_EMPTY,
+    MAGAZINE_EMPTY,
     NO_WORKPIECE_AT_MAGAZINE,
 )
 from src.robot_systems.paint.processes.paint.config import (
+    MAGAZINE_PICKUP_MODE_AUTO_DISCOVERY_SENSOR_CONTROLLED_FAST_LIN,
     scale_paint_process_accelerations,
 )
 
@@ -58,6 +60,7 @@ class PaintProductionService:
         self._paint_control = PaintExecutionControl()
         self._active_context_lock = threading.Lock()
         self._active_execution_context: PaintExecutionContext | None = None
+        self._last_execution_context: PaintExecutionContext | None = None
         self._prepositioned_start_group: str | None = None
 
     def pause_current_phase(self) -> None:
@@ -117,7 +120,11 @@ class PaintProductionService:
             pickup_mode = str(getattr(magazine_config, "pickup_mode", "") or "").strip().lower()
             if pickup_mode == "fixed_group_sensor_controlled_fast_lin" and not fixed_sources:
                 return False, "No fixed magazines are enabled"
-            if run_while_found:
+            if (
+                run_while_found
+                or pickup_mode
+                == MAGAZINE_PICKUP_MODE_AUTO_DISCOVERY_SENSOR_CONTROLLED_FAST_LIN
+            ):
                 return self._run_magazine_loop(
                     magazine_config,
                     process_config,
@@ -165,6 +172,7 @@ class PaintProductionService:
                     completed_cycles=completed_cycles,
                 )
                 return False, msg
+            self._last_execution_context = None
             ok, msg = self._run_single_cycle(
                 should_stop,
                 process_config=process_config,
@@ -217,9 +225,19 @@ class PaintProductionService:
         sources = fixed_sources if fixed_sources is not None else self._fixed_magazine_sources(magazine_config)
         group_index = 0
         consecutive_empty_groups = 0
+        discovery_contours: list = []
+        discovery_snapshot = None
+        pickup_mode = str(getattr(magazine_config, "pickup_mode", "") or "").strip().lower()
+        auto_discovery = (
+            pickup_mode == MAGAZINE_PICKUP_MODE_AUTO_DISCOVERY_SENSOR_CONTROLLED_FAST_LIN
+        )
         while not should_stop():
             active_source = sources[group_index] if sources else None
-            active_group = self._magazine_source_group(active_source, magazine_config)
+            active_group = (
+                str(getattr(magazine_config, "magazine_group_id", "Magazine") or "Magazine").strip()
+                if auto_discovery
+                else self._magazine_source_group(active_source, magazine_config)
+            )
             ok, msg = self._run_single_cycle(
                 should_stop,
                 process_config=process_config,
@@ -229,9 +247,24 @@ class PaintProductionService:
                 magazine_index=group_index,
                 cycle_index=completed_cycles + 1,
                 repeats_after_success=True,
+                magazine_discovery_contours=discovery_contours,
+                magazine_discovery_snapshot=discovery_snapshot,
             )
 
+            context = self._last_execution_context
+            if auto_discovery and context is not None:
+                discovery_contours = list(context.magazine_discovery_contours)
+                discovery_snapshot = context.magazine_snapshot
+
             if not ok and msg == NO_WORKPIECE_AT_MAGAZINE:
+                if auto_discovery:
+                    self._log_phase_timing(
+                        "magazine_loop_total",
+                        total_start,
+                        success=True,
+                        completed_cycles=completed_cycles,
+                    )
+                    return True, MAGAZINE_EMPTY
                 consecutive_empty_groups += 1
                 if sources and consecutive_empty_groups < len(sources):
                     next_index = (group_index + 1) % len(sources)
@@ -316,6 +349,8 @@ class PaintProductionService:
         magazine_index: int = 0,
         cycle_index: int,
         repeats_after_success: bool = False,
+        magazine_discovery_contours: list | None = None,
+        magazine_discovery_snapshot=None,
     ) -> tuple[bool, str]:
         raw_process_config = process_config
         if self._paint_process_config_service is not None:
@@ -347,6 +382,8 @@ class PaintProductionService:
             cycle_index=cycle_index,
             repeats_after_success=repeats_after_success,
             total_started_at=perf_counter(),
+            magazine_discovery_contours=list(magazine_discovery_contours or ()),
+            magazine_snapshot=magazine_discovery_snapshot,
         )
         if isinstance(magazine_source, dict) and "position" in magazine_source:
             context.magazine_fixed_pickup_pose = [
@@ -358,6 +395,7 @@ class PaintProductionService:
             machine = PaintExecutionMachineFactory().build(context)
             machine.start_execution()
         finally:
+            self._last_execution_context = context
             self._log_execution_state_timing(context)
             with self._active_context_lock:
                 if self._active_execution_context is context:

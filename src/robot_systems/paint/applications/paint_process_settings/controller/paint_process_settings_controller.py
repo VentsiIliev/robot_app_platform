@@ -13,6 +13,7 @@ from src.robot_systems.paint.applications.paint_process_settings.view.paint_proc
     PaintProcessSettingsView,
 )
 from src.robot_systems.paint.processes.paint.config import (
+    MAGAZINE_PICKUP_MODE_AUTO_DISCOVERY_SENSOR_CONTROLLED_FAST_LIN,
     MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN,
     MAGAZINE_PICKUP_MODE_VISION_SENSOR_CONTROLLED_FAST_LIN,
     PICKUP_CONTACT_MODE_SENSOR_CONTROLLED_FAST_LIN,
@@ -171,6 +172,7 @@ class PaintProcessSettingsController(IApplicationController, BackgroundWorker):
             )
         ).strip().lower()
         magazine_servo_selected = magazine_mode in {
+            MAGAZINE_PICKUP_MODE_AUTO_DISCOVERY_SENSOR_CONTROLLED_FAST_LIN,
             MAGAZINE_PICKUP_MODE_VISION_SENSOR_CONTROLLED_FAST_LIN,
             MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN,
         }

@@ -16,6 +16,13 @@ from src.robot_systems.paint.processes.paint.magazine_load_result import (
     NO_WORKPIECE_AT_MAGAZINE,
 )
 from src.robot_systems.paint.processes.paint.magazine_load_service import PaintMagazineLoadService
+from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_capture_handler import (
+    _ordered_contours,
+    handle_magazine_capture,
+)
+from src.robot_systems.paint.processes.paint.execution_control import PaintExecutionControl
+from src.robot_systems.paint.processes.paint.execution_machine.context import PaintExecutionContext
+from src.robot_systems.paint.processes.paint.execution_machine.state import PaintExecutionState
 from src.robot_systems.paint.processes.paint.paint_process import PaintProcess
 from src.robot_systems.paint.processes.paint.paint_production_service import PaintProductionService
 from src.robot_systems.paint.processes.paint.plan.workpiece_preparation_service import (
@@ -40,6 +47,40 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
             path_preparation_service=MagicMock(),
             path_executor=MagicMock(),
         )
+
+    def test_auto_discovery_orders_all_valid_centroids_top_to_bottom_then_left_to_right(self):
+        lower = _square(4.0) + np.array([[[20.0, 30.0]]], dtype=np.float32)
+        upper_right = _square(4.0) + np.array([[[40.0, 10.0]]], dtype=np.float32)
+        upper_left = _square(4.0) + np.array([[[5.0, 10.0]]], dtype=np.float32)
+
+        ordered = _ordered_contours([lower, upper_right, upper_left, [[1.0, 2.0]]])
+
+        self.assertIs(ordered[0], upper_left)
+        self.assertIs(ordered[1], upper_right)
+        self.assertIs(ordered[2], lower)
+
+    def test_auto_discovery_reuses_frozen_contours_without_recapturing(self):
+        capture = MagicMock()
+        service = SimpleNamespace(_capture_snapshot_service=capture)
+        first = _square(4.0)
+        second = _square(4.0) + np.array([[[20.0, 0.0]]], dtype=np.float32)
+        context = PaintExecutionContext(
+            production_service=service,
+            stop_requested=lambda: False,
+            control=PaintExecutionControl(),
+            magazine_config=PaintMagazineLoadConfig(
+                enabled=True,
+                pickup_mode="auto_discovery_sensor_controlled_fast_lin",
+            ),
+            magazine_discovery_contours=[first, second],
+        )
+
+        next_state = handle_magazine_capture(context)
+
+        self.assertEqual(PaintExecutionState.MAGAZINE_PREPARE_PICKUP_RELEASE, next_state)
+        self.assertIs(context.magazine_contour, first)
+        self.assertEqual([second], context.magazine_discovery_contours)
+        capture.capture_snapshot.assert_not_called()
 
     def test_preposition_marker_is_consumed_only_after_live_pose_verification(self):
         service = self._make_service()
@@ -823,6 +864,42 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
         self.assertEqual(
             ("Legacy Center",),
             PaintProductionService._fixed_magazine_groups(config),
+        )
+
+    def test_auto_discovery_uses_magazine_group_and_finishes_with_empty_message(self):
+        config = PaintMagazineLoadConfig(
+            enabled=True,
+            pickup_mode="auto_discovery_sensor_controlled_fast_lin",
+            magazine_group_id="Magazine",
+            fixed_pickup_sources=[
+                {"position": [1, 2, 3, 4, 5, 6], "enabled": True},
+            ],
+        )
+        service = self._make_service()
+
+        def run_cycle(*_args, **_kwargs):
+            service._last_execution_context = SimpleNamespace(
+                magazine_discovery_contours=[],
+                magazine_snapshot=None,
+            )
+            return False, NO_WORKPIECE_AT_MAGAZINE
+
+        service._run_single_cycle = MagicMock(side_effect=run_cycle)
+
+        ok, msg = service._run_magazine_loop(
+            config,
+            PaintProcessConfig(magazine_load=config),
+            lambda: False,
+        )
+
+        self.assertTrue(ok)
+        self.assertEqual("Magazine is empty", msg)
+        self.assertEqual(
+            "Magazine",
+            service._run_single_cycle.call_args.kwargs["magazine_group"],
+        )
+        self.assertIsNone(
+            service._run_single_cycle.call_args.kwargs["magazine_source"]
         )
 
     def test_run_once_aborts_when_magazine_load_fails(self):

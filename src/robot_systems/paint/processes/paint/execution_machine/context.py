@@ -52,6 +52,7 @@ class PaintExecutionContext:
     calibration_group: str = ""
     magazine_snapshot: object | None = None
     magazine_contour: object | None = None
+    magazine_discovery_contours: list = field(default_factory=list)
     magazine_pose: list[float] | None = None
     magazine_release_pose: list[float] | None = None
     magazine_target: dict | None = None

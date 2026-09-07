@@ -325,7 +325,8 @@
   },
   "PaintDashboardController": {
     "All Magazines Empty": "All Magazines Empty",
-    "No workpieces were found in any configured magazine. Refill the magazines and start again.": "No workpieces were found in any configured magazine. Refill the magazines and start again."
+    "No workpieces were found in any configured magazine. Refill the magazines and start again.": "No workpieces were found in any configured magazine. Refill the magazines and start again.",
+    "Magazine is empty": "Magazine is empty"
   },
   "PaintMotionRecipe": {
     "Recipe Saved": "Recipe Saved",

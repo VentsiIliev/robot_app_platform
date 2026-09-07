@@ -325,7 +325,8 @@
   },
   "PaintDashboardController": {
     "All Magazines Empty": "Всички магазини са празни",
-    "No workpieces were found in any configured magazine. Refill the magazines and start again.": "Не са намерени детайли в нито един конфигуриран магазин. Заредете магазините и стартирайте отново."
+    "No workpieces were found in any configured magazine. Refill the magazines and start again.": "Не са намерени детайли в нито един конфигуриран магазин. Заредете магазините и стартирайте отново.",
+    "Magazine is empty": "Магазинът е празен"
   },
   "PaintMotionRecipe": {
     "Recipe Saved": "Рецептата е запазена",
