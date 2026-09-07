@@ -210,6 +210,7 @@
     "Moved to selected tray corner.": "Роботът е преместен до избрания ъгъл на тавата.",
     "Robot move to the selected tray corner failed.": "Преместването на робота до избрания ъгъл на тавата е неуспешно.",
     "Fixed Pickup Movement Group": "Фиксирана група за движение при вземане",
+    "Ordered Fixed Pickup Movement Groups": "Подредени групи за фиксирано вземане",
     "Fixed Pickup Position Tolerance": "Допуск за фиксираната позиция на вземане",
     "Fixed Pickup Orientation Tolerance": "Допуск за ориентацията при фиксирано вземане",
     "Fixed Magazine Pickup Unavailable": "Фиксираното вземане от магазина не е налично",
@@ -311,6 +312,10 @@
     "Use the jog drawer if needed, then capture the current robot pose as the origin for the axis probe.": "Използвайте jog панела при нужда, след това заснемете текущата поза на робота като начало за проверката на осите.",
     "Jog along the desired paint translation direction, then capture the current pose.": "Преместете чрез jog по желаната paint посока на транслация, след това заснемете текущата поза.",
     "Return near the reference position if needed, rotate around the desired paint rotation axis, then capture.": "Върнете се близо до референтната позиция при нужда, завъртете около желаната paint ос на въртене, след това заснемете."
+  },
+  "PaintDashboardController": {
+    "All Magazines Empty": "Всички магазини са празни",
+    "No workpieces were found in any configured magazine. Refill the magazines and start again.": "Не са намерени детайли в нито един конфигуриран магазин. Заредете магазините и стартирайте отново."
   },
   "PaintMotionRecipe": {
     "Recipe Saved": "Рецептата е запазена",

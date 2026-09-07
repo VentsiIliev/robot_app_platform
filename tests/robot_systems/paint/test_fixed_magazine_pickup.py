@@ -92,6 +92,7 @@ class TestFixedMagazinePickup(unittest.TestCase):
         flat.update({
             "magazine_pickup_mode": MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN,
             "magazine_fixed_pickup_group_id": "Magazine Pickup Taught",
+            "magazine_fixed_pickup_group_ids": "Magazine Pickup Taught, Magazine Pickup 1, Magazine Pickup 1",
             "magazine_fixed_pickup_position_tolerance_mm": 1.5,
             "magazine_fixed_pickup_orientation_tolerance_deg": 0.75,
         })
@@ -100,6 +101,10 @@ class TestFixedMagazinePickup(unittest.TestCase):
 
         self.assertEqual(MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN, restored.magazine_load.pickup_mode)
         self.assertEqual("Magazine Pickup Taught", restored.magazine_load.fixed_pickup_group_id)
+        self.assertEqual(
+            ["Magazine Pickup Taught", "Magazine Pickup 1"],
+            restored.magazine_load.fixed_pickup_group_ids,
+        )
         self.assertEqual(1.5, restored.magazine_load.fixed_pickup_position_tolerance_mm)
         self.assertEqual(0.75, restored.magazine_load.fixed_pickup_orientation_tolerance_deg)
 

@@ -16,7 +16,10 @@ from src.robot_systems.paint.processes.paint.execution_machine import (
     PaintExecutionContext,
     PaintExecutionMachineFactory,
 )
-from src.robot_systems.paint.processes.paint.magazine_load_result import NO_WORKPIECE_AT_MAGAZINE
+from src.robot_systems.paint.processes.paint.magazine_load_result import (
+    ALL_MAGAZINES_EMPTY,
+    NO_WORKPIECE_AT_MAGAZINE,
+)
 from src.robot_systems.paint.processes.paint.config import (
     scale_paint_process_accelerations,
 )
@@ -109,13 +112,20 @@ class PaintProductionService:
         run_while_found = bool(getattr(process_config, "run_while_workpiece_found", False))
 
         if self._magazine_load_service is not None and magazine_config is not None and magazine_config.enabled:
+            fixed_groups = self._fixed_magazine_groups(magazine_config)
             if run_while_found:
-                return self._run_magazine_loop(magazine_config, process_config, should_stop)
+                return self._run_magazine_loop(
+                    magazine_config,
+                    process_config,
+                    should_stop,
+                    fixed_groups=fixed_groups,
+                )
 
             ok, msg = self._run_single_cycle(
                 should_stop,
                 process_config=process_config,
                 magazine_config=magazine_config,
+                magazine_group=fixed_groups[0] if fixed_groups else None,
                 cycle_index=1,
             )
 
@@ -189,28 +199,55 @@ class PaintProductionService:
         )
         return False, "Paint process stopped"
 
-    def _run_magazine_loop(self, magazine_config, process_config, should_stop: Callable[[], bool]) -> tuple[bool, str]:
+    def _run_magazine_loop(
+        self,
+        magazine_config,
+        process_config,
+        should_stop: Callable[[], bool],
+        *,
+        fixed_groups: tuple[str, ...] | None = None,
+    ) -> tuple[bool, str]:
         total_start = perf_counter()
         completed_cycles = 0
+        groups = fixed_groups if fixed_groups is not None else self._fixed_magazine_groups(magazine_config)
+        group_index = 0
+        consecutive_empty_groups = 0
         while not should_stop():
+            active_group = groups[group_index] if groups else None
             ok, msg = self._run_single_cycle(
                 should_stop,
                 process_config=process_config,
                 magazine_config=magazine_config,
+                magazine_group=active_group,
+                magazine_index=group_index,
                 cycle_index=completed_cycles + 1,
                 repeats_after_success=True,
             )
 
             if not ok and msg == NO_WORKPIECE_AT_MAGAZINE:
+                consecutive_empty_groups += 1
+                if groups and consecutive_empty_groups < len(groups):
+                    next_index = (group_index + 1) % len(groups)
+                    next_group = groups[next_index]
+                    _logger.info(
+                        "[MAGAZINE_LOAD] Magazine group '%s' is empty; advancing to '%s'",
+                        active_group,
+                        next_group,
+                    )
+                    group_index = next_index
+                    self._clear_prepositioned_start_group()
+                    continue
                 self._log_phase_timing(
                     "magazine_loop_total",
                     total_start,
                     success=True,
                     completed_cycles=completed_cycles,
                 )
-                if completed_cycles == 0:
-                    return True, NO_WORKPIECE_AT_MAGAZINE
-                return True, f"Magazine empty after {completed_cycles} paint cycle(s)"
+                _logger.info(
+                    "[MAGAZINE_LOAD] All %d configured magazine(s) are empty",
+                    len(groups) or 1,
+                )
+                return True, ALL_MAGAZINES_EMPTY
             if not ok and msg == "Drop-off plate is full":
                 return True, msg
             if not ok:
@@ -222,6 +259,7 @@ class PaintProductionService:
                 )
                 return False, msg
             completed_cycles += 1
+            consecutive_empty_groups = 0
             if msg == "Drop-off plate has no space for another workpiece of the same footprint":
                 return True, msg
         self._log_phase_timing(
@@ -233,12 +271,25 @@ class PaintProductionService:
         )
         return False, "Paint process stopped"
 
+    @staticmethod
+    def _fixed_magazine_groups(magazine_config) -> tuple[str, ...]:
+        mode = str(getattr(magazine_config, "pickup_mode", "") or "").strip().lower()
+        if mode != "fixed_group_sensor_controlled_fast_lin":
+            return ()
+        getter = getattr(magazine_config, "effective_fixed_pickup_group_ids", None)
+        if callable(getter):
+            return tuple(getter())
+        legacy = str(getattr(magazine_config, "fixed_pickup_group_id", "") or "").strip()
+        return (legacy,) if legacy else ()
+
     def _run_single_cycle(
         self,
         should_stop: Callable[[], bool],
         *,
         process_config,
         magazine_config,
+        magazine_group: str | None = None,
+        magazine_index: int = 0,
         cycle_index: int,
         repeats_after_success: bool = False,
     ) -> tuple[bool, str]:
@@ -267,6 +318,8 @@ class PaintProductionService:
             process_config=process_config,
             raw_process_config=raw_process_config,
             magazine_config=magazine_config,
+            magazine_group=str(magazine_group or "").strip(),
+            magazine_index=int(magazine_index),
             cycle_index=cycle_index,
             repeats_after_success=repeats_after_success,
             total_started_at=perf_counter(),
@@ -309,7 +362,7 @@ class PaintProductionService:
         configured_magazine = magazine or getattr(ctx.process_config, "magazine_load", None)
         if magazine is not None and bool(getattr(magazine, "enabled", False)):
             mode = str(getattr(magazine, "pickup_mode", "") or "").strip().lower()
-            group_id = (
+            group_id = ctx.magazine_group or (
                 magazine.fixed_pickup_group_id
                 if mode == "fixed_group_sensor_controlled_fast_lin"
                 else magazine.magazine_group_id

@@ -113,6 +113,9 @@ class PaintProcessConfigSerializer(ISettingsSerializer[PaintProcessConfig]):
         values["magazine_load"] = replace(
             magazine_load,
             pickup_mode=normalize_magazine_pickup_mode(magazine_load.pickup_mode),
+            fixed_pickup_group_ids=_normalize_group_ids(
+                magazine_load.fixed_pickup_group_ids
+            ),
         )
         values["safe_travel"] = _build_dataclass(
             PaintSafeTravelConfig,
@@ -140,3 +143,18 @@ class PaintProcessConfigSerializer(ISettingsSerializer[PaintProcessConfig]):
             default.unmatched_second_pass,
         )
         return PaintProcessConfig(**values)
+
+
+def _normalize_group_ids(value: object) -> list[str]:
+    if isinstance(value, str):
+        values = value.split(",")
+    elif isinstance(value, (list, tuple)):
+        values = value
+    else:
+        return []
+    result: list[str] = []
+    for item in values:
+        group_id = str(item or "").strip()
+        if group_id and group_id not in result:
+            result.append(group_id)
+    return result

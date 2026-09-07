@@ -391,6 +391,10 @@ class TestPaintProcessConfig(unittest.TestCase):
             run_while_workpiece_found=False,
             magazine_load=PaintMagazineLoadConfig(
                 enabled=True,
+                fixed_pickup_group_ids=[
+                    "Magazine Fixed Pickup",
+                    "Magazine Fixed Pickup 1",
+                ],
                 magazine_group_id="Magazine",
                 calibration_group_id="CALIBRATION",
                 move_to_magazine_vel_percent=21.0,
@@ -406,6 +410,10 @@ class TestPaintProcessConfig(unittest.TestCase):
         restored = serializer.from_dict(serializer.to_dict(config))
 
         self.assertTrue(restored.magazine_load.enabled)
+        self.assertEqual(
+            ["Magazine Fixed Pickup", "Magazine Fixed Pickup 1"],
+            restored.magazine_load.fixed_pickup_group_ids,
+        )
         self.assertFalse(restored.run_while_workpiece_found)
         self.assertEqual("Magazine", restored.magazine_load.magazine_group_id)
         self.assertEqual("CALIBRATION", restored.magazine_load.calibration_group_id)

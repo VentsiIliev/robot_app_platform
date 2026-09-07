@@ -134,4 +134,5 @@ class PaintProcess(BaseProcess):
             "no workpiece" in lowered
             or "no usable contour detected" in lowered
             or "magazine empty" in lowered
+            or "magazines are empty" in lowered
         )

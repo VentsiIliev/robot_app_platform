@@ -20,6 +20,8 @@ class PaintExecutionContext:
     process_config: PaintProcessConfig | None = None
     raw_process_config: PaintProcessConfig | None = None
     magazine_config: PaintMagazineLoadConfig | None = None
+    magazine_group: str = ""
+    magazine_index: int = 0
     cycle_index: int = 1
     repeats_after_success: bool = False
     stop_event: threading.Event = field(default_factory=threading.Event)
@@ -47,7 +49,6 @@ class PaintExecutionContext:
     paint_contact_executed_in_ordered_chain: bool = False
     paint_motion_active: bool = False
     resume_retry_available: bool = False
-    magazine_group: str = ""
     calibration_group: str = ""
     magazine_snapshot: object | None = None
     magazine_contour: object | None = None
@@ -106,6 +107,7 @@ class PaintExecutionContext:
             "paint_motion_active": self.paint_motion_active,
             "resume_retry_available": self.resume_retry_available,
             "magazine_group": self.magazine_group,
+            "magazine_index": self.magazine_index,
             "calibration_group": self.calibration_group,
             "has_magazine_snapshot": self.magazine_snapshot is not None,
             "has_magazine_contour": self.magazine_contour is not None,

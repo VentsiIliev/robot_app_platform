@@ -198,6 +198,12 @@ def build_process_groups() -> list[SettingGroup]:
                 "line_edit",
                 default="Magazine Fixed Pickup",
             ),
+            SettingField(
+                "magazine_fixed_pickup_group_ids",
+                _t("Ordered Fixed Pickup Movement Groups"),
+                "line_edit",
+                default="",
+            ),
             _mm_field(
                 "magazine_fixed_pickup_position_tolerance_mm",
                 "Fixed Pickup Position Tolerance",

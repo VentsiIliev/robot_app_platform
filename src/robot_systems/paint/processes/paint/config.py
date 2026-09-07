@@ -228,6 +228,9 @@ class PaintMagazineLoadConfig:
     enabled: bool = False  # [LIVE SETTINGS]
     pickup_mode: str = MAGAZINE_PICKUP_MODE_VISION_PLANNED  # [LIVE SETTINGS]
     fixed_pickup_group_id: str = "Magazine Fixed Pickup"  # [LIVE SETTINGS]
+    # Ordered fixed pickup positions. An empty list preserves the legacy
+    # single-position behavior through ``fixed_pickup_group_id``.
+    fixed_pickup_group_ids: list[str] = field(default_factory=list)  # [LIVE SETTINGS]
     fixed_pickup_position_tolerance_mm: float = 2.0  # [LIVE SETTINGS]
     fixed_pickup_orientation_tolerance_deg: float = 1.0  # [LIVE SETTINGS]
     full_retract_before_release: bool = True  # [LIVE SETTINGS]
@@ -245,6 +248,19 @@ class PaintMagazineLoadConfig:
     release_z_mm: float = 50.0  # [LIVE SETTINGS]
     camera_settle_s: float = 0.5
     release_settle_s: float = 0.5
+
+    def effective_fixed_pickup_group_ids(self) -> tuple[str, ...]:
+        ordered: list[str] = []
+        seen: set[str] = set()
+        for value in self.fixed_pickup_group_ids or ():
+            group_id = str(value or "").strip()
+            if group_id and group_id not in seen:
+                ordered.append(group_id)
+                seen.add(group_id)
+        if ordered:
+            return tuple(ordered)
+        legacy_group = str(self.fixed_pickup_group_id or "").strip()
+        return (legacy_group,) if legacy_group else ()
 
 
 @dataclass(frozen=True)

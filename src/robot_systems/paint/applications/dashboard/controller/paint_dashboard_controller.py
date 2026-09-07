@@ -38,6 +38,23 @@ class PaintDashboardController(
     DashboardCameraFeedMixin,
     DashboardProcessStateMixin,
 ):
+    def _dashboard_warning_for_event(
+        self,
+        event_state: str,
+        message: str,
+    ) -> tuple[str, str] | None:
+        if (
+            event_state == "stopped"
+            and str(message or "").strip().lower() == "all magazines are empty"
+        ):
+            return (
+                self._t("All Magazines Empty"),
+                self._t(
+                    "No workpieces were found in any configured magazine. Refill the magazines and start again."
+                ),
+            )
+        return super()._dashboard_warning_for_event(event_state, message)
+
     def __init__(self, model: PaintDashboardModel, view: PaintDashboardView, broker: IMessagingService):
         BrokerSubscriptionMixin.__init__(self)
         self._model = model

@@ -210,6 +210,7 @@
     "Moved to selected tray corner.": "Moved to selected tray corner.",
     "Robot move to the selected tray corner failed.": "Robot move to the selected tray corner failed.",
     "Fixed Pickup Movement Group": "Fixed Pickup Movement Group",
+    "Ordered Fixed Pickup Movement Groups": "Ordered Fixed Pickup Movement Groups",
     "Fixed Pickup Position Tolerance": "Fixed Pickup Position Tolerance",
     "Fixed Pickup Orientation Tolerance": "Fixed Pickup Orientation Tolerance",
     "Fixed Magazine Pickup Unavailable": "Fixed Magazine Pickup Unavailable",
@@ -311,6 +312,10 @@
     "Use the jog drawer if needed, then capture the current robot pose as the origin for the axis probe.": "Use the jog drawer if needed, then capture the current robot pose as the origin for the axis probe.",
     "Jog along the desired paint translation direction, then capture the current pose.": "Jog along the desired paint translation direction, then capture the current pose.",
     "Return near the reference position if needed, rotate around the desired paint rotation axis, then capture.": "Return near the reference position if needed, rotate around the desired paint rotation axis, then capture."
+  },
+  "PaintDashboardController": {
+    "All Magazines Empty": "All Magazines Empty",
+    "No workpieces were found in any configured magazine. Refill the magazines and start again.": "No workpieces were found in any configured magazine. Refill the magazines and start again."
   },
   "PaintMotionRecipe": {
     "Recipe Saved": "Recipe Saved",

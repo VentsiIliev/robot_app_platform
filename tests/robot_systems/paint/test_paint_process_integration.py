@@ -11,7 +11,10 @@ from src.robot_systems.paint.component_ids import ProcessID
 from src.robot_systems.paint.processes.paint.config import PaintMagazineLoadConfig, PaintProcessConfig
 from src.robot_systems.paint.processes.paint.dashboard_live_view_events import PaintDashboardLiveViewTopics
 from src.robot_systems.paint.processes.paint.magazine_load.state import MagazineLoadState, MagazineLoadTransitions
-from src.robot_systems.paint.processes.paint.magazine_load_result import NO_WORKPIECE_AT_MAGAZINE
+from src.robot_systems.paint.processes.paint.magazine_load_result import (
+    ALL_MAGAZINES_EMPTY,
+    NO_WORKPIECE_AT_MAGAZINE,
+)
 from src.robot_systems.paint.processes.paint.magazine_load_service import PaintMagazineLoadService
 from src.robot_systems.paint.processes.paint.paint_process import PaintProcess
 from src.robot_systems.paint.processes.paint.paint_production_service import PaintProductionService
@@ -521,7 +524,7 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
         ok, msg = service.run_once()
 
         self.assertTrue(ok, msg)
-        self.assertEqual("Magazine empty after 1 paint cycle(s)", msg)
+        self.assertEqual(ALL_MAGAZINES_EMPTY, msg)
         self.assertEqual(2, magazine_load.load_to_calibration.call_count)
         self.assertIs(config, magazine_load.load_to_calibration.call_args_list[0].args[0])
         service._capture_snapshot_service.capture_snapshot.assert_called_once_with(source="paint_process")
@@ -736,7 +739,7 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
         ok, msg = service.run_once()
 
         self.assertTrue(ok, msg)
-        self.assertEqual("Magazine empty after 2 paint cycle(s)", msg)
+        self.assertEqual(ALL_MAGAZINES_EMPTY, msg)
         self.assertEqual(3, magazine_load.load_to_calibration.call_count)
         self.assertEqual(2, service._capture_snapshot_service.capture_snapshot.call_count)
         self.assertEqual(2, service._path_executor.execute_paint_process.call_count)
@@ -759,9 +762,68 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
         ok, msg = service.run_once()
 
         self.assertTrue(ok, msg)
-        self.assertEqual(NO_WORKPIECE_AT_MAGAZINE, msg)
+        self.assertEqual(ALL_MAGAZINES_EMPTY, msg)
         magazine_load.load_to_calibration.assert_called_once()
         service._capture_snapshot_service.capture_snapshot.assert_not_called()
+
+    def test_magazine_loop_exhausts_each_ordered_fixed_group_before_finishing(self):
+        config = PaintMagazineLoadConfig(
+            enabled=True,
+            pickup_mode="fixed_group_sensor_controlled_fast_lin",
+            fixed_pickup_group_ids=["Center", "Magazine 1", "Magazine 2"],
+        )
+        service = self._make_service()
+        service._run_single_cycle = MagicMock(side_effect=[
+            (True, "Painted from center"),
+            (False, NO_WORKPIECE_AT_MAGAZINE),
+            (False, NO_WORKPIECE_AT_MAGAZINE),
+            (True, "Painted from magazine 2"),
+            (False, NO_WORKPIECE_AT_MAGAZINE),
+            (False, NO_WORKPIECE_AT_MAGAZINE),
+            (False, NO_WORKPIECE_AT_MAGAZINE),
+        ])
+
+        ok, msg = service._run_magazine_loop(
+            config,
+            PaintProcessConfig(magazine_load=config),
+            lambda: False,
+        )
+
+        self.assertTrue(ok)
+        self.assertEqual(ALL_MAGAZINES_EMPTY, msg)
+        self.assertEqual(
+            [
+                "Center",
+                "Center",
+                "Magazine 1",
+                "Magazine 2",
+                "Magazine 2",
+                "Center",
+                "Magazine 1",
+            ],
+            [
+                call.kwargs["magazine_group"]
+                for call in service._run_single_cycle.call_args_list
+            ],
+        )
+        self.assertEqual(
+            [0, 0, 1, 2, 2, 0, 1],
+            [
+                call.kwargs["magazine_index"]
+                for call in service._run_single_cycle.call_args_list
+            ],
+        )
+
+    def test_fixed_magazine_groups_fall_back_to_legacy_single_group(self):
+        config = PaintMagazineLoadConfig(
+            pickup_mode="fixed_group_sensor_controlled_fast_lin",
+            fixed_pickup_group_id="Legacy Center",
+        )
+
+        self.assertEqual(
+            ("Legacy Center",),
+            PaintProductionService._fixed_magazine_groups(config),
+        )
 
     def test_run_once_aborts_when_magazine_load_fails(self):
         config_service = MagicMock()
@@ -1146,6 +1208,32 @@ class TestPaintProcessIntegration(unittest.TestCase):
             and event.state == ProcessState.STOPPED
         ]
         self.assertEqual(stopped_events[-1].message, "No workpiece detected after 2 paint cycle(s)")
+
+    def test_all_magazines_empty_publishes_operator_message(self):
+        process, _production_service, messaging = self._make_process(
+            (True, ALL_MAGAZINES_EMPTY)
+        )
+        published = []
+        stop_seen = threading.Event()
+
+        def _publish(topic, event):
+            published.append((topic, event))
+            if topic == ProcessTopics.state(ProcessID.MAIN_PROCESS) and event.state == ProcessState.STOPPED:
+                stop_seen.set()
+
+        messaging.publish.side_effect = _publish
+
+        process.start()
+        self.assertTrue(stop_seen.wait(timeout=1.0), "paint process did not reach stopped state")
+        process._thread.join(timeout=1.0)
+
+        stopped_events = [
+            event
+            for topic, event in published
+            if topic == ProcessTopics.state(ProcessID.MAIN_PROCESS)
+            and event.state == ProcessState.STOPPED
+        ]
+        self.assertEqual(stopped_events[-1].message, ALL_MAGAZINES_EMPTY)
 
     def test_failed_run_transitions_process_to_error(self):
         process, production_service, messaging = self._make_process((False, "No usable contour detected"))

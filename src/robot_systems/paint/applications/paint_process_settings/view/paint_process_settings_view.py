@@ -60,6 +60,7 @@ _SENSOR_CONTROLLED_FAST_LIN_KEYS = {
 }
 _FIXED_MAGAZINE_ONLY_KEYS = {
     "magazine_fixed_pickup_group_id",
+    "magazine_fixed_pickup_group_ids",
     "magazine_fixed_pickup_position_tolerance_mm",
     "magazine_fixed_pickup_orientation_tolerance_deg",
 }

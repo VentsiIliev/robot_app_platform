@@ -13,6 +13,22 @@ from src.robot_systems.paint.processes.paint.config import (
 
 class PaintProcessSettingsMapper:
     @staticmethod
+    def _group_ids_from_value(value: object) -> list[str]:
+        if isinstance(value, str):
+            items = value.split(",")
+        else:
+            try:
+                items = list(value or [])
+            except TypeError:
+                return []
+        result: list[str] = []
+        for item in items:
+            group_id = str(item or "").strip()
+            if group_id and group_id not in result:
+                result.append(group_id)
+        return result
+
+    @staticmethod
     def _pose_to_text(position: object) -> str:
         if not position:
             return ""
@@ -349,6 +365,9 @@ class PaintProcessSettingsMapper:
             "magazine_load_enabled": magazine.enabled,
             "magazine_pickup_mode": magazine.pickup_mode,
             "magazine_fixed_pickup_group_id": magazine.fixed_pickup_group_id,
+            "magazine_fixed_pickup_group_ids": ", ".join(
+                magazine.fixed_pickup_group_ids
+            ),
             "magazine_fixed_pickup_position_tolerance_mm": magazine.fixed_pickup_position_tolerance_mm,
             "magazine_fixed_pickup_orientation_tolerance_deg": magazine.fixed_pickup_orientation_tolerance_deg,
             "magazine_full_retract_before_release": magazine.full_retract_before_release,
@@ -716,6 +735,12 @@ class PaintProcessSettingsMapper:
             fixed_pickup_group_id=str(
                 flat.get("magazine_fixed_pickup_group_id", base.magazine_load.fixed_pickup_group_id)
             ).strip(),
+            fixed_pickup_group_ids=PaintProcessSettingsMapper._group_ids_from_value(
+                flat.get(
+                    "magazine_fixed_pickup_group_ids",
+                    base.magazine_load.fixed_pickup_group_ids,
+                )
+            ),
             fixed_pickup_position_tolerance_mm=float(
                 flat.get(
                     "magazine_fixed_pickup_position_tolerance_mm",
