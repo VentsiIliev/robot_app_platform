@@ -109,10 +109,19 @@ def execute_magazine_pickup_release(
     pickup_rx = float(pickup_base_pose[3])
     pickup_ry = float(pickup_base_pose[4])
     pickup_rz = float(pickup_rz)
-    approach_pose = (
-        list(fixed_approach_pose)
-        if fixed_approach_pose is not None
-        else [
+    if fixed_approach_pose is not None:
+        approach_pose = list(fixed_approach_pose)
+    elif magazine_pickup_mode == MAGAZINE_PICKUP_MODE_AUTO_DISCOVERY_SENSOR_CONTROLLED_FAST_LIN:
+        approach_pose = [
+            pickup_x,
+            pickup_y,
+            float(pickup_base_pose[2]),
+            pickup_rx,
+            pickup_ry,
+            pickup_rz,
+        ]
+    else:
+        approach_pose = [
             pickup_x,
             pickup_y,
             float(pickup_z) + pickup_motion.approach_offset_mm,
@@ -120,7 +129,6 @@ def execute_magazine_pickup_release(
             pickup_ry,
             pickup_rz,
         ]
-    )
     pickup_pose = [pickup_x, pickup_y, float(pickup_z), pickup_rx, pickup_ry, pickup_rz]
     lift_pose = [
         pickup_x,

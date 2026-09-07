@@ -172,7 +172,6 @@ class PaintProductionService:
                     completed_cycles=completed_cycles,
                 )
                 return False, msg
-            self._last_execution_context = None
             ok, msg = self._run_single_cycle(
                 should_stop,
                 process_config=process_config,
@@ -226,6 +225,7 @@ class PaintProductionService:
         group_index = 0
         consecutive_empty_groups = 0
         discovery_contours: list = []
+        discovery_active_contour = None
         discovery_snapshot = None
         pickup_mode = str(getattr(magazine_config, "pickup_mode", "") or "").strip().lower()
         auto_discovery = (
@@ -238,6 +238,7 @@ class PaintProductionService:
                 if auto_discovery
                 else self._magazine_source_group(active_source, magazine_config)
             )
+            self._last_execution_context = None
             ok, msg = self._run_single_cycle(
                 should_stop,
                 process_config=process_config,
@@ -248,23 +249,29 @@ class PaintProductionService:
                 cycle_index=completed_cycles + 1,
                 repeats_after_success=True,
                 magazine_discovery_contours=discovery_contours,
+                magazine_discovery_active_contour=discovery_active_contour,
                 magazine_discovery_snapshot=discovery_snapshot,
             )
 
             context = self._last_execution_context
             if auto_discovery and context is not None:
                 discovery_contours = list(context.magazine_discovery_contours)
+                discovery_active_contour = context.magazine_discovery_active_contour
                 discovery_snapshot = context.magazine_snapshot
 
             if not ok and msg == NO_WORKPIECE_AT_MAGAZINE:
                 if auto_discovery:
-                    self._log_phase_timing(
-                        "magazine_loop_total",
-                        total_start,
-                        success=True,
-                        completed_cycles=completed_cycles,
-                    )
-                    return True, MAGAZINE_EMPTY
+                    if context is not None and context.magazine_discovery_empty_capture:
+                        self._log_phase_timing(
+                            "magazine_loop_total",
+                            total_start,
+                            success=True,
+                            completed_cycles=completed_cycles,
+                        )
+                        return True, MAGAZINE_EMPTY
+                    discovery_active_contour = None
+                    self._clear_prepositioned_start_group()
+                    continue
                 consecutive_empty_groups += 1
                 if sources and consecutive_empty_groups < len(sources):
                     next_index = (group_index + 1) % len(sources)
@@ -350,6 +357,7 @@ class PaintProductionService:
         cycle_index: int,
         repeats_after_success: bool = False,
         magazine_discovery_contours: list | None = None,
+        magazine_discovery_active_contour=None,
         magazine_discovery_snapshot=None,
     ) -> tuple[bool, str]:
         raw_process_config = process_config
@@ -383,6 +391,7 @@ class PaintProductionService:
             repeats_after_success=repeats_after_success,
             total_started_at=perf_counter(),
             magazine_discovery_contours=list(magazine_discovery_contours or ()),
+            magazine_discovery_active_contour=magazine_discovery_active_contour,
             magazine_snapshot=magazine_discovery_snapshot,
         )
         if isinstance(magazine_source, dict) and "position" in magazine_source:

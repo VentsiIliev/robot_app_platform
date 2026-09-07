@@ -28,10 +28,18 @@ def handle_magazine_capture(ctx: PaintExecutionContext) -> PaintExecutionState:
     auto_discovery = (
         pickup_mode == MAGAZINE_PICKUP_MODE_AUTO_DISCOVERY_SENSOR_CONTROLLED_FAST_LIN
     )
-    if auto_discovery and ctx.magazine_discovery_contours:
-        ctx.magazine_contour = ctx.magazine_discovery_contours.pop(0)
+    if auto_discovery and ctx.magazine_discovery_active_contour is not None:
+        ctx.magazine_contour = ctx.magazine_discovery_active_contour
         _logger.info(
-            "[MAGAZINE_LOAD] Reusing auto-discovery capture; remaining_targets=%d",
+            "[MAGAZINE_LOAD] Reusing active auto-discovery pile; queued_piles=%d",
+            len(ctx.magazine_discovery_contours),
+        )
+        return PaintExecutionState.MAGAZINE_PREPARE_PICKUP_RELEASE
+    if auto_discovery and ctx.magazine_discovery_contours:
+        ctx.magazine_discovery_active_contour = ctx.magazine_discovery_contours.pop(0)
+        ctx.magazine_contour = ctx.magazine_discovery_active_contour
+        _logger.info(
+            "[MAGAZINE_LOAD] Advancing to next auto-discovery pile; queued_piles=%d",
             len(ctx.magazine_discovery_contours),
         )
         return PaintExecutionState.MAGAZINE_PREPARE_PICKUP_RELEASE
@@ -59,11 +67,12 @@ def handle_magazine_capture(ctx: PaintExecutionContext) -> PaintExecutionState:
         ctx.magazine_discovery_contours = _ordered_contours(
             getattr(ctx.magazine_snapshot, "contours", None)
         )
-        ctx.magazine_contour = (
-            ctx.magazine_discovery_contours.pop(0)
-            if ctx.magazine_discovery_contours
-            else None
-        )
+        ctx.magazine_discovery_empty_capture = not ctx.magazine_discovery_contours
+        if ctx.magazine_discovery_contours:
+            ctx.magazine_discovery_active_contour = (
+                ctx.magazine_discovery_contours.pop(0)
+            )
+        ctx.magazine_contour = ctx.magazine_discovery_active_contour
     else:
         ctx.magazine_contour = pick_largest_contour(
             getattr(ctx.magazine_snapshot, "contours", None)

@@ -53,6 +53,8 @@ class PaintExecutionContext:
     magazine_snapshot: object | None = None
     magazine_contour: object | None = None
     magazine_discovery_contours: list = field(default_factory=list)
+    magazine_discovery_active_contour: object | None = None
+    magazine_discovery_empty_capture: bool = False
     magazine_pose: list[float] | None = None
     magazine_release_pose: list[float] | None = None
     magazine_target: dict | None = None
@@ -112,5 +114,7 @@ class PaintExecutionContext:
             "calibration_group": self.calibration_group,
             "has_magazine_snapshot": self.magazine_snapshot is not None,
             "has_magazine_contour": self.magazine_contour is not None,
+            "magazine_discovery_queued_piles": len(self.magazine_discovery_contours),
+            "has_magazine_discovery_active_pile": self.magazine_discovery_active_contour is not None,
             "has_magazine_target": self.magazine_target is not None,
         }
