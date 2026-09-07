@@ -3,13 +3,12 @@
     "display_name": "Български"
   },
   "PaintPlateLayout": {
-    "Press a workpiece to select it": "Натиснете детайл, за да го изберете",
     "New Tray": "Нова тава",
     "Remove": "Премахване",
     "Painted at": "Боядисан в",
     "Drying for": "Съхне от",
     "Drying Duration": "Продължителност на сушене",
-    "Selected Drying Time": "Време за сушене на избрания детайл",
+    "Drying Time": "Време за сушене",
     "Passes": "Преминавания",
     "Drying time is unavailable": "Времето за сушене не е налично",
     "Unavailable": "Не е налично"
@@ -46,7 +45,6 @@
     "Speed": "Скорост",
     "Acceleration": "Ускорение",
     "Press Offset": "Отместване на притискане",
-    "Used only when workpiece matching is off.": "Използва се само когато съпоставянето на детайли е изключено.",
     "Apply": "Приложи",
     "Relieve Cable (Unwind J6)": "Освободи кабела (развий J6)",
     "Vacuum Pump": "Вакуумна помпа",

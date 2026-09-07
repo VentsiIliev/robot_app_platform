@@ -3,13 +3,12 @@
     "display_name": "English"
   },
   "PaintPlateLayout": {
-    "Press a workpiece to select it": "Press a workpiece to select it",
     "New Tray": "New Tray",
     "Remove": "Remove",
     "Painted at": "Painted at",
     "Drying for": "Drying for",
     "Drying Duration": "Drying Duration",
-    "Selected Drying Time": "Selected Drying Time",
+    "Drying Time": "Drying Time",
     "Passes": "Passes",
     "Drying time is unavailable": "Drying time is unavailable",
     "Unavailable": "Unavailable"
@@ -46,7 +45,6 @@
     "Speed": "Speed",
     "Acceleration": "Acceleration",
     "Press Offset": "Press Offset",
-    "Used only when workpiece matching is off.": "Used only when workpiece matching is off.",
     "Apply": "Apply",
     "Relieve Cable (Unwind J6)": "Relieve Cable (Unwind J6)",
     "Vacuum Pump": "Vacuum Pump",

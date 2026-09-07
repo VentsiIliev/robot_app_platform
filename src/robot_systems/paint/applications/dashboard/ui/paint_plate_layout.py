@@ -233,7 +233,8 @@ class PaintPlateLayout(QWidget):
         self._selected_drying_value.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._selected_drying_value.setMinimumWidth(150)
         self._selected_drying_value.setStyleSheet(
-            f"color: {PRIMARY}; font-size: 18pt; font-weight: bold;"
+            f"color: {PRIMARY}; background-color: transparent; "
+            "font-size: 18pt; font-weight: bold;"
         )
         selected_drying_layout.addWidget(self._selected_drying_value)
         self._selected_drying_box.setVisible(self._use_dry_duration)
@@ -295,7 +296,7 @@ class PaintPlateLayout(QWidget):
             self._drying_timer.stop()
         self._remove.hide()
         self._canvas.clear_selection()
-        self._hint.setText(self.tr("Press a workpiece to select it"))
+        self._hint.clear()
         self._selected_drying_value.setText("—")
 
     def _on_new_tray(self) -> None:
@@ -383,14 +384,14 @@ class PaintPlateLayout(QWidget):
 
     def retranslateUi(self) -> None:
         if self._selected_id is None:
-            self._hint.setText(self.tr("Press a workpiece to select it"))
+            self._hint.clear()
             self._selected_drying_value.setText("—")
         else:
             self._render_selection_metadata()
         self._new_tray.setText(self.tr("New Tray"))
         self._remove.setText(self.tr("Remove"))
         self._drying_duration_box.setTitle(self.tr("Drying Duration"))
-        self._selected_drying_box.setTitle(self.tr("Selected Drying Time"))
+        self._selected_drying_box.setTitle(self.tr("Drying Time"))
 
     def changeEvent(self, event: QEvent) -> None:
         if event.type() == QEvent.Type.LanguageChange:

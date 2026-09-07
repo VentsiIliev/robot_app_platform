@@ -223,9 +223,6 @@ class PaintControlsDrawer(QWidget):
         self._pass_2_velocity.valueChanged.connect(self._update_resolved_speed_labels)
         self._unmatched_tabs.addTab(pass_2_widget, "")
         unmatched_layout.addWidget(self._unmatched_tabs)
-        self._unmatched_note = QLabel()
-        self._unmatched_note.setWordWrap(True)
-        unmatched_layout.addWidget(self._unmatched_note)
         self._unmatched_apply = QPushButton()
         self._unmatched_apply.setStyleSheet(ACTION_BTN_STYLE)
         self._unmatched_apply.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -656,7 +653,6 @@ class PaintControlsDrawer(QWidget):
         for label, text in zip(self._pass_2_labels, (pass_2_velocity_label, "Acceleration", "Press Offset")):
             label.setText(self.tr(text))
         self._update_resolved_speed_labels()
-        self._unmatched_note.setText(self.tr("Used only when workpiece matching is off."))
         self._unmatched_apply.setText(self.tr("Apply"))
         self._relief_button.setText(self.tr("Relieve Cable (Unwind J6)"))
         self._shortcuts_box.setTitle(self.tr("Application Shortcuts"))
