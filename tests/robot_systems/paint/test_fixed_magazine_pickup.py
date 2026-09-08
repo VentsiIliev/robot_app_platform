@@ -34,10 +34,12 @@ from src.robot_systems.paint.applications.paint_process_settings.mapper import (
 
 
 class TestFixedMagazinePickup(unittest.TestCase):
-    def test_cached_auto_discovery_can_skip_camera_wait_and_enter_capture(self):
+    def test_cached_auto_discovery_moves_to_magazine_before_skipping_camera_wait(self):
         load_service = MagicMock()
+        load_service._move_to_group_with_pause_resume_recovery.return_value = True
         service = MagicMock()
         service._magazine_load_service = load_service
+        service._consume_verified_prepositioned_start_group.return_value = False
         config = PaintMagazineLoadConfig(
             enabled=True,
             pickup_mode=MAGAZINE_PICKUP_MODE_AUTO_DISCOVERY_SENSOR_CONTROLLED_FAST_LIN,
@@ -55,7 +57,12 @@ class TestFixedMagazinePickup(unittest.TestCase):
                 PaintExecutionState.MAGAZINE_MOVE_TO_MAGAZINE
             ],
         )
-        load_service._move_to_group_with_pause_resume_recovery.assert_not_called()
+        load_service._move_to_group_with_pause_resume_recovery.assert_called_once()
+        self.assertEqual(
+            "Magazine",
+            load_service._move_to_group_with_pause_resume_recovery.call_args.args[2],
+        )
+        service._restore_capture_view.assert_not_called()
 
     def test_auto_discovery_approaches_and_retracts_at_configured_z(self):
         process_config = PaintProcessConfig(

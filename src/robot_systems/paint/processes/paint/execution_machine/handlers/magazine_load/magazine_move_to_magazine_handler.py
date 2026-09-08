@@ -41,17 +41,13 @@ def handle_magazine_move_to_magazine(ctx: PaintExecutionContext) -> PaintExecuti
         ctx.magazine_group = str(group_id or "").strip()
     if not ctx.calibration_group:
         ctx.calibration_group = str(config.calibration_group_id or "CALIBRATION").strip()
-    if (
+    has_cached_auto_discovery = bool(
         pickup_mode == MAGAZINE_PICKUP_MODE_AUTO_DISCOVERY_SENSOR_CONTROLLED_FAST_LIN
         and (
             ctx.magazine_discovery_active_contour is not None
             or ctx.magazine_discovery_contours
         )
-    ):
-        _logger.info(
-            "[MAGAZINE_LOAD] Auto-discovery piles are cached; skipping Magazine capture pose"
-        )
-        return PaintExecutionState.MAGAZINE_CAPTURE
+    )
     if not ctx.magazine_group:
         ctx.set_result(False, "Magazine movement group is not configured")
         return PaintExecutionState.ERROR
@@ -82,6 +78,12 @@ def handle_magazine_move_to_magazine(ctx: PaintExecutionContext) -> PaintExecuti
         _logger.info("[MAGAZINE_LOAD] Reusing verified prepositioned group '%s'", ctx.magazine_group)
         if pickup_mode == MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN:
             return PaintExecutionState.MAGAZINE_PREPARE_PICKUP_RELEASE
+        if has_cached_auto_discovery:
+            _logger.info(
+                "[MAGAZINE_LOAD] Auto-discovery piles are cached; "
+                "reusing verified Magazine pose and skipping camera settle"
+            )
+            return PaintExecutionState.MAGAZINE_CAPTURE
         service._restore_capture_view("after verifying prepositioned magazine pickup")
         return PaintExecutionState.MAGAZINE_WAIT_CAMERA_SETTLE
 
@@ -136,5 +138,11 @@ def handle_magazine_move_to_magazine(ctx: PaintExecutionContext) -> PaintExecuti
     _logger.info("[MAGAZINE_LOAD] Moved to magazine group '%s'", ctx.magazine_group)
     if pickup_mode == MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN:
         return PaintExecutionState.MAGAZINE_PREPARE_PICKUP_RELEASE
+    if has_cached_auto_discovery:
+        _logger.info(
+            "[MAGAZINE_LOAD] Auto-discovery piles are cached; "
+            "positioned at Magazine pose and skipping camera settle"
+        )
+        return PaintExecutionState.MAGAZINE_CAPTURE
     service._restore_capture_view("after reaching magazine pickup")
     return PaintExecutionState.MAGAZINE_WAIT_CAMERA_SETTLE
