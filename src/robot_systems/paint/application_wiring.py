@@ -883,7 +883,9 @@ def _build_calibration_settings_application(robot_system):
     )
     jog_service = build_robot_system_jog_service(robot_system)
     return WidgetApplication(
-        widget_factory=lambda ms: CalibrationSettingsFactory().build(
+        widget_factory=lambda ms: CalibrationSettingsFactory(
+            work_area_definitions=robot_system.get_work_area_definitions()
+        ).build(
             service,
             messaging=ms,
             jog_service=jog_service,

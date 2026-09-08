@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 from src.engine.common_settings_ids import CommonSettingsID
 from src.engine.robot.calibration.robot_calibration.config_helpers import (
     RobotCalibrationConfig,
@@ -7,6 +9,75 @@ from src.engine.robot.calibration.robot_calibration.config_helpers import (
 )
 from src.engine.robot.calibration.robot_calibration_service import RobotCalibrationService
 from src.shared_contracts.events.robot_events import RobotCalibrationTopics
+
+
+class _CalibrationArtifactVisionProxy:
+    """Delegate vision operations while routing calibration output to the selected profile."""
+
+    def __init__(self, vision_service, settings_service):
+        self._vision_service = vision_service
+        self._settings_service = settings_service
+        self._locked_matrix_path = None
+        self._locked_target_area_id = None
+
+    def __getattr__(self, name):
+        return getattr(self._vision_service, name)
+
+    @property
+    def camera_to_robot_matrix_path(self) -> str:
+        if self._locked_matrix_path is not None:
+            return self._locked_matrix_path
+        return self._resolve_matrix_path()
+
+    def begin_calibration(self) -> None:
+        if self._locked_matrix_path is not None:
+            raise RuntimeError("A calibration artifact destination is already locked")
+        self._locked_target_area_id = self._selected_target_area_id()
+        self._locked_matrix_path = self._resolve_matrix_path(self._locked_target_area_id)
+
+    def end_calibration(self) -> None:
+        self._locked_matrix_path = None
+        self._locked_target_area_id = None
+
+    def get_calibration_target_area_id(self) -> str:
+        if self._locked_target_area_id is None:
+            return self._selected_target_area_id()
+        return self._locked_target_area_id
+
+    def _selected_target_area_id(self) -> str:
+        settings = self._settings_service.get(CommonSettingsID.CALIBRATION_VISION_SETTINGS)
+        return str(
+            getattr(settings, "calibration_target_work_area", "global") or "global"
+        ).strip()
+
+    def _resolve_matrix_path(self, area_id=None) -> str:
+        global_path = self._vision_service.camera_to_robot_matrix_path
+        settings = self._settings_service.get(CommonSettingsID.CALIBRATION_VISION_SETTINGS)
+        area_id = str(area_id or self._selected_target_area_id()).strip()
+        if area_id == "global":
+            return global_path
+        profile_id = (getattr(settings, "work_area_calibration_profiles", {}) or {}).get(area_id)
+        if not profile_id:
+            raise RuntimeError(f"Calibration destination {area_id!r} has no assigned profile")
+        if profile_id == "global":
+            raise RuntimeError(
+                f"Calibration destination {area_id!r} uses the shared global profile; "
+                "assign a dedicated profile before calibrating this area"
+            )
+        profile = (getattr(settings, "coordinate_calibration_profiles", {}) or {}).get(profile_id)
+        if profile is None:
+            raise RuntimeError(f"Calibration profile {profile_id!r} is not defined")
+        configured_path = str(getattr(profile, "matrix_path", "") or "").strip()
+        if not configured_path:
+            raise RuntimeError(f"Calibration profile {profile_id!r} has no matrix path")
+        if os.path.isabs(configured_path):
+            resolved = configured_path
+        else:
+            resolved = os.path.normpath(os.path.join(os.path.dirname(global_path), configured_path))
+        parent = os.path.dirname(resolved)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+        return resolved
 
 
 def build_robot_system_calibration_service(robot_system) -> RobotCalibrationService:
@@ -69,6 +140,10 @@ def build_robot_system_calibration_service(robot_system) -> RobotCalibrationServ
             "without calibration vision settings. Ensure CommonSettingsID.CALIBRATION_VISION_SETTINGS is declared and loaded."
         )
 
+    calibration_vision_service = _CalibrationArtifactVisionProxy(
+        vision_service,
+        settings_service,
+    )
     events_config = RobotCalibrationEventsConfig(
         broker=messaging_service,
         calibration_start_topic=RobotCalibrationTopics.ROBOT_CALIBRATION_START,
@@ -78,9 +153,11 @@ def build_robot_system_calibration_service(robot_system) -> RobotCalibrationServ
     )
 
     config = RobotCalibrationConfig(
-        vision_service=vision_service,
+        vision_service=calibration_vision_service,
         robot_service=robot_service,
-        navigation_service=provider.build_calibration_navigation(),
+        navigation_service=provider.build_calibration_navigation(
+            calibration_target_area_id_getter=calibration_vision_service.get_calibration_target_area_id,
+        ),
         height_measuring_service=height_service,
         required_ids=calib_settings.required_ids,
         candidate_ids=getattr(calib_settings, "candidate_ids", []),

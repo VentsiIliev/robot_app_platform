@@ -39,8 +39,38 @@ VISION_CALIBRATION_GROUP = SettingGroup("Camera Calibration", [
                  default=30, min_val=1, max_val=200, step=1, step_options=[1, 5, 10]),
 ])
 
+COORDINATE_CALIBRATION_GROUP = SettingGroup("Coordinate Calibration", [
+    SettingField(
+        "coordinate_calibration_mode",
+        "Calibration Mode",
+        "combo",
+        default="global",
+        choices=["global", "per_area"],
+    ),
+    SettingField(
+        "calibration_target_work_area",
+        "Calibration Destination",
+        "combo",
+        default="global",
+        choices=["global"],
+    ),
+    SettingField(
+        "coordinate_calibration_profiles",
+        "Named Profiles (JSON)",
+        "line_edit",
+        default="{}",
+    ),
+    SettingField(
+        "work_area_calibration_profiles",
+        "Work Area Assignments (JSON)",
+        "line_edit",
+        default="{}",
+    ),
+])
+
 __all__ = [
     "VISION_CALIBRATION_GROUP",
+    "COORDINATE_CALIBRATION_GROUP",
     "CALIBRATION_ADAPTIVE_GROUP",
     "CALIBRATION_MARKER_GROUP",
     "CALIBRATION_AXIS_MAPPING_GROUP",

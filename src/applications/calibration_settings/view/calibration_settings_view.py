@@ -1,4 +1,6 @@
 from PyQt6.QtCore import pyqtSignal
+from copy import deepcopy
+
 from PyQt6.QtWidgets import QVBoxLayout
 
 from src.applications.base.keyboard_settings_view import KeyboardSettingsView
@@ -7,6 +9,7 @@ from src.applications.calibration_settings.view.calibration_settings_schema impo
     CALIBRATION_ADAPTIVE_GROUP,
     CALIBRATION_AXIS_MAPPING_GROUP,
     CALIBRATION_CAMERA_TCP_GROUP,
+    COORDINATE_CALIBRATION_GROUP,
     CALIBRATION_MARKER_GROUP,
     HEIGHT_MAPPING_GROUP,
     LASER_CALIBRATION_GROUP,
@@ -25,8 +28,9 @@ class CalibrationSettingsView(IApplicationView):
 
     save_requested = None
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, work_area_ids=None):
         self._workobject_tab = None
+        self._work_area_ids = list(work_area_ids or [])
         super().__init__("CalibrationSettings", parent)
 
     def setup_ui(self) -> None:
@@ -35,7 +39,14 @@ class CalibrationSettingsView(IApplicationView):
         layout.setSpacing(0)
 
         self.settings_view = KeyboardSettingsView(component_name="CalibrationSettings")
-        self.settings_view.add_tab("Camera", [VISION_CALIBRATION_GROUP])
+        coordinate_group = deepcopy(COORDINATE_CALIBRATION_GROUP)
+        for field in coordinate_group.fields:
+            if field.key == "calibration_target_work_area":
+                field.choices = ["global", *self._work_area_ids]
+        self.settings_view.add_tab(
+            "Camera",
+            [VISION_CALIBRATION_GROUP, coordinate_group],
+        )
         self.settings_view.add_tab(
             "Robot",
             [

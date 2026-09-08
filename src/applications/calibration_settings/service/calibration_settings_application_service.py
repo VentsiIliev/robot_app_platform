@@ -65,7 +65,10 @@ class CalibrationSettingsApplicationService(ICalibrationSettingsService):
             camera_settings = self._settings_service.get(CommonSettingsID.VISION_CAMERA_SETTINGS)
             if isinstance(camera_settings, CameraSettings):
                 merged = dict(camera_settings.data)
-                merged.update(settings.vision.to_dict())
+                # Coordinate-calibration routing is platform settings, not a
+                # VisionSystem camera setting. Only push the camera-calibration
+                # section into the live vision runtime.
+                merged["Calibration"] = settings.vision.to_dict()["Calibration"]
                 self._settings_service.save(CommonSettingsID.VISION_CAMERA_SETTINGS, CameraSettings(data=merged))
                 if self._vision_service is not None:
                     self._vision_service.update_settings(merged)

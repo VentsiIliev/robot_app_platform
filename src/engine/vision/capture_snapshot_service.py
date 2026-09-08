@@ -45,7 +45,7 @@ class CaptureSnapshotService(ICaptureSnapshotService):
         robot_pose_elapsed = time.perf_counter() - robot_pose_started
 
         validate_started = time.perf_counter()
-        robot_pose = self._validate_active_work_area(source, robot_pose)
+        active_area_id = self._validate_active_work_area(source, robot_pose)
         validate_elapsed = time.perf_counter() - validate_started
 
         vision_elapsed = 0.0
@@ -70,6 +70,8 @@ class CaptureSnapshotService(ICaptureSnapshotService):
                     _logger.exception("Failed to capture latest contours fallback for source=%s", source)
                 vision_elapsed = time.perf_counter() - fallback_started
 
+        self._ensure_active_work_area_unchanged(active_area_id)
+
         contour_count = len(contours or [])
         _logger.info(
             "[CAPTURE_TIMING] source=%s robot_pose_s=%.3f active_area_validate_s=%.3f "
@@ -89,6 +91,7 @@ class CaptureSnapshotService(ICaptureSnapshotService):
             robot_pose=robot_pose,
             timestamp_s=time.time(),
             source=source,
+            work_area_id=active_area_id,
         )
 
     def _capture_robot_pose(self, source: str) -> Optional[list[float]]:
@@ -104,9 +107,9 @@ class CaptureSnapshotService(ICaptureSnapshotService):
         self,
         source: str,
         robot_pose: Optional[list[float]],
-    ) -> None:
+    ) -> str:
         if self._work_area_service is None or self._active_work_area_validator is None:
-            return
+            return ""
         try:
             active_area_id = str(self._work_area_service.get_active_area_id() or "").strip()
         except Exception as exc:
@@ -128,4 +131,20 @@ class CaptureSnapshotService(ICaptureSnapshotService):
             detail = message or f"Robot is not verified at active work area '{active_area_id}'."
             raise ActiveWorkAreaVerificationError(
                 f"Vision capture blocked for {source or 'unknown source'}: {detail}"
+            )
+        return active_area_id
+
+    def _ensure_active_work_area_unchanged(self, captured_area_id: str) -> None:
+        if not captured_area_id or self._work_area_service is None:
+            return
+        try:
+            current_area_id = str(self._work_area_service.get_active_area_id() or "").strip()
+        except Exception as exc:
+            raise ActiveWorkAreaVerificationError(
+                "Cannot confirm the active work area after vision capture."
+            ) from exc
+        if current_area_id != captured_area_id:
+            raise ActiveWorkAreaVerificationError(
+                f"Active work area changed from {captured_area_id!r} to {current_area_id!r} "
+                "during vision capture; discard the inconsistent snapshot and capture again."
             )
