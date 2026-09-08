@@ -80,6 +80,37 @@ class PaintProcessSettingsMapper:
         return values
 
     @staticmethod
+    def _pose_to_waypoint_rows(
+        position: object,
+        default_vel: float,
+        default_acc: float,
+    ) -> list[dict]:
+        pose = PaintProcessSettingsMapper._pose_from_value(position, [])
+        if not pose:
+            return []
+        return [{
+            "position": pose,
+            "vel_percent": float(default_vel),
+            "acc_percent": float(default_acc),
+            "motion_type": "ptp",
+            "blendR": 0.0,
+        }]
+
+    @staticmethod
+    def _single_pose_from_value(value: object, fallback: list[float]) -> list[float]:
+        if isinstance(value, (list, tuple)) and value and isinstance(value[0], dict):
+            return PaintProcessSettingsMapper._pose_from_value(
+                value[0].get("position", value[0].get("pose", [])),
+                fallback,
+            )
+        if isinstance(value, dict):
+            return PaintProcessSettingsMapper._pose_from_value(
+                value.get("position", value.get("pose", [])),
+                fallback,
+            )
+        return PaintProcessSettingsMapper._pose_from_value(value, fallback)
+
+    @staticmethod
     def _waypoint_from_value(value: object, default_vel: float, default_acc: float) -> dict | None:
         if isinstance(value, dict):
             pose = PaintProcessSettingsMapper._pose_from_value(
@@ -200,6 +231,7 @@ class PaintProcessSettingsMapper:
             "center_to_dropoff",
             "exit_center",
             "exit_gate",
+            "gate_to_next_midpoint",
             "gate_to_next_start",
         )
         incoming = PaintProcessSettingsMapper._profiles_by_key(value)
@@ -355,7 +387,13 @@ class PaintProcessSettingsMapper:
             "dropoff_plate_spacing_y_mm": dropoff.plate_spacing_y_mm,
             "dropoff_plate_robot_tool": dropoff.plate_robot_tool,
             "dropoff_plate_robot_user": dropoff.plate_robot_user,
-            "dropoff_plate_passage_gate": PaintProcessSettingsMapper._pose_to_text(dropoff.plate_passage_gate_pose),
+            "dropoff_plate_passage_gate": PaintProcessSettingsMapper._pose_to_waypoint_rows(
+                dropoff.plate_passage_gate_pose, 70.0, 50.0
+            ),
+            "dropoff_plate_next_cycle_midpoint_enabled": dropoff.plate_next_cycle_midpoint_enabled,
+            "dropoff_plate_next_cycle_midpoint": PaintProcessSettingsMapper._pose_to_waypoint_rows(
+                dropoff.plate_next_cycle_midpoint_pose, 60.0, 40.0
+            ),
             "dropoff_plate_use_center_waypoint": dropoff.plate_use_center_waypoint,
             "dropoff_plate_distribute_unwind": dropoff.plate_distribute_unwind,
             "dropoff_plate_motion_profiles": [dict(profile) for profile in dropoff.plate_motion_profiles],
@@ -697,8 +735,16 @@ class PaintProcessSettingsMapper:
             plate_spacing_y_mm=float(flat.get("dropoff_plate_spacing_y_mm", base.dropoff.plate_spacing_y_mm)),
             plate_robot_tool=int(flat.get("dropoff_plate_robot_tool", base.dropoff.plate_robot_tool)),
             plate_robot_user=int(flat.get("dropoff_plate_robot_user", base.dropoff.plate_robot_user)),
-            plate_passage_gate_pose=PaintProcessSettingsMapper._pose_from_value(
+            plate_passage_gate_pose=PaintProcessSettingsMapper._single_pose_from_value(
                 flat.get("dropoff_plate_passage_gate", ""), base.dropoff.plate_passage_gate_pose
+            ),
+            plate_next_cycle_midpoint_enabled=bool(flat.get(
+                "dropoff_plate_next_cycle_midpoint_enabled",
+                base.dropoff.plate_next_cycle_midpoint_enabled,
+            )),
+            plate_next_cycle_midpoint_pose=PaintProcessSettingsMapper._single_pose_from_value(
+                flat.get("dropoff_plate_next_cycle_midpoint", ""),
+                base.dropoff.plate_next_cycle_midpoint_pose,
             ),
             plate_use_center_waypoint=bool(flat.get(
                 "dropoff_plate_use_center_waypoint", base.dropoff.plate_use_center_waypoint

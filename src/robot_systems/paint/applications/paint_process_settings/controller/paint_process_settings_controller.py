@@ -38,6 +38,7 @@ class PaintProcessSettingsController(IApplicationController, BackgroundWorker):
         self._view.save_requested.connect(self._on_save)
         self._view.set_safe_travel_current_requested.connect(self._on_set_safe_travel_current)
         self._view.set_dropoff_safe_travel_current_requested.connect(self._on_set_dropoff_safe_travel_current)
+        self._view.set_plate_route_pose_current_requested.connect(self._on_set_plate_route_pose_current)
         self._view.add_fixed_magazine_current_requested.connect(self._on_add_fixed_magazine_current)
         self._view.capture_plate_corner_requested.connect(self._on_capture_plate_corner)
         self._view.move_to_plate_corner_requested.connect(self._on_move_to_plate_corner)
@@ -59,6 +60,10 @@ class PaintProcessSettingsController(IApplicationController, BackgroundWorker):
             pass
         try:
             self._view.set_dropoff_safe_travel_current_requested.disconnect(self._on_set_dropoff_safe_travel_current)
+        except Exception:
+            pass
+        try:
+            self._view.set_plate_route_pose_current_requested.disconnect(self._on_set_plate_route_pose_current)
         except Exception:
             pass
         try:
@@ -90,7 +95,7 @@ class PaintProcessSettingsController(IApplicationController, BackgroundWorker):
         if not self._dropoff_strategy_is_allowed(flat):
             if str(flat.get("dropoff_strategy", "")).strip().lower() == "plate_layout":
                 message = self._t(
-                    "Plate layout requires four valid corners ordered BL, BR, TR, TL and a valid passage gate pose."
+                    "Plate layout requires four valid corners ordered BL, BR, TR, TL, a valid passage gate pose, and a valid midpoint pose when the midpoint is enabled."
                 )
                 show_warning(self._view, self._t("Plate Layout Not Configured"), message)
                 self._view.set_status(message)
@@ -252,11 +257,20 @@ class PaintProcessSettingsController(IApplicationController, BackgroundWorker):
             _, error = validate_plate_corners(corners)
             if error:
                 return False
-            gate = PaintProcessSettingsMapper._pose_from_value(
+            gate = PaintProcessSettingsMapper._single_pose_from_value(
                 flat.get("dropoff_plate_passage_gate", ""), []
             )
             _, error = validate_plate_passage_gate(gate)
-            return not error
+            if error:
+                return False
+            if bool(flat.get("dropoff_plate_next_cycle_midpoint_enabled", False)):
+                midpoint = PaintProcessSettingsMapper._single_pose_from_value(
+                    flat.get("dropoff_plate_next_cycle_midpoint", ""), []
+                )
+                _, error = validate_plate_passage_gate(midpoint)
+                if error:
+                    return False
+            return True
         return True
 
     def _safe_travel_is_allowed(self, flat: dict) -> bool:
@@ -320,6 +334,18 @@ class PaintProcessSettingsController(IApplicationController, BackgroundWorker):
         self._view.set_dropoff_safe_travel_position(position)
         self._view.set_status(
             self._t("Paint-to-dropoff safe travel pose set. Waypoint added from current robot position. Save settings to keep it.")
+        )
+
+    def _on_set_plate_route_pose_current(self, key: str) -> None:
+        position = self._model.get_current_robot_position()
+        if position is None:
+            message = self._t("Could not read the current robot position for the plate route pose.")
+            show_warning(self._view, self._t("Robot Position Not Available"), message)
+            self._view.set_status(message)
+            return
+        self._view.set_plate_route_pose(key, position)
+        self._view.set_status(
+            self._t("Plate route pose set from the current robot position. Save settings to keep it.")
         )
 
     def _on_add_fixed_magazine_current(self) -> None:

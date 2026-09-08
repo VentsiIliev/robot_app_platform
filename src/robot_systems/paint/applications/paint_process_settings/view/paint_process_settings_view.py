@@ -71,7 +71,8 @@ _VISION_MAGAZINE_ONLY_KEYS = {
 _PLATE_DROPOFF_ONLY_KEYS = {
     "dropoff_plate_corners",
     "dropoff_plate_robot_frame", "dropoff_plate_motion_profiles",
-    "dropoff_plate_passage_gate", "dropoff_plate_capture_passage_gate",
+    "dropoff_plate_passage_gate", "dropoff_plate_next_cycle_midpoint_enabled",
+    "dropoff_plate_next_cycle_midpoint",
     "dropoff_plate_use_center_waypoint",
     "dropoff_plate_distribute_unwind",
     "dropoff_plate_release_z_offset_mm", "dropoff_plate_approach_clearance_mm",
@@ -1036,6 +1037,7 @@ class PaintProcessSettingsView(IApplicationView):
     value_changed = pyqtSignal(str, object)
     set_safe_travel_current_requested = pyqtSignal()
     set_dropoff_safe_travel_current_requested = pyqtSignal()
+    set_plate_route_pose_current_requested = pyqtSignal(str)
     add_fixed_magazine_current_requested = pyqtSignal()
     capture_plate_corner_requested = pyqtSignal(str)
     move_to_plate_corner_requested = pyqtSignal(dict)
@@ -1084,6 +1086,9 @@ class PaintProcessSettingsView(IApplicationView):
 
     def set_dropoff_safe_travel_position(self, position: list[float]) -> None:
         self._append_waypoint("dropoff_safe_travel_positions", position)
+
+    def set_plate_route_pose(self, key: str, position: list[float]) -> None:
+        self._append_waypoint(key, position)
 
     def set_plate_corner(self, corner_key: str, position: list[float], tool: int, user: int) -> None:
         values = self.values()
@@ -1271,6 +1276,9 @@ class PaintProcessSettingsView(IApplicationView):
         if key == "dropoff_safe_travel_positions" and value == "dropoff_safe_travel_positions_add_current":
             self.set_dropoff_safe_travel_current_requested.emit()
             return
+        if key in {"dropoff_plate_passage_gate", "dropoff_plate_next_cycle_midpoint"} and value == f"{key}_add_current":
+            self.set_plate_route_pose_current_requested.emit(key)
+            return
         if key == "magazine_fixed_pickup_sources" and value == "add_current":
             self.add_fixed_magazine_current_requested.emit()
             return
@@ -1283,13 +1291,12 @@ class PaintProcessSettingsView(IApplicationView):
                 if isinstance(waypoint, dict):
                     self.move_to_plate_corner_requested.emit(waypoint)
                 return
-        corner_actions = {
-            "dropoff_plate_capture_passage_gate": "dropoff_plate_passage_gate",
-        }
-        if key in corner_actions and bool(value):
-            self.capture_plate_corner_requested.emit(corner_actions[key])
-            return
-        if key in {"safe_travel_positions", "dropoff_safe_travel_positions"} and isinstance(value, dict):
+        if key in {
+            "safe_travel_positions",
+            "dropoff_safe_travel_positions",
+            "dropoff_plate_passage_gate",
+            "dropoff_plate_next_cycle_midpoint",
+        } and isinstance(value, dict):
             if value.get("action") == "move_to":
                 waypoint = value.get("waypoint", {})
                 if isinstance(waypoint, dict):
@@ -1348,7 +1355,10 @@ class PaintProcessSettingsView(IApplicationView):
         waypoints = _WaypointTable._normalize_waypoints(values.get(key, []), default_vel, default_acc)
         waypoint = _WaypointTable._normalize_waypoint(position, default_vel, default_acc)
         if waypoint is not None:
-            waypoints.append(waypoint)
+            if key in {"dropoff_plate_passage_gate", "dropoff_plate_next_cycle_midpoint"}:
+                waypoints = [waypoint]
+            else:
+                waypoints.append(waypoint)
         values[key] = waypoints
         self.set_values(values)
         self._current_values = values
@@ -1357,6 +1367,10 @@ class PaintProcessSettingsView(IApplicationView):
     @staticmethod
     def _waypoint_defaults_for_key(key: str) -> tuple[float, float]:
         if key == "dropoff_safe_travel_positions":
+            return 60.0, 40.0
+        if key == "dropoff_plate_passage_gate":
+            return 70.0, 50.0
+        if key == "dropoff_plate_next_cycle_midpoint":
             return 60.0, 40.0
         return 50.0, 20.0
 

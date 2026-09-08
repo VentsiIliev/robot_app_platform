@@ -229,6 +229,8 @@ class TestPlateLayoutDropoff(unittest.TestCase):
             plate_robot_tool=7,
             plate_robot_user=3,
             plate_passage_gate_pose=[200, 100, 180, 180, 0, 0],
+            plate_next_cycle_midpoint_enabled=True,
+            plate_next_cycle_midpoint_pose=[150, 50, 160, 180, 0, 10],
             plate_use_center_waypoint=False,
             plate_distribute_unwind=True,
             plate_motion_profiles=[
@@ -237,6 +239,7 @@ class TestPlateLayoutDropoff(unittest.TestCase):
                 {"key": "center_to_dropoff", "vel_percent": 13, "acc_percent": 23, "motion_type": "linear", "blendR": 3},
                 {"key": "exit_center", "vel_percent": 14, "acc_percent": 24, "motion_type": "ptp", "blendR": 4},
                 {"key": "exit_gate", "vel_percent": 15, "acc_percent": 25, "motion_type": "ptp", "blendR": 5},
+                {"key": "gate_to_next_midpoint", "vel_percent": 17, "acc_percent": 27, "motion_type": "ptp", "blendR": 7},
                 {"key": "gate_to_next_start", "vel_percent": 16, "acc_percent": 26, "motion_type": "ptp", "blendR": 6},
             ],
         ))
@@ -252,6 +255,8 @@ class TestPlateLayoutDropoff(unittest.TestCase):
         self.assertEqual(7, restored.dropoff.plate_robot_tool)
         self.assertEqual(3, restored.dropoff.plate_robot_user)
         self.assertEqual([200, 100, 180, 180, 0, 0], restored.dropoff.plate_passage_gate_pose)
+        self.assertTrue(restored.dropoff.plate_next_cycle_midpoint_enabled)
+        self.assertEqual([150, 50, 160, 180, 0, 10], restored.dropoff.plate_next_cycle_midpoint_pose)
         self.assertFalse(restored.dropoff.plate_use_center_waypoint)
         self.assertTrue(restored.dropoff.plate_distribute_unwind)
         self.assertEqual(config.dropoff.plate_motion_profiles, restored.dropoff.plate_motion_profiles)
@@ -310,6 +315,8 @@ class TestPlateLayoutDropoff(unittest.TestCase):
             strategy="plate_layout",
             plate_corners=_corners(),
             plate_passage_gate_pose=[200, 100, 180, 180, 0, 0],
+            plate_next_cycle_midpoint_enabled=True,
+            plate_next_cycle_midpoint_pose=[150, 50, 160, 180, 0, 10],
             plate_use_center_waypoint=False,
             plate_distribute_unwind=True,
             plate_approach_clearance_mm=40.0,
@@ -319,6 +326,7 @@ class TestPlateLayoutDropoff(unittest.TestCase):
                 {"key": "center_to_dropoff", "vel_percent": 13, "acc_percent": 23, "motion_type": "linear", "blendR": 3},
                 {"key": "exit_center", "vel_percent": 14, "acc_percent": 24, "motion_type": "ptp", "blendR": 4},
                 {"key": "exit_gate", "vel_percent": 15, "acc_percent": 25, "motion_type": "ptp", "blendR": 5},
+                {"key": "gate_to_next_midpoint", "vel_percent": 17, "acc_percent": 27, "motion_type": "ptp", "blendR": 7},
                 {"key": "gate_to_next_start", "vel_percent": 16, "acc_percent": 26, "motion_type": "ptp", "blendR": 6},
             ],
         ))
@@ -353,11 +361,12 @@ class TestPlateLayoutDropoff(unittest.TestCase):
         entry = executor._motion.move_ordered_pickup_sequence.call_args_list[0].args[1]
         exit_chain = executor._motion.move_ordered_pickup_sequence.call_args_list[1].args[1]
         self.assertEqual([1, 2, 0.0], [item["blendR"] for item in entry])
-        self.assertEqual([4, 5, 0.0], [item["blendR"] for item in exit_chain])
+        self.assertEqual([4, 5, 7, 0.0], [item["blendR"] for item in exit_chain])
         self.assertEqual(["ptp", "ptp", "linear"], [item["type"] for item in entry])
         self.assertIn("center to calculated dropoff", entry[-1]["label"])
         self.assertAlmostEqual(90.0, entry[-1]["position"][5] % 360.0)
         self.assertAlmostEqual(0.0, exit_chain[-1]["position"][5] % 360.0)
+        self.assertEqual([150, 50, 160], exit_chain[-2]["position"][:3])
         self.assertEqual(2, executor._motion.move_ordered_pickup_sequence.call_count)
         self.assertEqual("Start", executor._last_prepositioned_start_group)
         executor._robot_service.unwind_joint6.assert_not_called()

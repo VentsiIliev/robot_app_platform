@@ -124,6 +124,8 @@
     "plate_robot_tool": -1,
     "plate_robot_user": -1,
     "plate_passage_gate_pose": [],
+    "plate_next_cycle_midpoint_enabled": false,
+    "plate_next_cycle_midpoint_pose": [],
     "plate_use_center_waypoint": true,
     "plate_distribute_unwind": false,
     "plate_motion_profiles": [
@@ -159,6 +161,13 @@
         "key": "exit_gate",
         "vel_percent": 70.0,
         "acc_percent": 50.0,
+        "motion_type": "ptp",
+        "blendR": 20.0
+      },
+      {
+        "key": "gate_to_next_midpoint",
+        "vel_percent": 60.0,
+        "acc_percent": 40.0,
         "motion_type": "ptp",
         "blendR": 20.0
       },

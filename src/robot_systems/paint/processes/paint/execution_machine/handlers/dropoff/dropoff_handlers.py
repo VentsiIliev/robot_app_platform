@@ -1059,6 +1059,13 @@ def _execute_plate_layout_ordered_release(
     gate_pose, error = validate_plate_passage_gate(dropoff.plate_passage_gate_pose)
     if error:
         return False, error
+    midpoint_pose = None
+    if bool(dropoff.plate_next_cycle_midpoint_enabled) and next_cycle_start is not None:
+        midpoint_pose, error = validate_plate_passage_gate(
+            dropoff.plate_next_cycle_midpoint_pose
+        )
+        if error:
+            return False, f"Plate-layout next-cycle midpoint: {error}"
     try:
         use_center_waypoint = _plate_route_uses_center(dropoff, reservation)
     except ValueError as exc:
@@ -1085,6 +1092,12 @@ def _execute_plate_layout_ordered_release(
         except (TypeError, ValueError):
             _logger.exception("[PLATE_LAYOUT] Failed to build distributed-unwind route")
             return False, "Plate-layout distributed unwind route could not be built"
+    if midpoint_pose is not None:
+        route_poses["next_midpoint"] = list(midpoint_pose)
+        route_poses["next_midpoint"][5] = unwrap_degrees(
+            float(route_poses["exit_gate"][5]),
+            float(route_poses["next_midpoint"][5]),
+        )
     entry_segments = [_plate_ordered_segment(
         "Plate entry: paint detach to passage gate",
         route_poses["entry_gate"],
@@ -1141,8 +1154,18 @@ def _execute_plate_layout_ordered_release(
         stop=next_cycle_start is None,
     ))
     if next_cycle_start is not None:
+        if midpoint_pose is not None:
+            exit_segments.append(_plate_ordered_segment(
+                "Plate exit: passage gate to next-cycle midpoint",
+                route_poses["next_midpoint"],
+                _plate_motion_profile(dropoff, "gate_to_next_midpoint"),
+            ))
         exit_segments.append(_plate_ordered_segment(
-            f"Plate exit: passage gate to next-cycle start '{next_cycle_start['group_id']}'",
+            (
+                f"Plate exit: next-cycle midpoint to next-cycle start '{next_cycle_start['group_id']}'"
+                if midpoint_pose is not None
+                else f"Plate exit: passage gate to next-cycle start '{next_cycle_start['group_id']}'"
+            ),
             route_poses["next_start"],
             _plate_motion_profile(dropoff, "gate_to_next_start"),
             stop=True,
