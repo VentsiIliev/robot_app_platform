@@ -584,6 +584,7 @@ class TestPaintDashboardUi(unittest.TestCase):
         self.assertEqual(cards[0].width(), 48)
         self.assertFalse(view._status_flyout.isHidden())
         self.assertEqual(view._status_flyout_title.text(), "Robot Status")
+        self.assertEqual(view._status_flyout_note.text(), "Waiting for robot state")
         cards[1].set_expanded(True)
         cards[1].expansion_changed.emit(True)
         self.assertFalse(cards[0].is_expanded())

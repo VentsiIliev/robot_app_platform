@@ -97,12 +97,14 @@ class PaintInfoCard(QWidget):
         self._compact = False
         self._expanded = False
         self._value = value
+        self._note = note
         self._update_indicator(value)
 
     def set_content(self, title: str, value: str, note: str) -> None:
         self._title_label.setText(title)
         self._value_label.setText(value)
         self._value = value
+        self._note = note
         self._update_indicator(value)
         self.setAccessibleName(f"{title}: {value}")
 

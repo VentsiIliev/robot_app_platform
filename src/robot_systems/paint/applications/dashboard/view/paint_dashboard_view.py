@@ -64,6 +64,8 @@ _EXPANDED_PROCESS_SECTION_HEIGHT = 300
 _COMPACT_PROCESS_SECTION_HEIGHT = 250
 _FOOTER_BUTTON_HEIGHT = 48
 _PROCESS_BUTTON_HEIGHT = 72
+_STATUS_FLYOUT_HEIGHT = 118
+_STATUS_FLYOUT_WIDTH = 320
 _EXPANDED_STATUS_MIN_WIDTH = 650
 _MESSAGE_COLLAPSED_HEIGHT = 45
 _SETTINGS_COLLAPSED_HEIGHT = 45
@@ -259,6 +261,7 @@ class PaintDashboardView(IApplicationView):
         self._status_flyout: QFrame | None = None
         self._status_flyout_title: QLabel | None = None
         self._status_flyout_value: QLabel | None = None
+        self._status_flyout_note: QLabel | None = None
         self._status_flyout_animation: QPropertyAnimation | None = None
         self._active_status_card = None
         super().__init__("PaintDashboard", parent)
@@ -443,7 +446,7 @@ class PaintDashboardView(IApplicationView):
     def _build_status_flyout(self, parent: QWidget) -> None:
         flyout = QFrame(parent)
         flyout.setStyleSheet(_MESSAGE_PANEL_STYLE)
-        flyout.setFixedHeight(76)
+        flyout.setFixedHeight(_STATUS_FLYOUT_HEIGHT)
         flyout.hide()
         layout = QVBoxLayout(flyout)
         layout.setContentsMargins(12, 8, 12, 8)
@@ -455,8 +458,15 @@ class PaintDashboardView(IApplicationView):
             f"color: {TEXT_COLOR}; font-size: 14pt; font-weight: bold; "
             "background: transparent; border: none;"
         )
+        self._status_flyout_note = QLabel()
+        self._status_flyout_note.setWordWrap(True)
+        self._status_flyout_note.setStyleSheet(
+            f"color: {TEXT_COLOR}; font-size: 10pt; "
+            "background: transparent; border: none;"
+        )
         layout.addWidget(self._status_flyout_title)
         layout.addWidget(self._status_flyout_value)
+        layout.addWidget(self._status_flyout_note, 1)
         self._status_flyout = flyout
         animation = QPropertyAnimation(flyout, b"geometry", flyout)
         animation.setDuration(240)
@@ -468,17 +478,22 @@ class PaintDashboardView(IApplicationView):
             return
         self._status_flyout_title.setText(card._title_label.text())
         self._status_flyout_value.setText(card._value_label.text())
+        self._status_flyout_note.setText(getattr(card, "_note", ""))
         rail_top = self._status_rail.mapTo(self._status_flyout.parentWidget(), card.pos())
         right = rail_top.x()
         top = rail_top.y()
-        width = 210
+        width = _STATUS_FLYOUT_WIDTH
         self._status_flyout_animation.stop()
-        self._status_flyout.setGeometry(QRect(right, top, 0, 76))
+        self._status_flyout.setGeometry(QRect(right, top, 0, _STATUS_FLYOUT_HEIGHT))
         self._status_flyout.show()
         self._status_flyout.raise_()
         self._status_rail.raise_()
-        self._status_flyout_animation.setStartValue(QRect(right, top, 0, 76))
-        self._status_flyout_animation.setEndValue(QRect(right - width, top, width, 76))
+        self._status_flyout_animation.setStartValue(
+            QRect(right, top, 0, _STATUS_FLYOUT_HEIGHT)
+        )
+        self._status_flyout_animation.setEndValue(
+            QRect(right - width, top, width, _STATUS_FLYOUT_HEIGHT)
+        )
         self._status_flyout_animation.start()
 
     def _hide_status_flyout(self) -> None:
@@ -1413,6 +1428,7 @@ class PaintDashboardView(IApplicationView):
             if card is self._active_status_card:
                 self._status_flyout_title.setText(card._title_label.text())
                 self._status_flyout_value.setText(card._value_label.text())
+                self._status_flyout_note.setText(getattr(card, "_note", ""))
             self._last_card_states[card_id] = card_state
 
     def retranslateUi(self) -> None:
