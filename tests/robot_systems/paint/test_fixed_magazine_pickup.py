@@ -21,7 +21,10 @@ from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_prepare_pickup_release_handler import (
     handle_magazine_prepare_pickup_release,
 )
-from src.robot_systems.paint.processes.paint.execution_machine.state import PaintExecutionState
+from src.robot_systems.paint.processes.paint.execution_machine.state import (
+    PaintExecutionState,
+    PaintExecutionTransitions,
+)
 from src.robot_systems.paint.processes.paint.paint_process_config_serializer import (
     PaintProcessConfigSerializer,
 )
@@ -31,6 +34,29 @@ from src.robot_systems.paint.applications.paint_process_settings.mapper import (
 
 
 class TestFixedMagazinePickup(unittest.TestCase):
+    def test_cached_auto_discovery_can_skip_camera_wait_and_enter_capture(self):
+        load_service = MagicMock()
+        service = MagicMock()
+        service._magazine_load_service = load_service
+        config = PaintMagazineLoadConfig(
+            enabled=True,
+            pickup_mode=MAGAZINE_PICKUP_MODE_AUTO_DISCOVERY_SENSOR_CONTROLLED_FAST_LIN,
+            magazine_group_id="Magazine",
+        )
+        ctx = self._context(service, config)
+        ctx.magazine_discovery_contours = [object()]
+
+        next_state = handle_magazine_move_to_magazine(ctx)
+
+        self.assertEqual(PaintExecutionState.MAGAZINE_CAPTURE, next_state)
+        self.assertIn(
+            next_state,
+            PaintExecutionTransitions.get_rules()[
+                PaintExecutionState.MAGAZINE_MOVE_TO_MAGAZINE
+            ],
+        )
+        load_service._move_to_group_with_pause_resume_recovery.assert_not_called()
+
     def test_auto_discovery_approaches_and_retracts_at_configured_z(self):
         process_config = PaintProcessConfig(
             magazine_load=PaintMagazineLoadConfig(

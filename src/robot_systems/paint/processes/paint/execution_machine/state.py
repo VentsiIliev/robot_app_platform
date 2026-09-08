@@ -65,6 +65,7 @@ class PaintExecutionTransitions:
             S.MAGAZINE_LOAD: {S.MAGAZINE_MOVE_TO_MAGAZINE, S.CAPTURE_WORKPIECE, S.COMPLETED, *active},
             S.MAGAZINE_MOVE_TO_MAGAZINE: {
                 S.MAGAZINE_WAIT_CAMERA_SETTLE,
+                S.MAGAZINE_CAPTURE,
                 S.MAGAZINE_PREPARE_PICKUP_RELEASE,
                 *active,
             },
