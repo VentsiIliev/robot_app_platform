@@ -8,11 +8,9 @@ from PyQt6.QtWidgets import QAbstractSpinBox, QGroupBox, QHBoxLayout, QLabel, QP
 
 from pl_gui.settings.settings_view.styles import (
     ACTION_BTN_STYLE,
-    BG_COLOR,
     BORDER,
     ERROR_COLOR,
     GHOST_BTN_STYLE,
-    GROUP_STYLE,
     LABEL_STYLE,
     PRIMARY,
     TEXT_COLOR,
@@ -21,6 +19,32 @@ from pl_gui.settings.settings_view.styles import (
 from src.applications.base.widgets.custom_virtual_keyboard import KeyboardSpinBox
 
 _DRIED_COLOR = "#2E7D32"
+_TRAY_SECTION_STYLE = """
+QWidget#paintPlateLayout {{
+    background-color: white;
+    border: none;
+}}
+"""
+
+_TRAY_GROUP_STYLE = f"""
+QGroupBox {{
+    color: #333333;
+    font-size: 12pt;
+    font-weight: bold;
+    border: 2px solid {BORDER};
+    border-radius: 8px;
+    margin-top: 14px;
+    padding-top: 10px;
+    background: white;
+}}
+QGroupBox::title {{
+    subcontrol-origin: margin;
+    left: 14px;
+    padding: 0 8px;
+    background: white;
+    border-radius: 4px;
+}}
+"""
 
 
 class _PlateCanvas(QWidget):
@@ -54,20 +78,20 @@ class _PlateCanvas(QWidget):
     def paintEvent(self, _event) -> None:
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.fillRect(self.rect(), QColor(BG_COLOR))
+        painter.fillRect(self.rect(), QColor(TEXT_ON_PRIMARY))
         width = float(self._state.get("width_mm", 0.0) or 0.0)
         height = float(self._state.get("height_mm", 0.0) or 0.0)
         self._rects.clear()
         if width <= 0.0 or height <= 0.0:
             plate = QRectF(18, 18, max(1, self.width() - 36), max(1, self.height() - 36))
-            painter.setPen(QPen(QColor(BORDER), 3))
+            painter.setPen(QPen(QColor(PRIMARY), 3))
             painter.setBrush(QColor(TEXT_ON_PRIMARY))
             painter.drawRoundedRect(plate, 10, 10)
             painter.setPen(QColor(TEXT_COLOR))
             painter.drawText(plate, Qt.AlignmentFlag.AlignCenter, self.tr("Tray is not configured"))
             return
         plate = self._scaled_plate_rect(width, height)
-        painter.setPen(QPen(QColor(BORDER), 3))
+        painter.setPen(QPen(QColor(PRIMARY), 3))
         painter.setBrush(QColor(TEXT_ON_PRIMARY))
         painter.drawRoundedRect(plate, 10, 10)
         for item in self._state.get("placements", []):
@@ -199,14 +223,15 @@ class PaintPlateLayout(QWidget):
         self._drying_timer.setInterval(1000)
         self._use_dry_duration = bool(use_dry_duration)
         self._drying_timer.timeout.connect(self._on_drying_timer)
-        self.setStyleSheet(f"background-color: {BG_COLOR};")
+        self.setObjectName("paintPlateLayout")
+        self.setStyleSheet(_TRAY_SECTION_STYLE)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         header = QHBoxLayout()
         self._hint = QLabel()
         self._hint.setStyleSheet(LABEL_STYLE)
         self._drying_duration_box = QGroupBox()
-        self._drying_duration_box.setStyleSheet(GROUP_STYLE)
+        self._drying_duration_box.setStyleSheet(_TRAY_GROUP_STYLE)
         duration_layout = QHBoxLayout(self._drying_duration_box)
         duration_layout.setContentsMargins(10, 18, 10, 8)
         duration_layout.setSpacing(8)
@@ -226,7 +251,7 @@ class PaintPlateLayout(QWidget):
         self._drying_duration_box.setVisible(self._use_dry_duration)
         header.addWidget(self._drying_duration_box)
         self._selected_drying_box = QGroupBox()
-        self._selected_drying_box.setStyleSheet(GROUP_STYLE)
+        self._selected_drying_box.setStyleSheet(_TRAY_GROUP_STYLE)
         selected_drying_layout = QHBoxLayout(self._selected_drying_box)
         selected_drying_layout.setContentsMargins(18, 18, 18, 8)
         self._selected_drying_value = QLabel()

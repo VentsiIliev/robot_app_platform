@@ -22,15 +22,57 @@ from pl_gui.shell.ui.icon_loader import load_icon
 from pl_gui.utils.utils_widgets.SwitchButton import QToggle
 from pl_gui.settings.settings_view.styles import (
     ACTION_BTN_STYLE,
-    BG_COLOR,
     BORDER,
     GHOST_BTN_STYLE,
     GROUP_STYLE,
     LABEL_STYLE,
     PRIMARY,
     PRIMARY_DARK,
+    TEXT_COLOR,
 )
 from src.applications.base.widgets.custom_virtual_keyboard import KeyboardDoubleSpinBox, KeyboardSpinBox
+
+
+_CONCISE_PAINT_GROUP_STYLE = f"""
+QGroupBox {{
+    color: {TEXT_COLOR};
+    border: 2px solid {BORDER};
+    border-radius: 8px;
+    margin-top: 0;
+    padding-top: 0;
+    background: white;
+}}
+"""
+
+_CONCISE_SUMMARY_GROUP_STYLE = f"""
+QGroupBox {{
+    color: {TEXT_COLOR};
+    font-size: 12pt;
+    font-weight: bold;
+    border: 2px solid {BORDER};
+    border-radius: 8px;
+    margin-top: 14px;
+    padding-top: 10px;
+    background: white;
+}}
+QGroupBox::title {{
+    subcontrol-origin: margin;
+    left: 14px;
+    padding: 0 8px;
+    background: white;
+    border-radius: 4px;
+}}
+"""
+
+_CONCISE_VALUE_STYLE = f"""
+QSpinBox, QDoubleSpinBox {{
+    color: {TEXT_COLOR};
+    background: white;
+    border: 1px solid {BORDER};
+    border-radius: 4px;
+    padding: 0 8px;
+}}
+"""
 
 class PaintControlsDrawer(QWidget):
     """Data-driven manual controls hosted by the dashboard drawer."""
@@ -133,14 +175,14 @@ class PaintControlsDrawer(QWidget):
         self._unmatched_tabs = QTabWidget()
         self._unmatched_tabs.setStyleSheet(f"""
             QTabWidget::pane {{
-                background-color: {BG_COLOR};
+                background-color: white;
                 border: 1px solid {BORDER};
                 border-radius: 8px;
                 top: -1px;
             }}
             QTabBar::tab {{
                 color: {PRIMARY};
-                background-color: {BG_COLOR};
+                background-color: white;
                 border: 1px solid {BORDER};
                 border-bottom: none;
                 border-top-left-radius: 7px;
@@ -343,7 +385,9 @@ class PaintControlsDrawer(QWidget):
         )
         self._content_layout.setSpacing(6)
         self._unmatched_box.setMinimumHeight(0)
-        self._unmatched_layout.setContentsMargins(8, 16, 8, 8)
+        self._unmatched_box.setTitle("")
+        self._unmatched_box.setStyleSheet(_CONCISE_PAINT_GROUP_STYLE)
+        self._unmatched_layout.setContentsMargins(8, 8, 8, 8)
         self._unmatched_layout.setSpacing(4)
         self._pass_1_layout.setContentsMargins(4, 4, 4, 4)
         self._pass_1_layout.setSpacing(4)
@@ -351,8 +395,10 @@ class PaintControlsDrawer(QWidget):
         self._pass_2_layout.setSpacing(4)
 
         if hasattr(self, "_pass_count_box"):
+            self._pass_count_box.setStyleSheet(_CONCISE_SUMMARY_GROUP_STYLE)
             self._pass_count_box.layout().setContentsMargins(8, 14, 8, 8)
             self._pass_count_box.setFixedHeight(104)
+        self._acceleration_scale_box.setStyleSheet(_CONCISE_SUMMARY_GROUP_STYLE)
         self._acceleration_scale_box.layout().setContentsMargins(8, 14, 8, 8)
         self._acceleration_scale_box.layout().setSpacing(4)
         self._acceleration_scale_box.setFixedHeight(104)
@@ -403,6 +449,20 @@ class PaintControlsDrawer(QWidget):
         ):
             field.setMinimumHeight(48)
             field.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
+            field.setStyleSheet(_CONCISE_VALUE_STYLE)
+
+        concise_labels = (
+            self._unmatched_velocity_label,
+            self._unmatched_acceleration_label,
+            self._unmatched_offset_label,
+            *self._pass_2_labels,
+            self._pass_1_resolved_speed,
+            self._pass_2_resolved_speed,
+        )
+        for label in concise_labels:
+            label.setStyleSheet(
+                f"color: {TEXT_COLOR}; background: transparent; border: none;"
+            )
 
         self._unmatched_apply.clicked.disconnect(self._on_unmatched_paint_settings)
         self._unmatched_apply.clicked.connect(self._on_concise_apply)
@@ -723,7 +783,8 @@ class PaintControlsDrawer(QWidget):
 
     def retranslateUi(self) -> None:
         self._title.setText(self.tr("Manual Controls"))
-        self._unmatched_box.setTitle(self.tr("Painting"))
+        if not self._concise_layout:
+            self._unmatched_box.setTitle(self.tr("Painting"))
         self._unmatched_pass_count_label.setText(self.tr("Number of Passes"))
         if hasattr(self, "_pass_count_box"):
             self._pass_count_box.setTitle(self.tr("Number of Passes"))

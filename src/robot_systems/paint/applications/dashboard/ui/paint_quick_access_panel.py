@@ -1,9 +1,26 @@
 from __future__ import annotations
 
 from PyQt6.QtCore import QEvent, Qt, pyqtSignal
-from PyQt6.QtWidgets import QGroupBox, QPushButton, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QGridLayout, QGroupBox, QPushButton, QVBoxLayout, QWidget
 
-from pl_gui.settings.settings_view.styles import ACTION_BTN_STYLE, GHOST_BTN_STYLE, GROUP_STYLE
+from pl_gui.settings.settings_view.styles import (
+    ACTION_BTN_STYLE,
+    BORDER,
+    GHOST_BTN_STYLE,
+    GROUP_STYLE,
+)
+
+
+_FOOTER_BOX_STYLE = f"""
+QGroupBox {{
+    background: white;
+    border: 1px solid {BORDER};
+    border-radius: 8px;
+    margin-top: 0;
+    padding-top: 0;
+}}
+"""
+_FOOTER_BUTTON_HEIGHT = 48
 
 
 class PaintQuickAccessPanel(QWidget):
@@ -105,8 +122,39 @@ class PaintQuickAccessPanel(QWidget):
     def set_new_tray_enabled(self, enabled: bool) -> None:
         self._new_tray.setEnabled(enabled)
 
+    def use_compact_footer_layout(self) -> None:
+        """Arrange quick actions as a shallow touch-friendly footer grid."""
+        self._box.setTitle("")
+        self._box.setStyleSheet(_FOOTER_BOX_STYLE)
+        widgets = [
+            self._drying_mode_button,
+            *(self._buttons[item.device_id] for item in self._configs),
+            self._cable_relief,
+            self._new_tray,
+        ]
+        for widget in widgets:
+            widget.setFixedHeight(_FOOTER_BUTTON_HEIGHT)
+        while self._layout.count():
+            self._layout.takeAt(0)
+        grid_host = QWidget()
+        grid_host.setStyleSheet("background: transparent; border: none;")
+        grid = QGridLayout(grid_host)
+        grid.setContentsMargins(0, 0, 0, 0)
+        grid.setHorizontalSpacing(8)
+        grid.setVerticalSpacing(6)
+        for index, widget in enumerate(widgets[:-1]):
+            grid.addWidget(widget, index // 2, index % 2)
+        grid.addWidget(self._new_tray, 2, 0, 1, 2)
+        grid.setColumnStretch(0, 1)
+        grid.setColumnStretch(1, 1)
+        self._layout.setContentsMargins(10, 10, 10, 10)
+        self._layout.setSpacing(0)
+        self._layout.addWidget(grid_host, 1)
+        self._footer_grid = grid
+
     def retranslateUi(self) -> None:
-        self._box.setTitle(self.tr("Quick Controls"))
+        if not hasattr(self, "_footer_grid"):
+            self._box.setTitle(self.tr("Quick Controls"))
         self._cable_relief.setText(self.tr("Relieve Cable"))
         self._new_tray.setText(self.tr("New Tray"))
         self._render_drying_mode()

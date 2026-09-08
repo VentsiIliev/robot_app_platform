@@ -379,19 +379,20 @@ class TestPaintDashboardUi(unittest.TestCase):
             ui_config=PaintDashboardUiConfig(show_camera_preview=False),
         )
 
-        self.assertIsNotNone(view._expanded_tabs)
-        self.assertEqual(view._expanded_tabs.count(), 1)
-        self.assertIs(view._expanded_tabs.widget(0), view._plate_layout)
-        self.assertEqual(view._expanded_tabs.tabText(0), "")
-        self.assertEqual(view._expanded_tabs.tabToolTip(0), "Tray")
-        for index in (0,):
-            icon_label = view._expanded_tabs.tabBar().tabButton(
-                index,
-                QTabBar.ButtonPosition.LeftSide,
-            )
-            self.assertIsInstance(icon_label, QLabel)
-            self.assertFalse(icon_label.pixmap().isNull())
-            self.assertEqual(icon_label.alignment(), Qt.AlignmentFlag.AlignCenter)
+        self.assertIsNone(view._expanded_tabs)
+        preview_container = view._dashboard.layout_manager.main_layout.itemAt(0).layout().itemAt(0).widget()
+        self.assertIs(preview_container.layout().itemAt(0).widget(), view._tray_panel)
+        self.assertIs(view._plate_layout.parentWidget(), view._tray_panel)
+        self.assertFalse(view._plate_layout.isHidden())
+        self.assertEqual(view._plate_layout.objectName(), "paintPlateLayout")
+        self.assertIn("background-color: white", view._plate_layout.styleSheet())
+        self.assertEqual(view._tray_panel.objectName(), "paintTrayPanel")
+        self.assertIn("background: white", view._tray_panel.styleSheet())
+        self.assertIn("border: 1px solid #E0E0E0", view._tray_panel.styleSheet())
+        self.assertEqual(
+            view._tray_panel.layout().contentsMargins().left(),
+            10,
+        )
         self.assertIsNone(view._quick_controls)
         self.assertIsNone(view._controls_drawer)
         self.assertIsNotNone(view._quick_access)
@@ -399,17 +400,15 @@ class TestPaintDashboardUi(unittest.TestCase):
         top_section = view._dashboard.layout_manager.main_layout.itemAt(0).layout()
         status_column = top_section.itemAt(top_section.count() - 1).widget()
         status_layout = status_column.layout()
-        quick_access_position = status_layout.getItemPosition(
-            status_layout.indexOf(view._quick_access)
-        )
-        message_host = view._message_panel.parentWidget()
+        message_host = view._accordion_host
         message_position = status_layout.getItemPosition(
             status_layout.indexOf(message_host)
         )
-        self.assertEqual(quick_access_position, (0, 0, 1, 1))
-        self.assertEqual(message_position, (0, 1, 1, 2))
+        self.assertEqual(status_layout.indexOf(view._quick_access), -1)
+        self.assertEqual(message_position, (0, 0, 1, 3))
         self.assertGreaterEqual(status_column.minimumWidth(), 650)
-        self.assertTrue(view._message_scroll.isHidden())
+        self.assertTrue(view._message_panel.isHidden())
+        self.assertIsNotNone(view._message_rail_button)
         self.assertIsNotNone(view._settings_widget)
         self.assertIsNotNone(view._settings_panel)
         self.assertFalse(view._settings_content.isHidden())
@@ -429,6 +428,11 @@ class TestPaintDashboardUi(unittest.TestCase):
         self.assertEqual(view._settings_widget._acceleration_scale_box.height(), 104)
         self.assertTrue(view._settings_widget._acceleration_scale_apply.isHidden())
         self.assertEqual(view._settings_widget._unmatched_apply.text(), "Apply All")
+        self.assertIn(
+            "border: 1px solid #E0E0E0",
+            view._settings_widget._unmatched_velocity.styleSheet(),
+        )
+        self.assertEqual(view._settings_widget._unmatched_box.title(), "")
         self.assertIsInstance(view._settings_widget._pass_2_use_first, QToggle)
         self.assertEqual(view._settings_widget._pass_2_use_first.height(), 36)
         self.assertEqual(
@@ -451,36 +455,65 @@ class TestPaintDashboardUi(unittest.TestCase):
         self.assertEqual(len(painting_requests), 1)
         self.assertEqual(scaling_requests, [100.0])
         self.assertEqual(view._settings_title_label.text(), "Settings")
+        self.assertTrue(view._settings_title_label.isHidden())
         self.assertIs(view._accordion_layout.itemAt(0).widget(), view._settings_panel)
-        self.assertIs(view._accordion_layout.itemAt(1).widget(), view._message_panel)
+        self.assertIsNone(view._accordion_layout.itemAt(1).widget())
         self.assertEqual(view._accordion_layout.stretch(0), 1)
         self.assertEqual(view._accordion_layout.stretch(1), 0)
-        view._message_toggle.click()
-        self.assertFalse(view._message_scroll.isHidden())
-        self.assertTrue(view._settings_content.isHidden())
-        self.assertEqual(view._accordion_layout.stretch(0), 0)
-        self.assertEqual(view._accordion_layout.stretch(1), 1)
-        view._message_toggle.click()
-        self.assertTrue(view._message_scroll.isHidden())
-        self.assertTrue(view._settings_content.isHidden())
-        self.assertEqual(view._accordion_layout.stretch(0), 0)
-        self.assertEqual(view._accordion_layout.stretch(1), 0)
-        self.assertEqual(view._accordion_layout.stretch(2), 1)
-        self.assertFalse(view._message_toggle.icon().isNull())
-        view._message_toggle.click()
-        self.assertFalse(view._message_scroll.isHidden())
-        self.assertFalse(view._message_toggle.icon().isNull())
-        view._message_header.clicked.emit()
-        self.assertTrue(view._message_scroll.isHidden())
-        view._message_header.clicked.emit()
-        self.assertFalse(view._message_scroll.isHidden())
+        view._message_rail_button.click()
+        self.assertTrue(view._message_drawer_open)
+        self.assertFalse(view._message_panel.isHidden())
+        view._message_rail_button.click()
+        self.assertFalse(view._message_drawer_open)
+        view._on_message_drawer_animation_finished()
+        self.assertTrue(view._message_panel.isHidden())
         self.assertEqual(
             status_column.sizePolicy().verticalPolicy(),
             QSizePolicy.Policy.Expanding,
         )
         self.assertGreater(status_column.maximumHeight(), 458)
         bottom_container = view._dashboard.layout_manager.main_layout.itemAt(1).widget()
-        self.assertEqual(bottom_container.height(), 300)
+        self.assertEqual(bottom_container.height(), 250)
+        bottom_layout = bottom_container.layout()
+        quick_controls_host = bottom_layout.itemAt(0).widget()
+        process_controls_host = bottom_layout.itemAt(1).widget()
+        self.assertIs(
+            quick_controls_host.layout().itemAt(0).widget(),
+            view._quick_access,
+        )
+        self.assertEqual(bottom_layout.stretch(0), 1)
+        self.assertEqual(bottom_layout.stretch(1), 1)
+        self.assertTrue(bottom_layout.contentsMargins().isNull())
+        self.assertEqual(bottom_layout.spacing(), 10)
+        self.assertTrue(quick_controls_host.layout().contentsMargins().isNull())
+        self.assertEqual(view._quick_access._footer_grid.columnCount(), 2)
+        self.assertEqual(view._quick_access._box.title(), "")
+        footer_buttons = (
+            view._quick_access._drying_mode_button,
+            *view._quick_access._buttons.values(),
+            view._quick_access._cable_relief,
+            view._quick_access._new_tray,
+        )
+        process_buttons = (
+            view._dashboard.control_buttons.start_btn,
+            view._dashboard.control_buttons.pause_btn,
+            view._dashboard._action_buttons["reset_errors"],
+            view._dashboard.control_buttons.stop_btn,
+        )
+        self.assertTrue(all(button.height() == 48 for button in footer_buttons))
+        self.assertTrue(all(button.height() == 72 for button in process_buttons))
+        for button in process_buttons:
+            self.assertEqual(button.color, "#905BA9")
+            self.assertIn("background: #905BA9", button.styleSheet())
+            self.assertIn("border-radius: 14px", button.styleSheet())
+        self.assertEqual(
+            view._quick_access._footer_grid.getItemPosition(
+                view._quick_access._footer_grid.indexOf(view._quick_access._new_tray)
+            ),
+            (2, 0, 1, 2),
+        )
+        self.assertFalse(quick_controls_host.isHidden())
+        self.assertIs(process_controls_host, view._process_controls_host)
         reset_button = view._dashboard._action_buttons["reset_errors"]
         control_buttons = view._dashboard.control_buttons
         top_frame = control_buttons.layout().itemAt(0).widget()
@@ -518,7 +551,8 @@ class TestPaintDashboardUi(unittest.TestCase):
         self.assertIsNone(view._settings_widget)
         self.assertIsNone(view._settings_panel)
         self.assertIsNone(view._accordion_layout)
-        self.assertFalse(view._message_scroll.isHidden())
+        self.assertTrue(view._message_panel.isHidden())
+        self.assertIsNotNone(view._message_rail_button)
 
     def test_camera_disabled_moves_status_cards_to_exclusive_compact_rail(self) -> None:
         view = PaintDashboardView(
@@ -531,7 +565,7 @@ class TestPaintDashboardUi(unittest.TestCase):
 
         self.assertIsNotNone(view._status_rail)
         rail_layout = view._status_rail.layout()
-        self.assertEqual(rail_layout.count(), 4)
+        self.assertEqual(rail_layout.count(), 6)
         cards = list(view._cards_by_id.values())
         for index, card in enumerate(cards):
             self.assertIs(rail_layout.itemAt(index).widget(), card)
@@ -542,6 +576,7 @@ class TestPaintDashboardUi(unittest.TestCase):
                 card.cursor().shape(),
                 Qt.CursorShape.PointingHandCursor,
             )
+        self.assertIs(rail_layout.itemAt(4).widget(), view._message_rail_button)
 
         cards[0].set_expanded(True)
         cards[0].expansion_changed.emit(True)

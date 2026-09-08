@@ -58,9 +58,12 @@ _MAX_MESSAGE_ROWS = 50
 _MESSAGE_SCROLL_MIN_HEIGHT = 60
 _CONTROLS_DRAWER_WIDTH = 400
 _MESSAGE_DRAWER_HANDLE_CLEARANCE = 38
-_PROCESS_CONTROLS_TOP_MARGIN = 19
-_PROCESS_CONTROLS_BOTTOM_MARGIN = 5
+_PROCESS_CONTROLS_TOP_MARGIN = 0
+_PROCESS_CONTROLS_BOTTOM_MARGIN = 0
 _EXPANDED_PROCESS_SECTION_HEIGHT = 300
+_COMPACT_PROCESS_SECTION_HEIGHT = 250
+_FOOTER_BUTTON_HEIGHT = 48
+_PROCESS_BUTTON_HEIGHT = 72
 _EXPANDED_STATUS_MIN_WIDTH = 650
 _MESSAGE_COLLAPSED_HEIGHT = 45
 _SETTINGS_COLLAPSED_HEIGHT = 45
@@ -87,6 +90,13 @@ QTabBar::tab {
 """
 _MESSAGE_PANEL_STYLE = f"""
 QFrame {{
+    background: white;
+    border: 1px solid {BORDER};
+    border-radius: 8px;
+}}
+"""
+_TRAY_PANEL_STYLE = f"""
+QFrame#paintTrayPanel {{
     background: white;
     border: 1px solid {BORDER};
     border-radius: 8px;
@@ -225,7 +235,11 @@ class PaintDashboardView(IApplicationView):
         self._message_toggle: QToolButton | None = None
         self._message_panel: QFrame | None = None
         self._message_scroll: QScrollArea | None = None
+        self._message_rail_button: QToolButton | None = None
+        self._message_drawer_animation: QPropertyAnimation | None = None
+        self._message_drawer_open = False
         self._accordion_layout: QVBoxLayout | None = None
+        self._accordion_host: QWidget | None = None
         self._settings_widget: PaintControlsDrawer | None = None
         self._settings_panel: QFrame | None = None
         self._settings_content: QWidget | None = None
@@ -238,6 +252,7 @@ class PaintDashboardView(IApplicationView):
         self._quick_controls = None
         self._preview_stack = None
         self._plate_layout = None
+        self._tray_panel: QFrame | None = None
         self._expanded_tabs = None
         self._quick_access = None
         self._status_rail: QWidget | None = None
@@ -383,6 +398,19 @@ class PaintDashboardView(IApplicationView):
                 if expanded_changed is not None:
                     expanded_changed.connect(self._on_status_card_expansion_changed)
                 rail_layout.addWidget(card, alignment=Qt.AlignmentFlag.AlignRight)
+            rail_layout.addSpacing(12)
+            message_button = QToolButton()
+            message_button.setFixedSize(48, 48)
+            message_button.setIconSize(QSize(28, 28))
+            message_button.setIcon(load_icon("fa5s.comment-alt", color=PRIMARY))
+            message_button.setCursor(Qt.CursorShape.PointingHandCursor)
+            message_button.setStyleSheet(
+                f"QToolButton {{ background: white; border: 1px solid {BORDER}; "
+                "border-radius: 8px; }"
+                f"QToolButton:hover {{ background: {BG_COLOR}; }}"
+            )
+            message_button.clicked.connect(self._toggle_message_drawer)
+            rail_layout.addWidget(message_button, alignment=Qt.AlignmentFlag.AlignRight)
             rail_layout.addStretch(1)
             side_layout.addWidget(
                 rail,
@@ -394,6 +422,7 @@ class PaintDashboardView(IApplicationView):
             )
             side_layout.setColumnStretch(3, 0)
             self._status_rail = rail
+            self._message_rail_button = message_button
             self._build_status_flyout(side_panel)
         except (AttributeError, RuntimeError):
             self._status_rail = None
@@ -407,6 +436,7 @@ class PaintDashboardView(IApplicationView):
         if not expanded:
             self._hide_status_flyout()
             return
+        self._set_message_drawer_open(False)
         self._active_status_card = active_card
         self._show_status_flyout(active_card)
 
@@ -458,6 +488,46 @@ class PaintDashboardView(IApplicationView):
         self._status_flyout.hide()
         self._active_status_card = None
 
+    def _toggle_message_drawer(self) -> None:
+        self._set_message_drawer_open(not self._message_drawer_open)
+
+    def _set_message_drawer_open(self, open_: bool) -> None:
+        if self._message_panel is None or self._status_rail is None:
+            return
+        if self._message_drawer_open == bool(open_):
+            if not open_:
+                self._message_panel.hide()
+            return
+        self._message_drawer_open = bool(open_)
+        if self._message_drawer_open:
+            self._hide_status_flyout()
+            for card in self._cards_by_id.values():
+                set_expanded = getattr(card, "set_expanded", None)
+                if callable(set_expanded):
+                    set_expanded(False)
+        parent = self._message_panel.parentWidget()
+        width = min(420, max(280, parent.width() - 64))
+        height = max(1, parent.height())
+        rail_width = self._status_rail.width()
+        closed = QRect(parent.width(), 0, width, height)
+        opened = QRect(parent.width() - rail_width - width - 8, 0, width, height)
+        animation = self._message_drawer_animation
+        animation.stop()
+        animation.setStartValue(
+            closed
+            if self._message_drawer_open and self._message_panel.isHidden()
+            else self._message_panel.geometry()
+        )
+        animation.setEndValue(opened if self._message_drawer_open else closed)
+        self._message_panel.show()
+        self._message_panel.raise_()
+        self._status_rail.raise_()
+        animation.start()
+
+    def _on_message_drawer_animation_finished(self) -> None:
+        if self._message_panel is not None and not self._message_drawer_open:
+            self._message_panel.hide()
+
     def _install_controls_drawer(self) -> None:
         use_panel = (
             not self._ui_config.show_camera_preview
@@ -479,7 +549,25 @@ class PaintDashboardView(IApplicationView):
             self._expanded_tabs.removeTab(0)
             placeholder.deleteLater()
             if self._ui_config.use_collapsible_settings_panel:
-                self._center_expanded_tab_icon(0, "fa5s.th")
+                tray = self._expanded_tabs.widget(0)
+                self._expanded_tabs.removeTab(0)
+                tab_parent = self._expanded_tabs.parentWidget()
+                tab_parent_layout = tab_parent.layout()
+                tray_panel = QFrame(tab_parent)
+                tray_panel.setObjectName("paintTrayPanel")
+                tray_panel.setStyleSheet(_TRAY_PANEL_STYLE)
+                tray_panel_layout = QVBoxLayout(tray_panel)
+                tray_panel_layout.setContentsMargins(10, 10, 10, 10)
+                tray_panel_layout.setSpacing(0)
+                tray.setParent(tray_panel)
+                tray_panel_layout.addWidget(tray)
+                tab_parent_layout.replaceWidget(self._expanded_tabs, tray_panel)
+                tray.show()
+                tray_panel.show()
+                self._tray_panel = tray_panel
+                self._expanded_tabs.setParent(None)
+                self._expanded_tabs.deleteLater()
+                self._expanded_tabs = None
             else:
                 self._expanded_tabs.insertTab(
                     0,
@@ -488,7 +576,8 @@ class PaintDashboardView(IApplicationView):
                     "",
                 )
                 self._center_expanded_tab_icon(0, "fa5s.sliders-h")
-            self._retranslate_expanded_tabs()
+            if self._expanded_tabs is not None:
+                self._retranslate_expanded_tabs()
         if self._controls_drawer is not None:
             self._controls_drawer.set_visible(self._ui_config.show_left_drawer)
 
@@ -634,7 +723,35 @@ class PaintDashboardView(IApplicationView):
             )
             panel_host_layout.addWidget(panel, alignment=Qt.AlignmentFlag.AlignTop)
             self._message_panel = panel
-            if self._quick_access is not None and self._settings_widget is not None:
+            if self._status_rail is not None:
+                panel_host_layout.removeWidget(panel)
+                panel_host.deleteLater()
+                panel.setParent(side_panel)
+                self._message_header.hide()
+                panel.hide()
+                animation = QPropertyAnimation(panel, b"geometry", panel)
+                animation.setDuration(240)
+                animation.setEasingCurve(QEasingCurve.Type.InOutCubic)
+                animation.finished.connect(self._on_message_drawer_animation_finished)
+                self._message_drawer_animation = animation
+                if self._settings_widget is not None:
+                    message_row = 0
+                    accordion = QWidget()
+                    accordion.setStyleSheet("background: transparent; border: none;")
+                    accordion_layout = QVBoxLayout(accordion)
+                    accordion_layout.setContentsMargins(0, 0, 0, 0)
+                    accordion_layout.setSpacing(0)
+                    settings_panel = self._build_settings_panel()
+                    accordion_layout.addWidget(settings_panel, 1)
+                    accordion_layout.addStretch(0)
+                    layout.addWidget(accordion, message_row, 0, 1, 3)
+                    self._accordion_host = accordion
+                    self._accordion_layout = accordion_layout
+                    self._settings_panel = settings_panel
+                    self._set_settings_collapsed(False)
+                else:
+                    message_row = 0
+            elif self._quick_access is not None and self._settings_widget is not None:
                 message_row = 0
                 accordion = QWidget()
                 accordion.setStyleSheet("background: transparent; border: none;")
@@ -654,6 +771,7 @@ class PaintDashboardView(IApplicationView):
                 accordion_layout.addWidget(panel, 0)
                 accordion_layout.addStretch(0)
                 layout.addWidget(accordion, message_row, 1, 1, 2)
+                self._accordion_host = accordion
                 self._accordion_layout = accordion_layout
                 self._settings_panel = settings_panel
                 self._set_message_collapsed(True)
@@ -828,6 +946,8 @@ class PaintDashboardView(IApplicationView):
         if self._settings_panel is None or self._settings_content is None:
             return
         self._settings_content.setVisible(not collapsed)
+        if self._settings_title_label is not None:
+            self._settings_title_label.setVisible(collapsed)
         self._settings_panel.setMaximumHeight(
             _SETTINGS_COLLAPSED_HEIGHT if collapsed else 16777215
         )
@@ -849,11 +969,14 @@ class PaintDashboardView(IApplicationView):
             self._settings_content is not None and not self._settings_content.isHidden()
         )
         self._accordion_layout.setStretch(0, int(settings_expanded))
-        self._accordion_layout.setStretch(1, int(message_expanded))
-        self._accordion_layout.setStretch(
-            2,
-            int(not settings_expanded and not message_expanded),
-        )
+        if self._accordion_layout.count() >= 3:
+            self._accordion_layout.setStretch(1, int(message_expanded))
+            self._accordion_layout.setStretch(
+                2,
+                int(not settings_expanded and not message_expanded),
+            )
+        else:
+            self._accordion_layout.setStretch(1, int(not settings_expanded))
 
     @staticmethod
     def _clear_layout(layout) -> None:
@@ -896,16 +1019,63 @@ class PaintDashboardView(IApplicationView):
             main_layout = self._dashboard.layout_manager.main_layout
             bottom_container = main_layout.itemAt(1).widget()
             if not self._ui_config.show_camera_preview:
-                bottom_container.setFixedHeight(_EXPANDED_PROCESS_SECTION_HEIGHT)
+                bottom_container.setFixedHeight(
+                    _COMPACT_PROCESS_SECTION_HEIGHT
+                    if self._quick_access is not None
+                    else _EXPANDED_PROCESS_SECTION_HEIGHT
+                )
             bottom_layout = bottom_container.layout()
+            bottom_layout.setContentsMargins(0, 0, 0, 0)
+            bottom_layout.setSpacing(10)
             action_area = bottom_layout.itemAt(0).widget()
             controls = bottom_layout.itemAt(1).widget()
             controls = self._wrap_process_controls(bottom_layout, controls)
-            action_area.hide()
-            bottom_layout.setStretchFactor(action_area, 0)
-            bottom_layout.setStretchFactor(controls, 1)
+            if self._quick_access is not None:
+                self._move_quick_access_to_footer(action_area)
+                self._compact_process_buttons()
+                bottom_layout.setStretchFactor(action_area, 1)
+                bottom_layout.setStretchFactor(controls, 1)
+            else:
+                action_area.hide()
+                bottom_layout.setStretchFactor(action_area, 0)
+                bottom_layout.setStretchFactor(controls, 1)
         except Exception:
             pass
+
+    def _move_quick_access_to_footer(self, action_area: QWidget) -> None:
+        top_section = self._dashboard.layout_manager.main_layout.itemAt(0).layout()
+        side_panel = top_section.itemAt(top_section.count() - 1).widget()
+        side_layout = side_panel.layout()
+        side_layout.removeWidget(self._quick_access)
+        if self._accordion_host is not None:
+            side_layout.removeWidget(self._accordion_host)
+            side_layout.addWidget(self._accordion_host, 0, 0, 1, 3)
+
+        self._clear_layout(action_area.layout())
+        action_area.layout().setContentsMargins(0, 0, 0, 0)
+        self._quick_access.setMinimumWidth(0)
+        self._quick_access.setMaximumWidth(16777215)
+        self._quick_access.use_compact_footer_layout()
+        action_area.layout().addWidget(self._quick_access, 0, 0)
+        action_area.show()
+
+    def _compact_process_buttons(self) -> None:
+        controls = self._dashboard.control_buttons
+        reset_button = self._dashboard._action_buttons.get("reset_errors")
+        for button in (
+            controls.start_btn,
+            controls.pause_btn,
+            reset_button,
+            controls.stop_btn,
+        ):
+            if button is not None:
+                button.setFixedHeight(_PROCESS_BUTTON_HEIGHT)
+                if hasattr(button, "color") and hasattr(button, "apply_style"):
+                    button.color = PRIMARY
+                    button.apply_style()
+        for index in range(controls.layout().count()):
+            frame = controls.layout().itemAt(index).widget()
+            frame.setMinimumHeight(0)
 
     def _wrap_process_controls(self, bottom_layout, controls: QWidget) -> QWidget:
         """Give the process controls their own card, independent of inherited styles."""
