@@ -10,7 +10,6 @@ from PyQt6.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
     QLabel,
-    QCheckBox,
     QPushButton,
     QScrollArea,
     QTabWidget,
@@ -20,6 +19,7 @@ from PyQt6.QtWidgets import (
 )
 
 from pl_gui.shell.ui.icon_loader import load_icon
+from pl_gui.utils.utils_widgets.SwitchButton import QToggle
 from pl_gui.settings.settings_view.styles import (
     ACTION_BTN_STYLE,
     BG_COLOR,
@@ -51,6 +51,7 @@ class PaintControlsDrawer(QWidget):
         show_acceleration_scale_control: bool = True,
         show_shortcuts: bool = True,
         compact_layout: bool = False,
+        concise_layout: bool = False,
         use_combined_speed_control: bool = False,
         combined_speed_minimum_percent: float = 1.0,
         combined_speed_maximum_percent: float = 100.0,
@@ -66,6 +67,7 @@ class PaintControlsDrawer(QWidget):
         self._drying_mode = "auto"
         self._shortcuts = []
         self._compact_layout = bool(compact_layout)
+        self._concise_layout = bool(concise_layout)
         self._use_combined_speed_control = bool(use_combined_speed_control)
         self._combined_speed_minimum_percent = max(
             1.0, min(100.0, float(combined_speed_minimum_percent))
@@ -100,6 +102,7 @@ class PaintControlsDrawer(QWidget):
         self._scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self._scroll.setStyleSheet("QScrollArea { background: transparent; border: none; }")
         content_widget = QWidget()
+        self._content_widget = content_widget
         content_widget.setStyleSheet("background: transparent;")
         layout = QVBoxLayout(content_widget)
         self._content_layout = layout
@@ -192,7 +195,10 @@ class PaintControlsDrawer(QWidget):
         pass_2_widget = QWidget()
         pass_2_layout = QVBoxLayout(pass_2_widget)
         self._pass_2_layout = pass_2_layout
-        self._pass_2_use_first = QCheckBox()
+        self._pass_2_use_first = QToggle()
+        self._pass_2_use_first.setFixedHeight(36)
+        self._pass_2_use_first.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._pass_2_use_first.setDuration(200)
         self._pass_2_use_first.stateChanged.connect(self._sync_pass_2_enabled)
         pass_2_layout.addWidget(self._pass_2_use_first)
         self._pass_2_velocity = self._make_spin_box(0.1, 100.0, 1.0, "%")
@@ -295,6 +301,8 @@ class PaintControlsDrawer(QWidget):
         layout.addStretch(1)
         if self._compact_layout:
             self._apply_compact_layout()
+        if self._concise_layout:
+            self._apply_concise_layout()
         self._scroll.setWidget(content_widget)
         root.addWidget(self._scroll, 1)
         self.retranslateUi()
@@ -325,6 +333,80 @@ class PaintControlsDrawer(QWidget):
         self._compact_pass_one_fields()
         self._compact_pass_two_fields()
 
+    def _apply_concise_layout(self) -> None:
+        """Fit the compact controls into the dashboard's narrow accordion."""
+        self._scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._content_widget.setSizePolicy(
+            QSizePolicy.Policy.Ignored,
+            QSizePolicy.Policy.Preferred,
+        )
+        self._content_layout.setSpacing(6)
+        self._unmatched_box.setMinimumHeight(0)
+        self._unmatched_layout.setContentsMargins(8, 16, 8, 8)
+        self._unmatched_layout.setSpacing(4)
+        self._pass_1_layout.setContentsMargins(4, 4, 4, 4)
+        self._pass_1_layout.setSpacing(4)
+        self._pass_2_layout.setContentsMargins(4, 4, 4, 4)
+        self._pass_2_layout.setSpacing(4)
+
+        if hasattr(self, "_pass_count_box"):
+            self._pass_count_box.layout().setContentsMargins(8, 14, 8, 8)
+            self._pass_count_box.setFixedHeight(104)
+        self._acceleration_scale_box.layout().setContentsMargins(8, 14, 8, 8)
+        self._acceleration_scale_box.layout().setSpacing(4)
+        self._acceleration_scale_box.setFixedHeight(104)
+        self._acceleration_scale_apply.hide()
+
+        self._pass_1_compact_fields_layout.setDirection(
+            QVBoxLayout.Direction.TopToBottom
+        )
+        self._pass_2_compact_fields_layout.setDirection(
+            QVBoxLayout.Direction.TopToBottom
+        )
+
+        touch_rows = (
+            self._pass_count_row,
+            self._velocity_row,
+            self._acceleration_row,
+            self._offset_row,
+            self._pass_2_rows[0],
+            self._pass_2_rows[1],
+            self._pass_2_rows[2],
+        )
+        for row in touch_rows:
+            row.setFixedHeight(52)
+            row.layout().setSpacing(4)
+        acceleration_scale_row = self._acceleration_scale.parentWidget()
+        if acceleration_scale_row is not None:
+            acceleration_scale_row.setFixedHeight(52)
+            acceleration_scale_row.layout().setSpacing(4)
+
+        for button in (
+            *self._unmatched_step_buttons,
+            *self._acceleration_scale_step_buttons,
+        ):
+            button.setStyleSheet(
+                GHOST_BTN_STYLE
+                + "\nQPushButton { padding: 0; min-width: 36px; max-width: 36px; }"
+            )
+            button.setFixedWidth(40)
+        for field in (
+            self._unmatched_pass_count,
+            self._unmatched_velocity,
+            self._unmatched_acceleration,
+            self._unmatched_offset,
+            self._pass_2_velocity,
+            self._pass_2_acceleration,
+            self._pass_2_offset,
+            self._acceleration_scale,
+        ):
+            field.setMinimumHeight(48)
+            field.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
+
+        self._unmatched_apply.clicked.disconnect(self._on_unmatched_paint_settings)
+        self._unmatched_apply.clicked.connect(self._on_concise_apply)
+
     def _compact_pass_one_fields(self) -> None:
         for widget in (
             self._unmatched_velocity_label, self._velocity_row,
@@ -334,6 +416,7 @@ class PaintControlsDrawer(QWidget):
         ):
             self._pass_1_layout.removeWidget(widget)
         pair = QHBoxLayout()
+        self._pass_1_compact_fields_layout = pair
         pair.addWidget(self._field_column(self._unmatched_velocity_label, self._velocity_row, self._pass_1_resolved_speed), 1)
         if not self._use_combined_speed_control:
             pair.addWidget(self._field_column(self._unmatched_acceleration_label, self._acceleration_row), 1)
@@ -346,6 +429,7 @@ class PaintControlsDrawer(QWidget):
             self._pass_2_layout.removeWidget(row)
         self._pass_2_layout.removeWidget(self._pass_2_resolved_speed)
         pair = QHBoxLayout()
+        self._pass_2_compact_fields_layout = pair
         pair.addWidget(self._field_column(self._pass_2_labels[0], self._pass_2_rows[0], self._pass_2_resolved_speed), 1)
         if not self._use_combined_speed_control:
             pair.addWidget(self._field_column(self._pass_2_labels[1], self._pass_2_rows[1]), 1)
@@ -433,6 +517,11 @@ class PaintControlsDrawer(QWidget):
         self.unmatched_paint_settings_requested.emit(
             self._settings_payload()
         )
+
+    def _on_concise_apply(self) -> None:
+        """Apply every editable value shown by the concise settings panel."""
+        self.unmatched_paint_settings_requested.emit(self._settings_payload())
+        self.acceleration_scale_requested.emit(float(self._acceleration_scale.value()))
 
     def _settings_payload(self) -> dict:
         pass_1_speed = self._unmatched_velocity.value()
@@ -653,7 +742,9 @@ class PaintControlsDrawer(QWidget):
         for label, text in zip(self._pass_2_labels, (pass_2_velocity_label, "Acceleration", "Press Offset")):
             label.setText(self.tr(text))
         self._update_resolved_speed_labels()
-        self._unmatched_apply.setText(self.tr("Apply"))
+        self._unmatched_apply.setText(
+            self.tr("Apply All") if self._concise_layout else self.tr("Apply")
+        )
         self._relief_button.setText(self.tr("Relieve Cable (Unwind J6)"))
         self._shortcuts_box.setTitle(self.tr("Application Shortcuts"))
         for item in self._configs:

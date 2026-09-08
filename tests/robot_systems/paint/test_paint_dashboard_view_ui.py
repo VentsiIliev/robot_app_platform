@@ -8,9 +8,17 @@ from unittest.mock import MagicMock, patch
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QTabBar
-from PyQt6.QtWidgets import QApplication, QCheckBox, QLabel, QSizePolicy, QWidget
+from PyQt6.QtWidgets import (
+    QApplication,
+    QCheckBox,
+    QLabel,
+    QSizePolicy,
+    QVBoxLayout,
+    QWidget,
+)
 
 from pl_gui.dashboard.config import CardConfig
+from pl_gui.utils.utils_widgets.SwitchButton import QToggle
 from src.robot_systems.paint.applications.dashboard.dashboard_state import DashboardCardState, DashboardState
 from src.robot_systems.paint.applications.dashboard.ui.paint_card_factory import (
     PaintCardFactory,
@@ -397,17 +405,63 @@ class TestPaintDashboardUi(unittest.TestCase):
             status_layout.indexOf(view._quick_access)
         )
         message_host = view._message_panel.parentWidget()
-        self.assertEqual(
-            message_host.layout().itemAt(0).alignment(),
-            Qt.AlignmentFlag.AlignTop,
-        )
         message_position = status_layout.getItemPosition(
             status_layout.indexOf(message_host)
         )
         self.assertEqual(quick_access_position, (1, 0, 1, 1))
         self.assertEqual(message_position, (1, 1, 1, 2))
         self.assertGreaterEqual(status_column.minimumWidth(), 650)
+        self.assertTrue(view._message_scroll.isHidden())
+        self.assertIsNotNone(view._settings_widget)
+        self.assertIsNotNone(view._settings_panel)
+        self.assertFalse(view._settings_content.isHidden())
+        self.assertEqual(
+            view._settings_widget._scroll.verticalScrollBarPolicy(),
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff,
+        )
+        self.assertEqual(
+            view._settings_widget._scroll.horizontalScrollBarPolicy(),
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff,
+        )
+        for button in view._settings_widget._unmatched_step_buttons:
+            self.assertEqual(button.width(), 40)
+            self.assertIn(button.text(), {"−", "+"})
+            self.assertIn("padding: 0", button.styleSheet())
+        self.assertEqual(view._settings_widget._pass_count_box.height(), 104)
+        self.assertEqual(view._settings_widget._acceleration_scale_box.height(), 104)
+        self.assertTrue(view._settings_widget._acceleration_scale_apply.isHidden())
+        self.assertEqual(view._settings_widget._unmatched_apply.text(), "Apply All")
+        self.assertIsInstance(view._settings_widget._pass_2_use_first, QToggle)
+        self.assertEqual(view._settings_widget._pass_2_use_first.height(), 36)
+        self.assertEqual(
+            view._settings_widget._pass_2_use_first.cursor().shape(),
+            Qt.CursorShape.PointingHandCursor,
+        )
+        self.assertEqual(
+            view._settings_widget._pass_1_compact_fields_layout.direction(),
+            QVBoxLayout.Direction.TopToBottom,
+        )
+        painting_requests = []
+        scaling_requests = []
+        view._settings_widget.unmatched_paint_settings_requested.connect(
+            painting_requests.append
+        )
+        view._settings_widget.acceleration_scale_requested.connect(
+            scaling_requests.append
+        )
+        view._settings_widget._unmatched_apply.click()
+        self.assertEqual(len(painting_requests), 1)
+        self.assertEqual(scaling_requests, [100.0])
+        self.assertEqual(view._settings_title_label.text(), "Settings")
+        self.assertIs(view._accordion_layout.itemAt(0).widget(), view._settings_panel)
+        self.assertIs(view._accordion_layout.itemAt(1).widget(), view._message_panel)
+        self.assertEqual(view._accordion_layout.stretch(0), 1)
+        self.assertEqual(view._accordion_layout.stretch(1), 0)
+        view._message_toggle.click()
         self.assertFalse(view._message_scroll.isHidden())
+        self.assertTrue(view._settings_content.isHidden())
+        self.assertEqual(view._accordion_layout.stretch(0), 0)
+        self.assertEqual(view._accordion_layout.stretch(1), 1)
         view._message_toggle.click()
         self.assertTrue(view._message_scroll.isHidden())
         self.assertFalse(view._message_toggle.icon().isNull())

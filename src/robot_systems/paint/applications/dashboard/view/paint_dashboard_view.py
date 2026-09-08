@@ -54,6 +54,7 @@ _PROCESS_CONTROLS_BOTTOM_MARGIN = 5
 _EXPANDED_PROCESS_SECTION_HEIGHT = 300
 _EXPANDED_STATUS_MIN_WIDTH = 650
 _MESSAGE_COLLAPSED_HEIGHT = 45
+_SETTINGS_COLLAPSED_HEIGHT = 45
 _PROCESS_CONTROLS_PANEL_STYLE = f"""
 QFrame#paintProcessControlsPanel {{
     background-color: white;
@@ -215,6 +216,12 @@ class PaintDashboardView(IApplicationView):
         self._message_toggle: QToolButton | None = None
         self._message_panel: QFrame | None = None
         self._message_scroll: QScrollArea | None = None
+        self._accordion_layout: QVBoxLayout | None = None
+        self._settings_widget: PaintControlsDrawer | None = None
+        self._settings_panel: QFrame | None = None
+        self._settings_content: QWidget | None = None
+        self._settings_title_label: QLabel | None = None
+        self._settings_toggle: QToolButton | None = None
         self._last_state = None
         self._auxiliary_toggles = list(auxiliary_toggles or [])
         self._controls_drawer = None
@@ -265,6 +272,7 @@ class PaintDashboardView(IApplicationView):
         self._install_manual_plate_layout()
         self._align_preview_and_card_columns()
         self._install_bottom_quick_controls()
+        self._install_controls_drawer()
         self._install_message_panel()
         self._place_reset_action()
         self._expand_process_controls()
@@ -273,7 +281,6 @@ class PaintDashboardView(IApplicationView):
         self._dashboard.stop_requested.connect(self.stop_requested)
         self._dashboard.pause_requested.connect(self.pause_requested)
         self._dashboard.action_requested.connect(self._on_inner_action)
-        self._install_controls_drawer()
 
     def _install_manual_plate_layout(self) -> None:
         try:
@@ -338,20 +345,12 @@ class PaintDashboardView(IApplicationView):
             self._plate_layout = None
 
     def _install_controls_drawer(self) -> None:
-        self._controls_widget = PaintControlsDrawer(
-            self._auxiliary_toggles,
-            show_manual_controls=self._ui_config.show_manual_controls,
-            show_unmatched_paint_controls=self._ui_config.show_unmatched_paint_controls,
-            show_acceleration_scale_control=self._ui_config.show_acceleration_scale_control,
-            show_shortcuts=self._ui_config.show_application_shortcuts,
-            compact_layout=not self._ui_config.show_camera_preview,
-            use_combined_speed_control=self._ui_config.use_combined_paint_speed_control,
-            combined_speed_minimum_percent=self._ui_config.combined_paint_speed_minimum_percent,
-            combined_speed_maximum_percent=self._ui_config.combined_paint_speed_maximum_percent,
-            combined_acceleration_minimum_percent=self._ui_config.combined_paint_acceleration_minimum_percent,
-            combined_acceleration_maximum_percent=self._ui_config.combined_paint_acceleration_maximum_percent,
-            show_resolved_speed_values=self._ui_config.show_resolved_paint_speed_values,
-        )
+        self._controls_widget = self._build_controls_widget()
+        if not self._ui_config.show_camera_preview:
+            self._settings_widget = self._build_controls_widget(concise=True)
+        self._connect_controls_widget(self._controls_widget)
+        if self._settings_widget is not None:
+            self._connect_controls_widget(self._settings_widget)
         if self._ui_config.show_camera_preview:
             self._controls_drawer = DrawerToggle(
                 self,
@@ -371,20 +370,39 @@ class PaintDashboardView(IApplicationView):
             )
             self._center_expanded_tab_icon(0, "fa5s.sliders-h")
             self._retranslate_expanded_tabs()
-        self._controls_widget.cable_relief_requested.connect(self.cable_relief_requested)
-        self._controls_widget.device_toggle_requested.connect(self.auxiliary_toggle_requested)
-        self._controls_widget.application_shortcut_requested.connect(
-            self.application_shortcut_requested
-        )
-        self._controls_widget.unmatched_paint_settings_requested.connect(
-            self.unmatched_paint_settings_requested
-        )
-        self._controls_widget.acceleration_scale_requested.connect(
-            self.acceleration_scale_requested
-        )
-        self._controls_widget.drying_mode_requested.connect(self.drying_mode_requested)
         if self._controls_drawer is not None:
             self._controls_drawer.set_visible(self._ui_config.show_left_drawer)
+
+    def _build_controls_widget(self, *, concise: bool = False) -> PaintControlsDrawer:
+        return PaintControlsDrawer(
+            self._auxiliary_toggles,
+            show_manual_controls=self._ui_config.show_manual_controls,
+            show_unmatched_paint_controls=self._ui_config.show_unmatched_paint_controls,
+            show_acceleration_scale_control=self._ui_config.show_acceleration_scale_control,
+            show_shortcuts=self._ui_config.show_application_shortcuts,
+            compact_layout=not self._ui_config.show_camera_preview,
+            concise_layout=concise,
+            use_combined_speed_control=self._ui_config.use_combined_paint_speed_control,
+            combined_speed_minimum_percent=self._ui_config.combined_paint_speed_minimum_percent,
+            combined_speed_maximum_percent=self._ui_config.combined_paint_speed_maximum_percent,
+            combined_acceleration_minimum_percent=self._ui_config.combined_paint_acceleration_minimum_percent,
+            combined_acceleration_maximum_percent=self._ui_config.combined_paint_acceleration_maximum_percent,
+            show_resolved_speed_values=self._ui_config.show_resolved_paint_speed_values,
+        )
+
+    def _connect_controls_widget(self, widget: PaintControlsDrawer) -> None:
+        widget.cable_relief_requested.connect(self.cable_relief_requested)
+        widget.device_toggle_requested.connect(self.auxiliary_toggle_requested)
+        widget.application_shortcut_requested.connect(
+            self.application_shortcut_requested
+        )
+        widget.unmatched_paint_settings_requested.connect(
+            self.unmatched_paint_settings_requested
+        )
+        widget.acceleration_scale_requested.connect(
+            self.acceleration_scale_requested
+        )
+        widget.drying_mode_requested.connect(self.drying_mode_requested)
 
     def _install_bottom_quick_controls(self) -> None:
         if (
@@ -496,9 +514,30 @@ class PaintDashboardView(IApplicationView):
                 0,
             )
             panel_host_layout.addWidget(panel, alignment=Qt.AlignmentFlag.AlignTop)
+            self._message_panel = panel
             if self._quick_access is not None:
                 message_row = 1
-                layout.addWidget(panel_host, message_row, 1, 1, 2)
+                accordion = QWidget()
+                accordion.setStyleSheet("background: transparent; border: none;")
+                accordion_layout = QVBoxLayout(accordion)
+                accordion_layout.setContentsMargins(
+                    0,
+                    0,
+                    _MESSAGE_DRAWER_HANDLE_CLEARANCE,
+                    0,
+                )
+                accordion_layout.setSpacing(8)
+                panel_host_layout.setContentsMargins(0, 0, 0, 0)
+                panel_host_layout.removeWidget(panel)
+                panel.setParent(accordion)
+                settings_panel = self._build_settings_panel()
+                accordion_layout.addWidget(settings_panel, 1)
+                accordion_layout.addWidget(panel, 0)
+                layout.addWidget(accordion, message_row, 1, 1, 2)
+                self._accordion_layout = accordion_layout
+                self._settings_panel = settings_panel
+                self._set_message_collapsed(True)
+                self._set_settings_collapsed(False)
             else:
                 message_row = 2
                 layout.addWidget(panel_host, message_row, 0, 1, 3)
@@ -508,7 +547,6 @@ class PaintDashboardView(IApplicationView):
             layout.setRowStretch(message_row, 1)
             for column in range(3):
                 layout.setColumnStretch(column, 1)
-            self._message_panel = panel
             self._render_messages()
         except Exception:
             pass
@@ -582,10 +620,66 @@ class PaintDashboardView(IApplicationView):
         self.retranslateUi()
         return panel
 
+    def _build_settings_panel(self) -> QFrame:
+        panel = QFrame()
+        panel.setStyleSheet(_MESSAGE_PANEL_STYLE)
+        panel.setMaximumHeight(_SETTINGS_COLLAPSED_HEIGHT)
+        policy = panel.sizePolicy()
+        policy.setVerticalPolicy(QSizePolicy.Policy.Fixed)
+        panel.setSizePolicy(policy)
+
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(14, 10, 14, 10)
+        layout.setSpacing(4)
+
+        header = _ClickableHeader()
+        header.setStyleSheet("background: transparent; border: none;")
+        header.setCursor(Qt.CursorShape.PointingHandCursor)
+        header.clicked.connect(self._toggle_settings_panel)
+        header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(0, 0, 0, 0)
+        header_layout.setSpacing(4)
+
+        self._settings_title_label = QLabel()
+        self._settings_title_label.setAttribute(
+            Qt.WidgetAttribute.WA_TransparentForMouseEvents
+        )
+        self._settings_title_label.setStyleSheet(_MESSAGE_TITLE_STYLE)
+        self._settings_title_label.setText(self._translate_text("Settings"))
+        header_layout.addWidget(self._settings_title_label)
+        header_layout.addStretch(1)
+
+        self._settings_toggle = QToolButton()
+        self._settings_toggle.setAutoRaise(True)
+        self._settings_toggle.setIconSize(QSize(18, 18))
+        self._settings_toggle.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._settings_toggle.setFixedSize(32, 28)
+        self._settings_toggle.setStyleSheet(
+            f"QToolButton {{ color: {PRIMARY}; background: transparent; border: none; }}"
+            f"QToolButton:hover {{ background: {BG_COLOR}; border-radius: 6px; }}"
+        )
+        self._settings_toggle.clicked.connect(self._toggle_settings_panel)
+        header_layout.addWidget(self._settings_toggle)
+        layout.addWidget(header)
+
+        self._settings_content = self._settings_widget
+        if self._settings_content is not None:
+            self._settings_content.hide()
+            layout.addWidget(self._settings_content, 1)
+        self._retranslate_settings_toggle(True)
+        return panel
+
     def _toggle_message_panel(self) -> None:
         if self._message_panel is None or self._message_scroll is None:
             return
         collapsed = not self._message_scroll.isHidden()
+        if not collapsed:
+            self._set_settings_collapsed(True)
+        self._set_message_collapsed(collapsed)
+
+    def _set_message_collapsed(self, collapsed: bool) -> None:
+        if self._message_panel is None or self._message_scroll is None:
+            return
         self._message_scroll.setVisible(not collapsed)
         if collapsed:
             self._message_panel.setMaximumHeight(_MESSAGE_COLLAPSED_HEIGHT)
@@ -597,6 +691,42 @@ class PaintDashboardView(IApplicationView):
         policy.setVerticalPolicy(vertical_policy)
         self._message_panel.setSizePolicy(policy)
         self._retranslate_message_toggle(collapsed)
+        self._update_accordion_stretch()
+
+    def _toggle_settings_panel(self) -> None:
+        if self._settings_content is None:
+            return
+        collapsed = not self._settings_content.isHidden()
+        if not collapsed:
+            self._set_message_collapsed(True)
+        self._set_settings_collapsed(collapsed)
+
+    def _set_settings_collapsed(self, collapsed: bool) -> None:
+        if self._settings_panel is None or self._settings_content is None:
+            return
+        self._settings_content.setVisible(not collapsed)
+        self._settings_panel.setMaximumHeight(
+            _SETTINGS_COLLAPSED_HEIGHT if collapsed else 16777215
+        )
+        policy = self._settings_panel.sizePolicy()
+        policy.setVerticalPolicy(
+            QSizePolicy.Policy.Fixed if collapsed else QSizePolicy.Policy.Expanding
+        )
+        self._settings_panel.setSizePolicy(policy)
+        self._retranslate_settings_toggle(collapsed)
+        self._update_accordion_stretch()
+
+    def _update_accordion_stretch(self) -> None:
+        if self._accordion_layout is None:
+            return
+        message_expanded = bool(
+            self._message_scroll is not None and not self._message_scroll.isHidden()
+        )
+        settings_expanded = bool(
+            self._settings_content is not None and not self._settings_content.isHidden()
+        )
+        self._accordion_layout.setStretch(0, int(settings_expanded))
+        self._accordion_layout.setStretch(1, int(message_expanded))
 
     @staticmethod
     def _clear_layout(layout) -> None:
@@ -720,21 +850,24 @@ class PaintDashboardView(IApplicationView):
         self._dashboard.set_action_button_text(action_id, self._translate_text(text))
 
     def set_auxiliary_state(self, device_id: str, enabled: bool) -> None:
-        self._controls_widget.set_device_state(device_id, enabled)
+        for widget in self._control_widgets():
+            widget.set_device_state(device_id, enabled)
         if self._quick_controls is not None:
             self._quick_controls.set_device_state(device_id, enabled)
         if self._quick_access is not None:
             self._quick_access.set_device_state(device_id, enabled)
 
     def set_auxiliary_busy(self, device_id: str, busy: bool) -> None:
-        self._controls_widget.set_device_busy(device_id, busy)
+        for widget in self._control_widgets():
+            widget.set_device_busy(device_id, busy)
         if self._quick_controls is not None:
             self._quick_controls.set_device_busy(device_id, busy)
         if self._quick_access is not None:
             self._quick_access.set_device_busy(device_id, busy)
 
     def set_cable_relief_busy(self, busy: bool) -> None:
-        self._controls_widget.set_cable_relief_busy(busy)
+        for widget in self._control_widgets():
+            widget.set_cable_relief_busy(busy)
         if self._quick_controls is not None:
             self._quick_controls.set_cable_relief_busy(busy)
         if self._quick_access is not None:
@@ -745,8 +878,8 @@ class PaintDashboardView(IApplicationView):
             self._quick_controls.set_drying_mode(mode)
         if self._preview_stack is not None:
             self._preview_stack.setCurrentIndex(1 if str(mode).lower() == "manual" else 0)
-        if self._controls_widget is not None:
-            self._controls_widget.set_drying_mode(mode)
+        for widget in self._control_widgets():
+            widget.set_drying_mode(mode)
         if self._quick_access is not None:
             self._quick_access.set_drying_mode(mode)
 
@@ -779,8 +912,8 @@ class PaintDashboardView(IApplicationView):
     def set_drying_mode_busy(self, busy: bool) -> None:
         if self._quick_controls is not None:
             self._quick_controls.set_drying_mode_busy(busy)
-        if self._controls_widget is not None:
-            self._controls_widget.set_drying_mode_busy(busy)
+        for widget in self._control_widgets():
+            widget.set_drying_mode_busy(busy)
         if self._quick_access is not None:
             self._quick_access.set_drying_mode_busy(busy)
 
@@ -791,23 +924,35 @@ class PaintDashboardView(IApplicationView):
         return ask_yes_no(self, title, message, default_no=True)
 
     def set_application_shortcuts(self, shortcuts: list) -> None:
-        self._controls_widget.set_application_shortcuts(shortcuts)
+        for widget in self._control_widgets():
+            widget.set_application_shortcuts(shortcuts)
 
     def set_unmatched_paint_settings(self, settings: dict) -> None:
-        self._controls_widget.set_unmatched_paint_settings(settings)
+        for widget in self._control_widgets():
+            widget.set_unmatched_paint_settings(settings)
         if self._quick_controls is not None:
             self._quick_controls.set_unmatched_paint_settings(settings)
 
     def set_unmatched_paint_settings_editable(self, editable: bool) -> None:
-        self._controls_widget.set_unmatched_paint_settings_editable(editable)
+        for widget in self._control_widgets():
+            widget.set_unmatched_paint_settings_editable(editable)
         if self._quick_controls is not None:
             self._quick_controls.set_settings_editable(editable)
 
     def set_acceleration_scale(self, value: float) -> None:
-        self._controls_widget.set_acceleration_scale(value)
+        for widget in self._control_widgets():
+            widget.set_acceleration_scale(value)
 
     def set_acceleration_scale_editable(self, editable: bool) -> None:
-        self._controls_widget.set_acceleration_scale_editable(editable)
+        for widget in self._control_widgets():
+            widget.set_acceleration_scale_editable(editable)
+
+    def _control_widgets(self) -> tuple[PaintControlsDrawer, ...]:
+        return tuple(
+            widget
+            for widget in (self._controls_widget, self._settings_widget)
+            if widget is not None
+        )
 
     def show_info(self, title: str, message: str) -> None:
         self._enqueue_message("info", title, message)
@@ -982,8 +1127,14 @@ class PaintDashboardView(IApplicationView):
             )
         if self._message_empty_label is not None:
             self._message_empty_label.setText(self._translate_text("No process messages"))
-        if self._controls_widget is not None:
-            self._controls_widget.retranslateUi()
+        if self._settings_title_label is not None:
+            self._settings_title_label.setText(self._translate_text("Settings"))
+        if self._settings_toggle is not None:
+            self._retranslate_settings_toggle(
+                self._settings_content is None or self._settings_content.isHidden()
+            )
+        for widget in self._control_widgets():
+            widget.retranslateUi()
         if self._quick_controls is not None:
             self._quick_controls.retranslateUi()
         if self._quick_access is not None:
@@ -1005,6 +1156,16 @@ class PaintDashboardView(IApplicationView):
         self._message_toggle.setAccessibleName(text)
         icon_name = "fa5s.chevron-right" if collapsed else "fa5s.chevron-down"
         self._message_toggle.setIcon(load_icon(icon_name, color=PRIMARY))
+
+    def _retranslate_settings_toggle(self, collapsed: bool) -> None:
+        if self._settings_toggle is None:
+            return
+        source = "Expand Settings" if collapsed else "Collapse Settings"
+        text = self._translate_text(source)
+        self._settings_toggle.setToolTip(text)
+        self._settings_toggle.setAccessibleName(text)
+        icon_name = "fa5s.chevron-right" if collapsed else "fa5s.chevron-down"
+        self._settings_toggle.setIcon(load_icon(icon_name, color=PRIMARY))
 
     def _retranslate_expanded_tabs(self) -> None:
         if self._expanded_tabs is None or self._expanded_tabs.count() < 2:
