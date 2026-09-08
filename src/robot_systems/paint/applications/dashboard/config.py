@@ -22,6 +22,7 @@ class PaintDashboardUiConfig:
     show_acceleration_scale_control: bool = True
     show_bottom_quick_controls: bool = True
     show_camera_preview: bool = True
+    use_collapsible_settings_panel: bool = True
     use_combined_paint_speed_control: bool = False
     combined_paint_speed_minimum_percent: float = 1.0
     combined_paint_speed_maximum_percent: float = 100.0

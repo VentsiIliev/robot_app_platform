@@ -170,6 +170,9 @@ class PaintRobotSystem(BaseRobotSystem):
 
     ui_config = PaintDashboardUiConfig(
         show_camera_preview=paint_system_config.SHOW_DASHBOARD_CAMERA_PREVIEW,
+        use_collapsible_settings_panel=(
+            paint_system_config.USE_COLLAPSIBLE_DASHBOARD_SETTINGS_PANEL
+        ),
         use_combined_paint_speed_control=(
             paint_system_config.USE_COMBINED_PAINT_SPEED_CONTROL
         ),

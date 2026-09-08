@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from pl_gui.dashboard.config import CardConfig
 
 from src.robot_systems.paint.applications.dashboard.ui.paint_info_card import (
@@ -11,6 +13,16 @@ _DEFAULT_CARD_DATA = {
     1: ("Robot Status", "UNKNOWN", "Waiting for robot state"),
     2: ("Vision Status", "UNKNOWN", "Waiting for vision state"),
     3: ("Process Status", "READY", "Waiting for start"),
+}
+
+_PAINT_ICON_PATH = str(
+    Path(__file__).resolve().parent.parent / "assets" / "paint_process.svg"
+)
+
+_STATUS_ICONS = {
+    1: "mdi.robot-industrial",
+    2: "fa5s.camera",
+    3: _PAINT_ICON_PATH,
 }
 
 
@@ -32,4 +44,9 @@ class PaintCardFactory:
             cfg.card_id,
             (cfg.label, "Ready", "Status available"),
         )
-        return PaintInfoCard(title, value, note)
+        return PaintInfoCard(
+            title,
+            value,
+            note,
+            icon_name=_STATUS_ICONS.get(cfg.card_id, "fa5s.circle"),
+        )

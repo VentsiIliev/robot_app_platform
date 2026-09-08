@@ -3,7 +3,16 @@ from __future__ import annotations
 from collections import deque
 from datetime import datetime
 
-from PyQt6.QtCore import QCoreApplication, QSize, Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import (
+    QCoreApplication,
+    QEasingCurve,
+    QPropertyAnimation,
+    QRect,
+    QSize,
+    Qt,
+    QTimer,
+    pyqtSignal,
+)
 from PyQt6.QtGui import QIcon, QPixmap
 from PyQt6.QtWidgets import (
     QDialog,
@@ -231,6 +240,12 @@ class PaintDashboardView(IApplicationView):
         self._plate_layout = None
         self._expanded_tabs = None
         self._quick_access = None
+        self._status_rail: QWidget | None = None
+        self._status_flyout: QFrame | None = None
+        self._status_flyout_title: QLabel | None = None
+        self._status_flyout_value: QLabel | None = None
+        self._status_flyout_animation: QPropertyAnimation | None = None
+        self._active_status_card = None
         super().__init__("PaintDashboard", parent)
 
     @property
@@ -270,6 +285,7 @@ class PaintDashboardView(IApplicationView):
         layout.addWidget(self._dashboard)
         self._dashboard.setStyleSheet(f"background-color: {BG_COLOR};")
         self._install_manual_plate_layout()
+        self._install_compact_status_rail()
         self._align_preview_and_card_columns()
         self._install_bottom_quick_controls()
         self._install_controls_drawer()
@@ -337,20 +353,120 @@ class PaintDashboardView(IApplicationView):
                 self._plate_layout.set_new_tray_button_visible(False)
                 side_panel = top_section.itemAt(top_section.count() - 1).widget()
                 side_layout = side_panel.layout()
-                side_layout.addWidget(self._quick_access, 1, 0)
+                side_layout.addWidget(self._quick_access, 0, 0)
                 side_panel.setMinimumWidth(_EXPANDED_STATUS_MIN_WIDTH)
                 side_panel.setMaximumWidth(16777215)
         except (AttributeError, RuntimeError):
             self._preview_stack = None
             self._plate_layout = None
 
+    def _install_compact_status_rail(self) -> None:
+        if self._ui_config.show_camera_preview:
+            return
+        try:
+            main_layout = self._dashboard.layout_manager.main_layout
+            top_section = main_layout.itemAt(0).layout()
+            side_panel = top_section.itemAt(top_section.count() - 1).widget()
+            side_layout = side_panel.layout()
+
+            rail = QWidget()
+            rail.setStyleSheet("background: transparent; border: none;")
+            rail_layout = QVBoxLayout(rail)
+            rail_layout.setContentsMargins(0, 0, 0, 0)
+            rail_layout.setSpacing(6)
+            for card in self._cards_by_id.values():
+                side_layout.removeWidget(card)
+                set_compact = getattr(card, "set_compact", None)
+                if callable(set_compact):
+                    set_compact(True)
+                expanded_changed = getattr(card, "expansion_changed", None)
+                if expanded_changed is not None:
+                    expanded_changed.connect(self._on_status_card_expansion_changed)
+                rail_layout.addWidget(card, alignment=Qt.AlignmentFlag.AlignRight)
+            rail_layout.addStretch(1)
+            side_layout.addWidget(
+                rail,
+                0,
+                3,
+                1,
+                1,
+                Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight,
+            )
+            side_layout.setColumnStretch(3, 0)
+            self._status_rail = rail
+            self._build_status_flyout(side_panel)
+        except (AttributeError, RuntimeError):
+            self._status_rail = None
+
+    def _on_status_card_expansion_changed(self, expanded: bool) -> None:
+        active_card = self.sender()
+        for card in self._cards_by_id.values():
+            set_expanded = getattr(card, "set_expanded", None)
+            if callable(set_expanded):
+                set_expanded(card is active_card and expanded)
+        if not expanded:
+            self._hide_status_flyout()
+            return
+        self._active_status_card = active_card
+        self._show_status_flyout(active_card)
+
+    def _build_status_flyout(self, parent: QWidget) -> None:
+        flyout = QFrame(parent)
+        flyout.setStyleSheet(_MESSAGE_PANEL_STYLE)
+        flyout.setFixedHeight(76)
+        flyout.hide()
+        layout = QVBoxLayout(flyout)
+        layout.setContentsMargins(12, 8, 12, 8)
+        layout.setSpacing(2)
+        self._status_flyout_title = QLabel()
+        self._status_flyout_title.setStyleSheet(_MESSAGE_TITLE_STYLE)
+        self._status_flyout_value = QLabel()
+        self._status_flyout_value.setStyleSheet(
+            f"color: {TEXT_COLOR}; font-size: 14pt; font-weight: bold; "
+            "background: transparent; border: none;"
+        )
+        layout.addWidget(self._status_flyout_title)
+        layout.addWidget(self._status_flyout_value)
+        self._status_flyout = flyout
+        animation = QPropertyAnimation(flyout, b"geometry", flyout)
+        animation.setDuration(240)
+        animation.setEasingCurve(QEasingCurve.Type.InOutCubic)
+        self._status_flyout_animation = animation
+
+    def _show_status_flyout(self, card) -> None:
+        if self._status_flyout is None or self._status_rail is None:
+            return
+        self._status_flyout_title.setText(card._title_label.text())
+        self._status_flyout_value.setText(card._value_label.text())
+        rail_top = self._status_rail.mapTo(self._status_flyout.parentWidget(), card.pos())
+        right = rail_top.x()
+        top = rail_top.y()
+        width = 210
+        self._status_flyout_animation.stop()
+        self._status_flyout.setGeometry(QRect(right, top, 0, 76))
+        self._status_flyout.show()
+        self._status_flyout.raise_()
+        self._status_rail.raise_()
+        self._status_flyout_animation.setStartValue(QRect(right, top, 0, 76))
+        self._status_flyout_animation.setEndValue(QRect(right - width, top, width, 76))
+        self._status_flyout_animation.start()
+
+    def _hide_status_flyout(self) -> None:
+        if self._status_flyout is None:
+            return
+        self._status_flyout_animation.stop()
+        self._status_flyout.hide()
+        self._active_status_card = None
+
     def _install_controls_drawer(self) -> None:
-        self._controls_widget = self._build_controls_widget()
-        if not self._ui_config.show_camera_preview:
-            self._settings_widget = self._build_controls_widget(concise=True)
+        use_panel = (
+            not self._ui_config.show_camera_preview
+            and self._ui_config.use_collapsible_settings_panel
+        )
+        self._controls_widget = self._build_controls_widget(concise=use_panel)
+        if use_panel:
+            self._settings_widget = self._controls_widget
         self._connect_controls_widget(self._controls_widget)
-        if self._settings_widget is not None:
-            self._connect_controls_widget(self._settings_widget)
         if self._ui_config.show_camera_preview:
             self._controls_drawer = DrawerToggle(
                 self,
@@ -362,13 +478,16 @@ class PaintDashboardView(IApplicationView):
             placeholder = self._expanded_tabs.widget(0)
             self._expanded_tabs.removeTab(0)
             placeholder.deleteLater()
-            self._expanded_tabs.insertTab(
-                0,
-                self._controls_widget,
-                load_icon("fa5s.sliders-h", color=PRIMARY),
-                "",
-            )
-            self._center_expanded_tab_icon(0, "fa5s.sliders-h")
+            if self._ui_config.use_collapsible_settings_panel:
+                self._center_expanded_tab_icon(0, "fa5s.th")
+            else:
+                self._expanded_tabs.insertTab(
+                    0,
+                    self._controls_widget,
+                    load_icon("fa5s.sliders-h", color=PRIMARY),
+                    "",
+                )
+                self._center_expanded_tab_icon(0, "fa5s.sliders-h")
             self._retranslate_expanded_tabs()
         if self._controls_drawer is not None:
             self._controls_drawer.set_visible(self._ui_config.show_left_drawer)
@@ -510,20 +629,20 @@ class PaintDashboardView(IApplicationView):
             panel_host_layout.setContentsMargins(
                 0,
                 0,
-                _MESSAGE_DRAWER_HANDLE_CLEARANCE,
+                0 if self._status_rail is not None else _MESSAGE_DRAWER_HANDLE_CLEARANCE,
                 0,
             )
             panel_host_layout.addWidget(panel, alignment=Qt.AlignmentFlag.AlignTop)
             self._message_panel = panel
-            if self._quick_access is not None:
-                message_row = 1
+            if self._quick_access is not None and self._settings_widget is not None:
+                message_row = 0
                 accordion = QWidget()
                 accordion.setStyleSheet("background: transparent; border: none;")
                 accordion_layout = QVBoxLayout(accordion)
                 accordion_layout.setContentsMargins(
                     0,
                     0,
-                    _MESSAGE_DRAWER_HANDLE_CLEARANCE,
+                    0,
                     0,
                 )
                 accordion_layout.setSpacing(8)
@@ -533,15 +652,19 @@ class PaintDashboardView(IApplicationView):
                 settings_panel = self._build_settings_panel()
                 accordion_layout.addWidget(settings_panel, 1)
                 accordion_layout.addWidget(panel, 0)
+                accordion_layout.addStretch(0)
                 layout.addWidget(accordion, message_row, 1, 1, 2)
                 self._accordion_layout = accordion_layout
                 self._settings_panel = settings_panel
                 self._set_message_collapsed(True)
                 self._set_settings_collapsed(False)
+            elif self._quick_access is not None:
+                message_row = 0
+                layout.addWidget(panel_host, message_row, 1, 1, 2)
             else:
                 message_row = 2
                 layout.addWidget(panel_host, message_row, 0, 1, 3)
-            layout.setRowMinimumHeight(0, 82)
+            layout.setRowMinimumHeight(0, 0 if self._status_rail is not None else 82)
             layout.setRowStretch(0, 0)
             layout.setRowStretch(1, int(message_row == 1))
             layout.setRowStretch(message_row, 1)
@@ -727,6 +850,10 @@ class PaintDashboardView(IApplicationView):
         )
         self._accordion_layout.setStretch(0, int(settings_expanded))
         self._accordion_layout.setStretch(1, int(message_expanded))
+        self._accordion_layout.setStretch(
+            2,
+            int(not settings_expanded and not message_expanded),
+        )
 
     @staticmethod
     def _clear_layout(layout) -> None:
@@ -948,11 +1075,9 @@ class PaintDashboardView(IApplicationView):
             widget.set_acceleration_scale_editable(editable)
 
     def _control_widgets(self) -> tuple[PaintControlsDrawer, ...]:
-        return tuple(
-            widget
-            for widget in (self._controls_widget, self._settings_widget)
-            if widget is not None
-        )
+        if self._controls_widget is None:
+            return ()
+        return (self._controls_widget,)
 
     def show_info(self, title: str, message: str) -> None:
         self._enqueue_message("info", title, message)
@@ -1112,6 +1237,12 @@ class PaintDashboardView(IApplicationView):
                 self._translate_text(getattr(card_state, "value", "")),
                 self._translate_text(getattr(card_state, "note", "")),
             )
+            set_status_value = getattr(card, "set_status_value", None)
+            if callable(set_status_value):
+                set_status_value(getattr(card_state, "value", ""))
+            if card is self._active_status_card:
+                self._status_flyout_title.setText(card._title_label.text())
+                self._status_flyout_value.setText(card._value_label.text())
             self._last_card_states[card_id] = card_state
 
     def retranslateUi(self) -> None:
@@ -1168,12 +1299,15 @@ class PaintDashboardView(IApplicationView):
         self._settings_toggle.setIcon(load_icon(icon_name, color=PRIMARY))
 
     def _retranslate_expanded_tabs(self) -> None:
-        if self._expanded_tabs is None or self._expanded_tabs.count() < 2:
+        if self._expanded_tabs is None:
             return
-        labels = (
-            self._translate_text("Paint Settings"),
-            self._translate_text("Tray"),
-        )
+        if self._ui_config.use_collapsible_settings_panel:
+            labels = (self._translate_text("Tray"),)
+        else:
+            labels = (
+                self._translate_text("Paint Settings"),
+                self._translate_text("Tray"),
+            )
         for index, label in enumerate(labels):
             self._expanded_tabs.setTabText(index, "")
             self._expanded_tabs.setTabToolTip(index, label)

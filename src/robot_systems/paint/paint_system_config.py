@@ -22,6 +22,10 @@ PAINT_DASHBOARD_APP = True
 # process buttons expand to the available width.
 SHOW_DASHBOARD_CAMERA_PREVIEW = False
 
+# Camera-disabled layout only. True places paint settings in the collapsible
+# panel above Messages; False keeps them in the original Paint Settings tab.
+USE_COLLAPSIBLE_DASHBOARD_SETTINGS_PANEL = True
+
 # Replace separate paint velocity/acceleration inputs with Speed (1..100).
 # Velocity remains Speed, while acceleration is calculated as Speed² / 100.
 USE_COMBINED_PAINT_SPEED_CONTROL = True

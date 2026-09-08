@@ -46,6 +46,7 @@ from src.robot_systems.paint.applications.dashboard.view.paint_dashboard_view im
 from src.robot_systems.paint.applications.dashboard.config import (
     AuxiliaryToggleConfig,
     PAINT_DASHBOARD_ACTIONS,
+    PAINT_DASHBOARD_CARDS,
     PaintDashboardConfig,
     PaintDashboardUiConfig,
 )
@@ -379,14 +380,11 @@ class TestPaintDashboardUi(unittest.TestCase):
         )
 
         self.assertIsNotNone(view._expanded_tabs)
-        self.assertEqual(view._expanded_tabs.count(), 2)
-        self.assertIs(view._expanded_tabs.widget(0), view._controls_widget)
-        self.assertIs(view._expanded_tabs.widget(1), view._plate_layout)
+        self.assertEqual(view._expanded_tabs.count(), 1)
+        self.assertIs(view._expanded_tabs.widget(0), view._plate_layout)
         self.assertEqual(view._expanded_tabs.tabText(0), "")
-        self.assertEqual(view._expanded_tabs.tabText(1), "")
-        self.assertEqual(view._expanded_tabs.tabToolTip(0), "Paint Settings")
-        self.assertEqual(view._expanded_tabs.tabToolTip(1), "Tray")
-        for index in (0, 1):
+        self.assertEqual(view._expanded_tabs.tabToolTip(0), "Tray")
+        for index in (0,):
             icon_label = view._expanded_tabs.tabBar().tabButton(
                 index,
                 QTabBar.ButtonPosition.LeftSide,
@@ -408,8 +406,8 @@ class TestPaintDashboardUi(unittest.TestCase):
         message_position = status_layout.getItemPosition(
             status_layout.indexOf(message_host)
         )
-        self.assertEqual(quick_access_position, (1, 0, 1, 1))
-        self.assertEqual(message_position, (1, 1, 1, 2))
+        self.assertEqual(quick_access_position, (0, 0, 1, 1))
+        self.assertEqual(message_position, (0, 1, 1, 2))
         self.assertGreaterEqual(status_column.minimumWidth(), 650)
         self.assertTrue(view._message_scroll.isHidden())
         self.assertIsNotNone(view._settings_widget)
@@ -464,6 +462,10 @@ class TestPaintDashboardUi(unittest.TestCase):
         self.assertEqual(view._accordion_layout.stretch(1), 1)
         view._message_toggle.click()
         self.assertTrue(view._message_scroll.isHidden())
+        self.assertTrue(view._settings_content.isHidden())
+        self.assertEqual(view._accordion_layout.stretch(0), 0)
+        self.assertEqual(view._accordion_layout.stretch(1), 0)
+        self.assertEqual(view._accordion_layout.stretch(2), 1)
         self.assertFalse(view._message_toggle.icon().isNull())
         view._message_toggle.click()
         self.assertFalse(view._message_scroll.isHidden())
@@ -495,6 +497,82 @@ class TestPaintDashboardUi(unittest.TestCase):
         bottom_frame = control_buttons.layout().itemAt(1).widget()
         self.assertEqual(bottom_frame.layout().count(), 1)
         self.assertIs(bottom_frame.layout().itemAt(0).widget(), control_buttons.stop_btn)
+
+    def test_camera_disabled_can_keep_settings_in_original_tab(self) -> None:
+        view = PaintDashboardView(
+            config=PaintDashboardConfig(),
+            action_buttons=PAINT_DASHBOARD_ACTIONS,
+            cards=[],
+            auxiliary_toggles=[],
+            ui_config=PaintDashboardUiConfig(
+                show_camera_preview=False,
+                use_collapsible_settings_panel=False,
+            ),
+        )
+
+        self.assertEqual(view._expanded_tabs.count(), 2)
+        self.assertIs(view._expanded_tabs.widget(0), view._controls_widget)
+        self.assertIs(view._expanded_tabs.widget(1), view._plate_layout)
+        self.assertEqual(view._expanded_tabs.tabToolTip(0), "Paint Settings")
+        self.assertEqual(view._expanded_tabs.tabToolTip(1), "Tray")
+        self.assertIsNone(view._settings_widget)
+        self.assertIsNone(view._settings_panel)
+        self.assertIsNone(view._accordion_layout)
+        self.assertFalse(view._message_scroll.isHidden())
+
+    def test_camera_disabled_moves_status_cards_to_exclusive_compact_rail(self) -> None:
+        view = PaintDashboardView(
+            config=PaintDashboardConfig(),
+            action_buttons=PAINT_DASHBOARD_ACTIONS,
+            cards=PaintCardFactory().build_cards(PAINT_DASHBOARD_CARDS),
+            auxiliary_toggles=[],
+            ui_config=PaintDashboardUiConfig(show_camera_preview=False),
+        )
+
+        self.assertIsNotNone(view._status_rail)
+        rail_layout = view._status_rail.layout()
+        self.assertEqual(rail_layout.count(), 4)
+        cards = list(view._cards_by_id.values())
+        for index, card in enumerate(cards):
+            self.assertIs(rail_layout.itemAt(index).widget(), card)
+            self.assertEqual(card.width(), 48)
+            self.assertFalse(card.is_expanded())
+            self.assertFalse(card._indicator.isHidden())
+            self.assertEqual(
+                card.cursor().shape(),
+                Qt.CursorShape.PointingHandCursor,
+            )
+
+        cards[0].set_expanded(True)
+        cards[0].expansion_changed.emit(True)
+        self.assertTrue(cards[0].is_expanded())
+        self.assertEqual(cards[0].width(), 48)
+        self.assertFalse(view._status_flyout.isHidden())
+        self.assertEqual(view._status_flyout_title.text(), "Robot Status")
+        cards[1].set_expanded(True)
+        cards[1].expansion_changed.emit(True)
+        self.assertFalse(cards[0].is_expanded())
+        self.assertTrue(cards[1].is_expanded())
+        self.assertEqual(cards[1].width(), 48)
+        self.assertEqual(view._status_flyout_title.text(), "Vision Status")
+        cards[1].expansion_changed.emit(False)
+        self.assertTrue(view._status_flyout.isHidden())
+
+        cards[0].set_content("Robot Status", "DISCONNECTED", "")
+        cards[1].set_content("Vision Status", "ONLINE", "")
+        self.assertEqual("#79747E", cards[0]._status_color)
+        self.assertEqual("#905BA9", cards[1]._status_color)
+        self.assertFalse(cards[0]._indicator.icon().isNull())
+        self.assertFalse(cards[1]._indicator.icon().isNull())
+        self.assertEqual(cards[0]._icon_name, "mdi.robot-industrial")
+        self.assertEqual(cards[1]._icon_name, "fa5s.camera")
+        self.assertTrue(cards[2]._icon_name.endswith("assets/paint_process.svg"))
+        self.assertTrue(os.path.isfile(cards[2]._icon_name))
+        self.assertFalse(cards[2]._indicator.icon().isNull())
+        paint_pixmap = cards[2]._indicator.icon().pixmap(32, 32)
+        paint_image = paint_pixmap.toImage()
+        self.assertTrue(paint_image.hasAlphaChannel())
+        self.assertEqual(paint_image.pixelColor(0, 0).alpha(), 0)
 
     @classmethod
     def setUpClass(cls) -> None:
