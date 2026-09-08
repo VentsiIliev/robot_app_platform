@@ -953,8 +953,16 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
         self.assertIs(calls[3].kwargs["magazine_discovery_active_contour"], pile_two)
         self.assertIsNone(calls[4].kwargs["magazine_discovery_active_contour"])
 
-    def test_auto_discovery_does_not_preposition_to_camera_pose_between_pickups(self):
+    def test_auto_discovery_prepositions_to_magazine_group_between_pickups(self):
         service = self._make_service()
+        magazine_pose = [-100.0, -65.0, 200.0, -180.0, 0.0, 0.0]
+        service._magazine_load_service = SimpleNamespace(
+            _navigation=SimpleNamespace(
+                get_group_position=lambda group_id: (
+                    list(magazine_pose) if group_id == "Magazine" else None
+                )
+            )
+        )
         config = PaintMagazineLoadConfig(
             enabled=True,
             pickup_mode="auto_discovery_sensor_controlled_fast_lin",
@@ -964,10 +972,16 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
         context = SimpleNamespace(
             repeats_after_success=True,
             magazine_config=config,
+            magazine_group="Magazine",
+            magazine_fixed_pickup_pose=None,
             process_config=PaintProcessConfig(magazine_load=config),
         )
 
-        self.assertIsNone(service._next_cycle_start_target(context))
+        target = service._next_cycle_start_target(context)
+
+        self.assertIsNotNone(target)
+        self.assertEqual("Magazine", target["group_id"])
+        self.assertEqual(magazine_pose, target["position"])
 
     def test_run_once_aborts_when_magazine_load_fails(self):
         config_service = MagicMock()
