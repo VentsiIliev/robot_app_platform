@@ -328,6 +328,15 @@ def _execute_magazine_servo_contact_pickup_release(
         approach_segments,
     ):
         return False, "Magazine pickup approach before servo contact failed"
+    if not _wait_for_execution_inactive(executor._robot_service):
+        return False, "Magazine pickup approach did not become inactive"
+    approach_pose = _wait_for_stable_pose(executor._robot_service)
+    if approach_pose is None:
+        return False, "Magazine pickup approach pose did not become stable"
+    _logger.info(
+        "[MAGAZINE_LOAD] Pickup approach synchronized before servo contact pose=%s",
+        [round(value, 3) for value in approach_pose],
+    )
 
     if expected_start_pose is not None:
         ok, msg = _verify_fixed_pickup_start_pose(
@@ -730,7 +739,7 @@ def _wait_for_stable_pose(
                 stable_samples += 1
                 if stable_samples >= max(1, int(required_stable_samples)):
                     _logger.info(
-                        "[MAGAZINE_LOAD] Post-retract pose stable: xyz_delta_mm=%.3f "
+                        "[MAGAZINE_LOAD] Robot pose stable: xyz_delta_mm=%.3f "
                         "angular_delta_deg=%.3f samples=%d pose=%s",
                         xyz_delta,
                         angular_delta,
@@ -746,6 +755,47 @@ def _wait_for_stable_pose(
         time.sleep(max(0.01, float(sample_interval_s)))
     _logger.error("[MAGAZINE_LOAD] Post-retract pose stability timeout")
     return None
+
+
+def _wait_for_execution_inactive(
+    robot_service,
+    *,
+    timeout_s: float = 2.0,
+    poll_interval_s: float = 0.025,
+    required_inactive_samples: int = 2,
+) -> bool:
+    """Wait for the backend to finish a nominally blocking approach request."""
+    getter = getattr(robot_service, "get_execution_status", None)
+    if not callable(getter):
+        return True
+    deadline = time.monotonic() + max(0.1, float(timeout_s))
+    inactive_samples = 0
+    while time.monotonic() < deadline:
+        try:
+            status = getter()
+        except Exception:
+            _logger.exception("[MAGAZINE_LOAD] Pickup approach status read failed")
+            status = None
+        if isinstance(status, dict):
+            state = str(status.get("state") or status.get("status") or "").strip().lower()
+            active = bool(status.get("is_executing")) or state in {
+                "running",
+                "executing",
+                "active",
+                "moving",
+                "stopping",
+            }
+            if active:
+                inactive_samples = 0
+            else:
+                inactive_samples += 1
+                if inactive_samples >= max(1, int(required_inactive_samples)):
+                    return True
+        else:
+            inactive_samples = 0
+        time.sleep(max(0.005, float(poll_interval_s)))
+    _logger.error("[MAGAZINE_LOAD] Pickup approach execution-inactive timeout")
+    return False
 
 
 def handle_magazine_execute_pickup_release(ctx: PaintExecutionContext) -> PaintExecutionState:

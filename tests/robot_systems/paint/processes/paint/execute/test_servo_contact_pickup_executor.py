@@ -26,6 +26,7 @@ from src.robot_systems.paint.processes.paint.config import (
 )
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_execute_pickup_release_handler import (
     _execute_magazine_servo_contact_pickup_release,
+    _wait_for_execution_inactive,
 )
 from src.robot_systems.paint.processes.paint.magazine_load_result import (
     NO_WORKPIECE_AT_MAGAZINE,
@@ -157,6 +158,40 @@ class _ConditionLostAfterDetection:
 
 
 class ServoContactPickupExecutorTest(unittest.TestCase):
+    def test_magazine_approach_waits_for_two_inactive_status_samples(self):
+        statuses = iter((
+            {"is_executing": True, "state": "executing"},
+            {"is_executing": False, "state": "idle"},
+            {"is_executing": False, "state": "idle"},
+        ))
+        robot = SimpleNamespace(get_execution_status=lambda: next(statuses))
+
+        self.assertTrue(
+            _wait_for_execution_inactive(
+                robot,
+                timeout_s=0.1,
+                poll_interval_s=0.001,
+            )
+        )
+        with self.assertRaises(StopIteration):
+            next(statuses)
+
+    def test_magazine_approach_inactive_wait_times_out_while_still_executing(self):
+        robot = SimpleNamespace(
+            get_execution_status=lambda: {
+                "is_executing": True,
+                "state": "executing",
+            }
+        )
+
+        self.assertFalse(
+            _wait_for_execution_inactive(
+                robot,
+                timeout_s=0.02,
+                poll_interval_s=0.001,
+            )
+        )
+
     def test_calibration_contact_timeout_turns_vacuum_off(self):
         robot = _FakeRobot()
         robot.position[2] = 100.0
