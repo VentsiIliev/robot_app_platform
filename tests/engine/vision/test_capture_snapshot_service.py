@@ -20,7 +20,28 @@ class TestCaptureSnapshotService(unittest.TestCase):
         self.assertEqual(snapshot.contours, ["c1", "c2"])
         self.assertEqual(snapshot.robot_pose, [1, 2, 3, 4, 5, 6])
         self.assertEqual(snapshot.source, "manual")
+        self.assertEqual(snapshot.work_area_id, "")
         self.assertIsInstance(snapshot.timestamp_s, float)
+
+    def test_capture_snapshot_records_the_validated_work_area(self):
+        vision = MagicMock()
+        vision.compute_contours_for_latest_frame.return_value = ("frame", [])
+        robot = MagicMock()
+        robot.get_current_position.return_value = [1, 2, 3, 4, 5, 6]
+        work_areas = MagicMock()
+        work_areas.get_active_area_id.return_value = "magazine"
+        work_areas.is_active_area_verified.return_value = True
+        service = CaptureSnapshotService(
+            vision,
+            robot,
+            work_area_service=work_areas,
+            active_work_area_validator=lambda _area, _pose: (True, ""),
+        )
+
+        snapshot = service.capture_snapshot(source="magazine")
+
+        self.assertEqual(snapshot.work_area_id, "magazine")
+        self.assertEqual(snapshot.robot_pose, [1, 2, 3, 4, 5, 6])
 
     def test_capture_snapshot_without_services_returns_empty_snapshot(self):
         service = CaptureSnapshotService(None, None)
@@ -111,4 +132,20 @@ class TestCaptureSnapshotService(unittest.TestCase):
         )
 
         with self.assertRaisesRegex(RuntimeError, "not verified"):
+            service.capture_snapshot(source="paint")
+
+    def test_capture_snapshot_rejects_area_change_during_vision_processing(self):
+        vision = MagicMock()
+        vision.compute_contours_for_latest_frame.return_value = ("frame", [])
+        work_areas = MagicMock()
+        work_areas.get_active_area_id.side_effect = ["magazine", "paint"]
+        work_areas.is_active_area_verified.return_value = True
+        service = CaptureSnapshotService(
+            vision,
+            None,
+            work_area_service=work_areas,
+            active_work_area_validator=lambda _area, _pose: (True, ""),
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "changed from 'magazine' to 'paint'"):
             service.capture_snapshot(source="paint")

@@ -35,6 +35,21 @@ class TestCalibrationNavigationService(unittest.TestCase):
 
         navigation.move_to_group.assert_not_called()
 
+    def test_dynamic_group_is_resolved_once_before_move_side_effects(self):
+        calls = []
+        navigation = MagicMock()
+        service = CalibrationNavigationService(
+            navigation,
+            calibration_group_getter=lambda: calls.append("select") or "Magazine",
+            before_move=lambda: calls.append("activate"),
+            after_move=lambda: calls.append("verify"),
+        )
+
+        service.move_to_calibration_position()
+
+        self.assertEqual(calls, ["select", "activate", "verify"])
+        navigation.move_to_group.assert_called_once_with("Magazine", wait_cancelled=None)
+
 
 if __name__ == "__main__":
     unittest.main()

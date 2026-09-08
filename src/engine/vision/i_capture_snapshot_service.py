@@ -16,6 +16,7 @@ class VisionCaptureSnapshot:
     robot_pose: Optional[List[float]] = None
     timestamp_s: float = 0.0
     source: str = ""
+    work_area_id: str = ""
 
 
 class ICaptureSnapshotService(ABC):
@@ -24,4 +25,3 @@ class ICaptureSnapshotService(ABC):
     @abstractmethod
     def capture_snapshot(self, source: str = "") -> VisionCaptureSnapshot:
         """Return the latest frame/contours paired with the current robot pose."""
-

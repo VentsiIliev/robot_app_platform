@@ -45,10 +45,15 @@ class RobotCalibrationService(IRobotCalibrationService):
         handler       = self._attach_log_handler()
         auto_brightness_locked = False
         auto_brightness_adjustment_locked = False
+        calibration_destination_locked = False
         safety_walls_were_enabled = False
         vision_service = getattr(self._config, "vision_service", None)
         robot_service  = getattr(self._config, "robot_service", None)
         try:
+            begin_calibration = getattr(vision_service, "begin_calibration", None)
+            if callable(begin_calibration):
+                begin_calibration()
+                calibration_destination_locked = True
             if (
                 vision_service is not None
                 and vision_service.get_auto_brightness_enabled()
@@ -74,6 +79,8 @@ class RobotCalibrationService(IRobotCalibrationService):
             )
             success, msg = self._pipeline.run()
         finally:
+            if vision_service is not None and calibration_destination_locked:
+                vision_service.end_calibration()
             if robot_service is not None and safety_walls_were_enabled and hasattr(robot_service, "enable_safety_walls"):
                 if robot_service.enable_safety_walls():
                     _logger.info("Safety walls re-enabled after robot calibration")

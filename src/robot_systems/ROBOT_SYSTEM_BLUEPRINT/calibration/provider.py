@@ -11,7 +11,7 @@ class MyRobotSystemCalibrationProvider(RobotSystemCalibrationProvider):
     def __init__(self, robot_system) -> None:
         self._robot_system = robot_system
 
-    def build_calibration_navigation(self):
+    def build_calibration_navigation(self, calibration_target_area_id_getter=None):
         return CalibrationNavigationService(
             self._robot_system.get_service(CommonServiceID.NAVIGATION),
             before_move=self._before_move,

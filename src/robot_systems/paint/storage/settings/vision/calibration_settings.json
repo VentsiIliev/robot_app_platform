@@ -9,5 +9,15 @@
     "ChArUco square size (mm)": 15.0,
     "ChArUco marker size (mm)": 11.0,
     "Skip frames": 30
+  },
+  "Coordinate calibration": {
+    "Mode": "global",
+    "Calibration target": "global",
+    "Profiles": {},
+    "Work area profiles": {
+      "paint": "global",
+      "magazine": "global",
+      "vertical_shaft_alignment": "global"
+    }
   }
 }

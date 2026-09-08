@@ -13,7 +13,7 @@ class GlueRobotSystemCalibrationProvider(RobotSystemCalibrationProvider):
     def __init__(self, robot_system) -> None:
         self._robot_system = robot_system
 
-    def build_calibration_navigation(self):
+    def build_calibration_navigation(self, calibration_target_area_id_getter=None):
         work_area_service = self._robot_system.get_service(CommonServiceID.WORK_AREAS)
         return CalibrationNavigationService(
             self._robot_system.get_service(CommonServiceID.NAVIGATION),

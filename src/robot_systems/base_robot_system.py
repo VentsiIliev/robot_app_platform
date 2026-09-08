@@ -14,6 +14,7 @@ from src.engine.robot.targeting.vision_target_resolver import VisionTargetResolv
 import logging
 
 from src.engine.vision.homography_residual_transformer import HomographyResidualTransformer
+from src.engine.common_settings_ids import CommonSettingsID
 from src.engine.robot.calibration.robot_calibration.metrics import derive_calibration_artifact_paths
 from src.shared_contracts.declarations import (
     DispenseChannelDefinition,
@@ -58,6 +59,7 @@ class BaseRobotSystem(ABC):
     target_frames: ClassVar[List[TargetFrameDefinition]] = []
     work_area_observers: ClassVar[List[WorkAreaObserverBinding]] = []
     default_active_work_area_id: ClassVar[str] = ""
+    global_calibration_reference_frame: ClassVar[str] = "calibration"
     shell: ClassVar[ShellSetup] = ShellSetup()
     role_policy: ClassVar[RolePolicy] = RolePolicy()
 
@@ -266,6 +268,7 @@ class BaseRobotSystem(ABC):
             camera_to_tcp_x_offset=tcp_x,
             camera_to_tcp_y_offset=tcp_y,
             frames=frames,
+            **self._build_coordinate_calibration_routing(transformer),
         )
         _logger.info(
             "[CALIB] Built shared vision resolver: transformer=%s available=%s tcp_offset=(%.3f, %.3f) frames=%s",
@@ -299,12 +302,52 @@ class BaseRobotSystem(ABC):
                 residual_path = str(derive_calibration_artifact_paths(matrix_path)["homography_residual_path"])
             except Exception:
                 residual_path = ""
+        calibration_routing = self._coordinate_calibration_signature(matrix_path)
         return (
             ("tcp", float(tcp_x), float(tcp_y)),
             ("matrix", self._file_signature(matrix_path)),
             ("residual", self._file_signature(residual_path)),
             ("points", self._point_registry_signature(point_registry)),
             ("frames", self._target_frames_signature(frames)),
+            ("coordinate_calibration", calibration_routing),
+        )
+
+    def _coordinate_calibration_signature(self, global_matrix_path: str) -> tuple:
+        settings_service = getattr(self, "_settings_service", None)
+        if settings_service is None:
+            return ("global",)
+        try:
+            settings = settings_service.get(CommonSettingsID.CALIBRATION_VISION_SETTINGS)
+        except Exception:
+            return ("global",)
+        mode = str(getattr(settings, "coordinate_calibration_mode", "global") or "global").strip().lower()
+        if mode != "per_area":
+            return ("global",)
+        root = os.path.dirname(str(global_matrix_path or ""))
+        profiles = []
+        for profile_id, profile in sorted(
+            (getattr(settings, "coordinate_calibration_profiles", {}) or {}).items()
+        ):
+            configured_path = str(getattr(profile, "matrix_path", "") or "").strip()
+            path = configured_path if os.path.isabs(configured_path) else os.path.normpath(os.path.join(root, configured_path))
+            residual = derive_calibration_artifact_paths(path)["homography_residual_path"] if configured_path else ""
+            profiles.append(
+                (
+                    str(profile_id).strip(),
+                    str(getattr(profile, "reference_frame", "calibration") or "calibration").strip().lower(),
+                    self._file_signature(path),
+                    self._file_signature(residual),
+                )
+            )
+        assignments = tuple(sorted(
+            (str(area).strip(), str(profile).strip())
+            for area, profile in (getattr(settings, "work_area_calibration_profiles", {}) or {}).items()
+        ))
+        return (
+            "per_area",
+            str(self.global_calibration_reference_frame or "calibration").strip().lower(),
+            tuple(profiles),
+            assignments,
         )
 
     @staticmethod
@@ -386,6 +429,112 @@ class BaseRobotSystem(ABC):
             bool(getattr(transformer, "is_available", lambda: False)()),
         )
         return transformer
+
+    def _build_coordinate_calibration_routing(self, global_transformer) -> dict:
+        """Build optional per-area routing while keeping global mode unchanged."""
+        settings_service = getattr(self, "_settings_service", None)
+        if settings_service is None:
+            return {}
+        try:
+            settings = settings_service.get(CommonSettingsID.CALIBRATION_VISION_SETTINGS)
+        except Exception:
+            _logger.debug("Could not load coordinate calibration routing settings", exc_info=True)
+            return {}
+
+        mode = str(getattr(settings, "coordinate_calibration_mode", "global") or "global").strip().lower()
+        if mode != "per_area":
+            return {}
+
+        configured_profiles = getattr(settings, "coordinate_calibration_profiles", {}) or {}
+        assignments = {
+            str(area_id).strip(): str(profile_id).strip()
+            for area_id, profile_id in (getattr(settings, "work_area_calibration_profiles", {}) or {}).items()
+        }
+        invalid_assignments = sorted(
+            repr((area_id, profile_id))
+            for area_id, profile_id in assignments.items()
+            if not area_id or not profile_id
+        )
+        if invalid_assignments:
+            raise ValueError(f"Calibration profile assignments cannot be empty: {invalid_assignments}")
+        declared_areas = {
+            str(definition.id).strip() for definition in self.get_work_area_definitions()
+        }
+        declared_frames = {
+            str(definition.name).strip().lower()
+            for definition in self.get_target_frame_definitions()
+        }
+        unknown_areas = sorted(set(assignments) - declared_areas)
+        if unknown_areas:
+            raise ValueError(f"Calibration profiles reference unknown work areas: {unknown_areas}")
+
+        matrix_root = os.path.dirname(
+            str(getattr(getattr(self, "_vision", None), "camera_to_robot_matrix_path", "") or "")
+        )
+        global_reference_frame = str(
+            self.global_calibration_reference_frame or "calibration"
+        ).strip().lower()
+        transformers = {"global": global_transformer}
+        reference_frames = {"global": global_reference_frame}
+        normalized_profiles = {
+            str(profile_id).strip(): profile
+            for profile_id, profile in configured_profiles.items()
+            if str(profile_id).strip()
+        }
+        if "global" in normalized_profiles:
+            raise ValueError("Calibration profile id 'global' is reserved for the existing calibration")
+        missing_profiles = sorted(
+            set(assignments.values()) - {"global"} - set(normalized_profiles)
+        )
+        if missing_profiles:
+            raise ValueError(f"Work areas reference undefined calibration profiles: {missing_profiles}")
+        assigned_profile_ids = set(assignments.values()) - {"global"}
+        for normalized_id in sorted(assigned_profile_ids):
+            profile = normalized_profiles[normalized_id]
+            configured_path = str(getattr(profile, "matrix_path", "") or "").strip()
+            matrix_path = (
+                configured_path
+                if os.path.isabs(configured_path)
+                else os.path.normpath(os.path.join(matrix_root, configured_path))
+            )
+            if not configured_path:
+                raise ValueError(f"Calibration profile {normalized_id!r} has no matrix path")
+            transformers[normalized_id] = HomographyResidualTransformer(matrix_path)
+            reference_frame = str(
+                getattr(profile, "reference_frame", global_reference_frame)
+                or global_reference_frame
+            ).strip().lower()
+            if reference_frame not in declared_frames:
+                raise ValueError(
+                    f"Calibration profile {normalized_id!r} references unknown frame {reference_frame!r}"
+                )
+            if not transformers[normalized_id].is_available():
+                raise ValueError(
+                    f"Calibration profile {normalized_id!r} is unavailable at {matrix_path!r}"
+                )
+            reference_frames[normalized_id] = reference_frame
+
+        for area_id, profile_id in assignments.items():
+            target_frame = self.get_target_frame_for_work_area(area_id)
+            if target_frame is None:
+                raise ValueError(
+                    f"Work area {area_id!r} has a calibration assignment but no target frame"
+                )
+            target_reference = str(target_frame.name).strip().lower()
+            profile_reference = reference_frames[profile_id]
+            if profile_reference not in {global_reference_frame, target_reference}:
+                raise ValueError(
+                    f"Calibration profile {profile_id!r} references frame {profile_reference!r}, "
+                    f"which cannot be used for work area {area_id!r} ({target_reference!r})"
+                )
+
+        return {
+            "calibration_mode": "per_area",
+            "profile_transformers": transformers,
+            "work_area_profile_ids": assignments,
+            "profile_reference_frames": reference_frames,
+            "global_reference_frame": global_reference_frame,
+        }
 
     def _get_camera_to_tcp_offsets(self) -> tuple[float, float]:
         robot_config = getattr(self, "_robot_config", None)

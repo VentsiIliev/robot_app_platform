@@ -17,11 +17,18 @@ from src.applications.calibration_settings.view.calibration_settings_view import
 
 
 class CalibrationSettingsFactory(ApplicationFactory):
+    def __init__(self, work_area_definitions=None):
+        self._work_area_ids = list(dict.fromkeys(
+            str(getattr(definition, "id", "")).strip()
+            for definition in (work_area_definitions or [])
+            if str(getattr(definition, "id", "")).strip()
+        ))
+
     def _create_model(self, service: ICalibrationSettingsService) -> CalibrationSettingsModel:
         return CalibrationSettingsModel(service)
 
     def _create_view(self) -> CalibrationSettingsView:
-        return CalibrationSettingsView()
+        return CalibrationSettingsView(work_area_ids=self._work_area_ids)
 
     def _create_controller(self, model: IApplicationModel, view: IApplicationView) -> IApplicationController:
         assert isinstance(model, CalibrationSettingsModel)

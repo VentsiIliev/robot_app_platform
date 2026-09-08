@@ -485,11 +485,15 @@ class RefactoredRobotCalibrationPipeline:
         )
 
         # Save or warn based on error
-        if model_result.average_error_mm <= 3:
+        calibration_accepted = model_result.average_error_mm <= 3
+        if calibration_accepted:
             np.save(context.vision_service.camera_to_robot_matrix_path, model_result.homography_matrix)
             _logger.info(f"Homography matrix saved to {context.vision_service.camera_to_robot_matrix_path}")
         else:
-            _logger.warning(f"High reprojection error: {model_result.average_error_mm:.3f} mm")
+            _logger.warning(
+                "High reprojection error: %.3f mm; retaining the previous matrix and residual artifacts",
+                model_result.average_error_mm,
+            )
 
         # End final state timer and log summary
         context.end_state_timer()
@@ -513,17 +517,19 @@ class RefactoredRobotCalibrationPipeline:
             total_calibration_time=total_calibration_time,
         )
         _logger.info(report_bundle.completion_log)
-        save_homography_residual_artifact(
-            model_result.model_report["artifacts"]["homography_tps_residual"],
-            report_bundle.artifact_paths["homography_residual_path"],
-        )
+        if calibration_accepted:
+            save_homography_residual_artifact(
+                model_result.model_report["artifacts"]["homography_tps_residual"],
+                report_bundle.artifact_paths["homography_residual_path"],
+            )
         save_calibration_model_report(
             model_result.model_report,
             report_bundle.artifact_paths["report_path"],
         )
         self._log_homography_dataset_geometry(dataset, model_result)
         self._save_geometry_scale_diagnostics(dataset, model_result, report_bundle.artifact_paths)
-        _logger.info("Homography residual artifact saved to %s", report_bundle.artifact_paths["homography_residual_path"])
+        if calibration_accepted:
+            _logger.info("Homography residual artifact saved to %s", report_bundle.artifact_paths["homography_residual_path"])
         _logger.info("Calibration model report saved to %s", report_bundle.artifact_paths["report_path"])
         _logger.info(report_bundle.model_comparison_report)
         _logger.info(report_bundle.calibration_analysis_report)

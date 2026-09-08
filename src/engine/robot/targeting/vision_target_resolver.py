@@ -49,12 +49,32 @@ class VisionTargetResolver:
         camera_to_tcp_x_offset: float = 0.0,
         camera_to_tcp_y_offset: float = 0.0,
         frames: Optional[Dict[str, TargetFrame]] = None,
+        calibration_mode: str = "global",
+        profile_transformers: Optional[Dict[str, ICoordinateTransformer]] = None,
+        work_area_profile_ids: Optional[Dict[str, str]] = None,
+        profile_reference_frames: Optional[Dict[str, str]] = None,
+        global_reference_frame: str = "calibration",
     ) -> None:
         self._base = base_transformer
         self._registry = registry
         self._tcp_x = float(camera_to_tcp_x_offset)
         self._tcp_y = float(camera_to_tcp_y_offset)
-        self._frames: Dict[str, TargetFrame] = frames or {}
+        self._frames: Dict[str, TargetFrame] = {
+            str(name).strip().lower(): value for name, value in (frames or {}).items()
+        }
+        self._calibration_mode = str(calibration_mode or "global").strip().lower()
+        self._profile_transformers = {
+            str(name).strip(): value for name, value in (profile_transformers or {}).items()
+        }
+        self._work_area_profile_ids = {
+            str(area).strip(): str(profile).strip()
+            for area, profile in (work_area_profile_ids or {}).items()
+        }
+        self._profile_reference_frames = {
+            str(profile).strip(): str(reference).strip().lower()
+            for profile, reference in (profile_reference_frames or {}).items()
+        }
+        self._global_reference_frame = str(global_reference_frame or "calibration").strip().lower()
 
     def resolve(
         self,
@@ -64,8 +84,32 @@ class VisionTargetResolver:
         frame: str = "",
         mapper: Optional[PlanePoseMapper] = None,
     ) -> TargetTransformResult:
-        frame_obj = self._frames.get(frame)
+        frame_obj = self._frames.get(str(frame or "").strip().lower())
+        base_transformer = self._base
         active_mapper = mapper if mapper is not None else (frame_obj.mapper if frame_obj else None)
+        if self._calibration_mode == "per_area":
+            if frame_obj is None or not frame_obj.work_area_id:
+                raise RuntimeError(
+                    f"Per-area calibration requires a declared target frame with a work area; got {frame!r}"
+                )
+            profile_id = self._work_area_profile_ids.get(frame_obj.work_area_id)
+            if not profile_id:
+                raise RuntimeError(
+                    f"Work area {frame_obj.work_area_id!r} has no assigned calibration profile"
+                )
+            base_transformer = self._profile_transformers.get(profile_id)
+            if base_transformer is None:
+                raise RuntimeError(f"Calibration profile {profile_id!r} is not configured")
+            reference_frame = self._profile_reference_frames.get(
+                profile_id, self._global_reference_frame
+            )
+            if reference_frame == str(frame_obj.name).strip().lower():
+                active_mapper = None
+            elif reference_frame != self._global_reference_frame:
+                raise RuntimeError(
+                    f"Calibration profile {profile_id!r} references frame {reference_frame!r}, "
+                    f"which cannot be mapped to target frame {frame_obj.name!r}"
+                )
         current_rz = target.rz_degrees
 
         # _logger.info(
@@ -78,7 +122,7 @@ class VisionTargetResolver:
         #     float(self._tcp_y),
         # )
 
-        calibration_xy = self._base.transform(target.x_pixels, target.y_pixels)
+        calibration_xy = base_transformer.transform(target.x_pixels, target.y_pixels)
         plane_xy = _map_plane(calibration_xy, active_mapper)
         # Always apply the TCP-rotation delta so that the camera center lands on
         # the target regardless of the robot's current rz.  The calibration matrix
@@ -169,7 +213,7 @@ class VisionTargetResolver:
         return self._registry
 
     def get_frame(self, name: str) -> Optional[TargetFrame]:
-        return self._frames.get(name)
+        return self._frames.get(str(name or "").strip().lower())
 
 def _map_plane(xy: Tuple[float, float], mapper: Optional[PlanePoseMapper]) -> Tuple[float, float]:
     if mapper is None:

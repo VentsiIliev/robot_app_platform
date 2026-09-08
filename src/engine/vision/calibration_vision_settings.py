@@ -1,7 +1,28 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Dict
 
 from src.engine.repositories.interfaces.settings_serializer import ISettingsSerializer
+
+
+@dataclass(frozen=True)
+class CoordinateCalibrationProfile:
+    """A named pixel-to-robot calibration and the frame it was captured in."""
+
+    matrix_path: str = ""
+    reference_frame: str = "calibration"
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "Matrix path": str(self.matrix_path),
+            "Reference frame": str(self.reference_frame or "calibration").strip().lower(),
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "CoordinateCalibrationProfile":
+        return cls(
+            matrix_path=str(data.get("Matrix path", "")).strip(),
+            reference_frame=str(data.get("Reference frame", "calibration")).strip().lower(),
+        )
 
 
 @dataclass
@@ -15,6 +36,10 @@ class CalibrationVisionSettings:
     charuco_square_size_mm: float = 0.0
     charuco_marker_size_mm: float = 0.0
     calibration_skip_frames: int = 30
+    coordinate_calibration_mode: str = "global"
+    calibration_target_work_area: str = "global"
+    coordinate_calibration_profiles: Dict[str, CoordinateCalibrationProfile] = field(default_factory=dict)
+    work_area_calibration_profiles: Dict[str, str] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -28,12 +53,32 @@ class CalibrationVisionSettings:
                 "ChArUco square size (mm)": self.charuco_square_size_mm,
                 "ChArUco marker size (mm)": self.charuco_marker_size_mm,
                 "Skip frames": self.calibration_skip_frames,
-            }
+            },
+            "Coordinate calibration": {
+                "Mode": self.coordinate_calibration_mode,
+                "Calibration target": self.calibration_target_work_area,
+                "Profiles": {
+                    str(profile_id): profile.to_dict()
+                    for profile_id, profile in self.coordinate_calibration_profiles.items()
+                },
+                "Work area profiles": {
+                    str(area_id): str(profile_id)
+                    for area_id, profile_id in self.work_area_calibration_profiles.items()
+                },
+            },
         }
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "CalibrationVisionSettings":
         calibration = data.get("Calibration", {})
+        coordinate = data.get("Coordinate calibration", {})
+        calibration = calibration if isinstance(calibration, dict) else {}
+        coordinate = coordinate if isinstance(coordinate, dict) else {}
+        raw_profiles = coordinate.get("Profiles", {})
+        raw_assignments = coordinate.get("Work area profiles", {})
+        mode = str(coordinate.get("Mode", "global")).strip().lower()
+        if mode not in {"global", "per_area"}:
+            mode = "global"
         return cls(
             chessboard_width=int(calibration.get("Chessboard width", 32)),
             chessboard_height=int(calibration.get("Chessboard height", 20)),
@@ -44,6 +89,20 @@ class CalibrationVisionSettings:
             charuco_square_size_mm=float(calibration.get("ChArUco square size (mm)", 0.0)),
             charuco_marker_size_mm=float(calibration.get("ChArUco marker size (mm)", 0.0)),
             calibration_skip_frames=int(calibration.get("Skip frames", 30)),
+            coordinate_calibration_mode=mode,
+            calibration_target_work_area=str(
+                coordinate.get("Calibration target", "global") or "global"
+            ).strip(),
+            coordinate_calibration_profiles={
+                str(profile_id).strip(): CoordinateCalibrationProfile.from_dict(profile)
+                for profile_id, profile in raw_profiles.items()
+                if str(profile_id).strip() and isinstance(profile, dict)
+            } if isinstance(raw_profiles, dict) else {},
+            work_area_calibration_profiles={
+                str(area_id).strip(): str(profile_id).strip()
+                for area_id, profile_id in raw_assignments.items()
+                if str(area_id).strip() and str(profile_id).strip()
+            } if isinstance(raw_assignments, dict) else {},
         )
 
 
