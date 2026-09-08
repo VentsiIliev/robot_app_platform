@@ -301,6 +301,7 @@ class TestPaintProcessConfig(unittest.TestCase):
         self.assertEqual(0.5, flat["magazine_camera_settle_s"])
         self.assertEqual(0.5, flat["magazine_release_settle_s"])
         self.assertEqual(50.0, flat["magazine_release_z_mm"])
+        self.assertEqual(120.0, flat["magazine_full_retract_z_mm"])
         self.assertEqual(30.0, flat["magazine_move_to_magazine_vel_percent"])
         self.assertEqual(30.0, flat["magazine_move_to_magazine_acc_percent"])
         self.assertEqual(30.0, flat["magazine_transfer_to_calibration_vel_percent"])
@@ -315,6 +316,7 @@ class TestPaintProcessConfig(unittest.TestCase):
                 "magazine_camera_settle_s": 0.25,
                 "magazine_release_settle_s": 0.75,
                 "magazine_release_z_mm": 55.0,
+                "magazine_full_retract_z_mm": 125.0,
                 "magazine_move_to_magazine_vel_percent": 11.0,
                 "magazine_move_to_magazine_acc_percent": 12.0,
                 "magazine_transfer_to_calibration_vel_percent": 13.0,
@@ -329,6 +331,7 @@ class TestPaintProcessConfig(unittest.TestCase):
         self.assertEqual(0.25, restored.magazine_load.camera_settle_s)
         self.assertEqual(0.75, restored.magazine_load.release_settle_s)
         self.assertEqual(55.0, restored.magazine_load.release_z_mm)
+        self.assertEqual(125.0, restored.magazine_load.full_retract_z_mm)
         self.assertEqual(11.0, restored.magazine_load.move_to_magazine_vel_percent)
         self.assertEqual(12.0, restored.magazine_load.move_to_magazine_acc_percent)
         self.assertEqual(13.0, restored.magazine_load.transfer_to_calibration_vel_percent)

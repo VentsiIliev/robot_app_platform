@@ -165,11 +165,13 @@ class TestPaintProcessSettingsController(unittest.TestCase):
         base = PaintProcessConfig()
         flat = PaintProcessSettingsMapper.to_flat_dict(base)
         flat["magazine_full_retract_before_release"] = False
+        flat["magazine_full_retract_z_mm"] = 120.0
         flat["magazine_short_retract_distance_mm"] = 12.5
 
         restored = PaintProcessSettingsMapper.from_flat_dict(flat, base)
 
         self.assertFalse(restored.magazine_load.full_retract_before_release)
+        self.assertEqual(120.0, restored.magazine_load.full_retract_z_mm)
         self.assertEqual(12.5, restored.magazine_load.short_retract_distance_mm)
 
     def test_motion_profile_tables_round_trip_type_and_blendr(self):

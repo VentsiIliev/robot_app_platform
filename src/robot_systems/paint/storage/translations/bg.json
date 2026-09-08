@@ -223,6 +223,7 @@
     "Magazine pickup pose added from the current robot position. Save settings to keep it.": "Добавена е позиция за вземане от магазина от текущата позиция на робота. Запазете настройките.",
     "Fixed Pickup Position Tolerance": "Допуск за фиксираната позиция на вземане",
     "Fixed Pickup Orientation Tolerance": "Допуск за ориентацията при фиксирано вземане",
+    "Full Retract Z": "Z за пълно изтегляне",
     "Fixed Magazine Pickup Unavailable": "Фиксираното вземане от магазина не е налично",
     "Fixed-group magazine pickup requires a configured movement group.": "Фиксираното вземане от магазина изисква конфигурирана група за движение.",
     "Servo Contact Unavailable": "Servo Contact не е наличен",

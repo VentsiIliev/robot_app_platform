@@ -2,6 +2,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from src.robot_systems.paint.processes.paint.config import (
+    MAGAZINE_PICKUP_MODE_AUTO_DISCOVERY_SENSOR_CONTROLLED_FAST_LIN,
     MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN,
     MAGAZINE_PICKUP_MODE_VISION_PLANNED,
     MAGAZINE_PICKUP_MODE_VISION_SENSOR_CONTROLLED_FAST_LIN,
@@ -30,6 +31,44 @@ from src.robot_systems.paint.applications.paint_process_settings.mapper import (
 
 
 class TestFixedMagazinePickup(unittest.TestCase):
+    def test_auto_discovery_approaches_and_retracts_at_configured_z(self):
+        process_config = PaintProcessConfig(
+            magazine_load=PaintMagazineLoadConfig(
+                enabled=True,
+                pickup_mode=MAGAZINE_PICKUP_MODE_AUTO_DISCOVERY_SENSOR_CONTROLLED_FAST_LIN,
+                full_retract_z_mm=120.0,
+            )
+        )
+        executor = MagicMock()
+        executor._paint_process_config.return_value = process_config
+        executor._pickup_z_mm = 0.0
+        executor._pickup_safety_z_min_mm = 0.0
+        executor._motion.turn_vacuum_on.return_value = (True, "Vacuum on")
+        executor._motion.turn_vacuum_off.return_value = (True, "Vacuum off")
+        service = MagicMock()
+        service._path_executor = executor
+
+        with patch(
+            "src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_execute_pickup_release_handler._execute_magazine_servo_contact_pickup_release",
+            return_value=(True, "Picked"),
+        ) as execute_servo:
+            ok, message = execute_magazine_pickup_release(
+                service,
+                pickup_xy=(10.0, 20.0),
+                pickup_rz=30.0,
+                pickup_base_pose=[100.0, 200.0, 300.0, 180.0, 0.0, 0.0],
+                release_pose=[0.0, 0.0, 50.0, 180.0, 0.0, 0.0],
+                magazine_pickup_mode=MAGAZINE_PICKUP_MODE_AUTO_DISCOVERY_SENSOR_CONTROLLED_FAST_LIN,
+            )
+
+        self.assertTrue(ok, message)
+        waypoints = execute_servo.call_args.args[1]
+        self.assertEqual([10.0, 20.0, 120.0, 180.0, 0.0, 30.0], waypoints[0][1])
+        self.assertEqual(
+            [10.0, 20.0, 120.0, 180.0, 0.0, 30.0],
+            execute_servo.call_args.kwargs["retract_reference_pose"],
+        )
+
     def test_fixed_pickup_allows_approach_to_correct_initial_tolerance_miss(self):
         config = PaintProcessConfig()
         executor = MagicMock()

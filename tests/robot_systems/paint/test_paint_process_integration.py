@@ -953,6 +953,22 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
         self.assertIs(calls[3].kwargs["magazine_discovery_active_contour"], pile_two)
         self.assertIsNone(calls[4].kwargs["magazine_discovery_active_contour"])
 
+    def test_auto_discovery_does_not_preposition_to_camera_pose_between_pickups(self):
+        service = self._make_service()
+        config = PaintMagazineLoadConfig(
+            enabled=True,
+            pickup_mode="auto_discovery_sensor_controlled_fast_lin",
+            magazine_group_id="Magazine",
+            full_retract_z_mm=120.0,
+        )
+        context = SimpleNamespace(
+            repeats_after_success=True,
+            magazine_config=config,
+            process_config=PaintProcessConfig(magazine_load=config),
+        )
+
+        self.assertIsNone(service._next_cycle_start_target(context))
+
     def test_run_once_aborts_when_magazine_load_fails(self):
         config_service = MagicMock()
         config_service.get_snapshot.return_value = PaintProcessConfig(

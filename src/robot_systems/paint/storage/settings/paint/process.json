@@ -180,6 +180,7 @@
     "fixed_pickup_position_tolerance_mm": 1.0,
     "fixed_pickup_orientation_tolerance_deg": 0.5,
     "full_retract_before_release": true,
+    "full_retract_z_mm": 120.0,
     "short_retract_distance_mm": 10.0,
     "magazine_group_id": "Magazine",
     "calibration_group_id": "CALIBRATION",

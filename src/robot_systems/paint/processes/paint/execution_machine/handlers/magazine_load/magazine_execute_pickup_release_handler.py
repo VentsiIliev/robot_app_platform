@@ -96,6 +96,7 @@ def execute_magazine_pickup_release(
         return False, f"{release_label.capitalize()} pose is not configured"
 
     pickup_motion = executor._paint_process_config().pickup_motion
+    magazine_config = executor._paint_process_config().magazine_load
     pickup_z = executor._pickup_z_mm
     if pickup_z is None:
         pickup_z = (
@@ -109,13 +110,30 @@ def execute_magazine_pickup_release(
     pickup_rx = float(pickup_base_pose[3])
     pickup_ry = float(pickup_base_pose[4])
     pickup_rz = float(pickup_rz)
+    retract_reference_pose = list(pickup_base_pose)
+    if magazine_pickup_mode == MAGAZINE_PICKUP_MODE_AUTO_DISCOVERY_SENSOR_CONTROLLED_FAST_LIN:
+        retract_z = float(magazine_config.full_retract_z_mm)
+        minimum_z = float(pickup_motion.servo_contact_min_z_mm)
+        if not math.isfinite(retract_z) or retract_z <= minimum_z:
+            return False, (
+                "Auto-discovery full retract Z must be finite and above the "
+                f"sensor-controlled descent minimum Z ({minimum_z:.3f} mm)"
+            )
+        retract_reference_pose = [
+            pickup_x,
+            pickup_y,
+            retract_z,
+            pickup_rx,
+            pickup_ry,
+            pickup_rz,
+        ]
     if fixed_approach_pose is not None:
         approach_pose = list(fixed_approach_pose)
     elif magazine_pickup_mode == MAGAZINE_PICKUP_MODE_AUTO_DISCOVERY_SENSOR_CONTROLLED_FAST_LIN:
         approach_pose = [
             pickup_x,
             pickup_y,
-            float(pickup_base_pose[2]),
+            float(retract_reference_pose[2]),
             pickup_rx,
             pickup_ry,
             pickup_rz,
@@ -178,7 +196,6 @@ def execute_magazine_pickup_release(
             pickup_motion.lift_align_blendR,
         ),
     )
-    magazine_config = executor._paint_process_config().magazine_load
     velocity = float(magazine_config.transfer_to_calibration_vel_percent)
     acceleration = float(magazine_config.transfer_to_calibration_acc_percent)
     release_move_label = f"Moving picked workpiece to {release_label} release pose"
@@ -240,7 +257,7 @@ def execute_magazine_pickup_release(
             ok, msg = _execute_magazine_servo_contact_pickup_release(
                 executor,
                 transfer_waypoints,
-                retract_reference_pose=pickup_base_pose,
+                retract_reference_pose=retract_reference_pose,
                 release_label=release_label,
                 expected_start_pose=fixed_approach_pose,
                 position_tolerance_mm=fixed_position_tolerance_mm,

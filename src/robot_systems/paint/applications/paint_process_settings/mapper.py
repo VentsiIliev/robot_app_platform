@@ -404,6 +404,7 @@ class PaintProcessSettingsMapper:
             "magazine_fixed_pickup_position_tolerance_mm": magazine.fixed_pickup_position_tolerance_mm,
             "magazine_fixed_pickup_orientation_tolerance_deg": magazine.fixed_pickup_orientation_tolerance_deg,
             "magazine_full_retract_before_release": magazine.full_retract_before_release,
+            "magazine_full_retract_z_mm": magazine.full_retract_z_mm,
             "magazine_short_retract_distance_mm": magazine.short_retract_distance_mm,
             "magazine_release_z_mm": magazine.release_z_mm,
             "magazine_camera_settle_s": magazine.camera_settle_s,
@@ -796,6 +797,12 @@ class PaintProcessSettingsMapper:
                 flat.get(
                     "magazine_full_retract_before_release",
                     base.magazine_load.full_retract_before_release,
+                )
+            ),
+            full_retract_z_mm=float(
+                flat.get(
+                    "magazine_full_retract_z_mm",
+                    base.magazine_load.full_retract_z_mm,
                 )
             ),
             short_retract_distance_mm=float(

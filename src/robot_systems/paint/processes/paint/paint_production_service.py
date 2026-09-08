@@ -437,6 +437,8 @@ class PaintProductionService:
         configured_magazine = magazine or getattr(ctx.process_config, "magazine_load", None)
         if magazine is not None and bool(getattr(magazine, "enabled", False)):
             mode = str(getattr(magazine, "pickup_mode", "") or "").strip().lower()
+            if mode == MAGAZINE_PICKUP_MODE_AUTO_DISCOVERY_SENSOR_CONTROLLED_FAST_LIN:
+                return None
             group_id = ctx.magazine_group or (
                 magazine.fixed_pickup_group_id
                 if mode == "fixed_group_sensor_controlled_fast_lin"

@@ -9,6 +9,7 @@ from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine
 )
 from src.robot_systems.paint.processes.paint.execution_machine.state import PaintExecutionState
 from src.robot_systems.paint.processes.paint.config import (
+    MAGAZINE_PICKUP_MODE_AUTO_DISCOVERY_SENSOR_CONTROLLED_FAST_LIN,
     MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN,
     MAGAZINE_PICKUP_MODES,
 )
@@ -40,6 +41,17 @@ def handle_magazine_move_to_magazine(ctx: PaintExecutionContext) -> PaintExecuti
         ctx.magazine_group = str(group_id or "").strip()
     if not ctx.calibration_group:
         ctx.calibration_group = str(config.calibration_group_id or "CALIBRATION").strip()
+    if (
+        pickup_mode == MAGAZINE_PICKUP_MODE_AUTO_DISCOVERY_SENSOR_CONTROLLED_FAST_LIN
+        and (
+            ctx.magazine_discovery_active_contour is not None
+            or ctx.magazine_discovery_contours
+        )
+    ):
+        _logger.info(
+            "[MAGAZINE_LOAD] Auto-discovery piles are cached; skipping Magazine capture pose"
+        )
+        return PaintExecutionState.MAGAZINE_CAPTURE
     if not ctx.magazine_group:
         ctx.set_result(False, "Magazine movement group is not configured")
         return PaintExecutionState.ERROR
