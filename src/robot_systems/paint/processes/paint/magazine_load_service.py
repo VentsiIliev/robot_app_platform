@@ -377,54 +377,12 @@ class PaintMagazineLoadService:
             frame=self._frame_name,
         )
         center_resolve_elapsed = monotonic() - center_resolve_started
-        comparison_request = VisionPoseRequest(
-            x_pixels=float(center_px[0]),
-            y_pixels=float(center_px[1]),
-            z_mm=z,
-            rx_degrees=rx,
-            ry_degrees=ry,
-            rz_degrees=float(pickup_rz),
+        diagnostic_calibration_xy = getattr(center_result, "calibration_xy", center_result.final_xy)
+        diagnostic_plane_xy = getattr(center_result, "plane_xy", center_result.final_xy)
+        diagnostic_tcp_delta = getattr(
+            center_result, "pickup_plane_reference_delta_xy", (0.0, 0.0)
         )
-        calibration_camera_result = resolver.resolve(
-            comparison_request,
-            camera_point,
-            frame="calibration",
-        )
-        magazine_camera_result = resolver.resolve(
-            comparison_request,
-            camera_point,
-            frame=self._frame_name,
-        )
-        calibration_tool_result = resolver.resolve(
-            comparison_request,
-            target_point,
-            frame="calibration",
-        )
-        _logger.info(
-            "[MAGAZINE_TARGET_DIAGNOSTIC] same_pixel_frame_comparison px=(%.3f, %.3f) "
-            "calibration_camera_xy=(%.3f, %.3f) magazine_camera_xy=(%.3f, %.3f) "
-            "camera_frame_delta_xy=(%.3f, %.3f) actual_capture_delta_xy=(%.3f, %.3f) "
-            "calibration_%s_xy=(%.3f, %.3f) magazine_%s_xy=(%.3f, %.3f) "
-            "tool_frame_delta_xy=(%.3f, %.3f)",
-            float(center_px[0]),
-            float(center_px[1]),
-            float(calibration_camera_result.final_xy[0]),
-            float(calibration_camera_result.final_xy[1]),
-            float(magazine_camera_result.final_xy[0]),
-            float(magazine_camera_result.final_xy[1]),
-            float(magazine_camera_result.final_xy[0] - calibration_camera_result.final_xy[0]),
-            float(magazine_camera_result.final_xy[1] - calibration_camera_result.final_xy[1]),
-            float(magazine_pose[0] - mapper.source_pose.x) if mapper is not None else float("nan"),
-            float(magazine_pose[1] - mapper.source_pose.y) if mapper is not None else float("nan"),
-            str(target_point.name),
-            float(calibration_tool_result.final_xy[0]),
-            float(calibration_tool_result.final_xy[1]),
-            str(target_point.name),
-            float(center_result.final_xy[0]),
-            float(center_result.final_xy[1]),
-            float(center_result.final_xy[0] - calibration_tool_result.final_xy[0]),
-            float(center_result.final_xy[1] - calibration_tool_result.final_xy[1]),
-        )
+        diagnostic_target_delta = getattr(center_result, "target_delta_xy", (0.0, 0.0))
         _logger.info(
             "[MAGAZINE_TARGET_DIAGNOSTIC] center_px=(%.3f, %.3f) point=%s "
             "homography_residual_xy=(%.3f, %.3f) mapped_plane_xy=(%.3f, %.3f) "
@@ -434,20 +392,20 @@ class PaintMagazineLoadService:
             float(center_px[0]),
             float(center_px[1]),
             str(target_point.name),
-            float(center_result.calibration_xy[0]),
-            float(center_result.calibration_xy[1]),
-            float(center_result.plane_xy[0]),
-            float(center_result.plane_xy[1]),
-            float(center_result.plane_xy[0] - center_result.calibration_xy[0]),
-            float(center_result.plane_xy[1] - center_result.calibration_xy[1]),
-            float(center_result.pickup_plane_reference_delta_xy[0]),
-            float(center_result.pickup_plane_reference_delta_xy[1]),
-            float(center_result.target_delta_xy[0]),
-            float(center_result.target_delta_xy[1]),
+            float(diagnostic_calibration_xy[0]),
+            float(diagnostic_calibration_xy[1]),
+            float(diagnostic_plane_xy[0]),
+            float(diagnostic_plane_xy[1]),
+            float(diagnostic_plane_xy[0] - diagnostic_calibration_xy[0]),
+            float(diagnostic_plane_xy[1] - diagnostic_calibration_xy[1]),
+            float(diagnostic_tcp_delta[0]),
+            float(diagnostic_tcp_delta[1]),
+            float(diagnostic_target_delta[0]),
+            float(diagnostic_target_delta[1]),
             float(center_result.final_xy[0]),
             float(center_result.final_xy[1]),
             float(pickup_rz),
-            float(center_result.reference_rz or 0.0),
+            float(getattr(center_result, "reference_rz", 0.0) or 0.0),
         )
         _logger.info(
             "[MAGAZINE_LOAD] simple pickup target center_px=(%.3f, %.3f) pickup_xy=(%.3f, %.3f) pickup_rz=%.3f contour_points=%d",
@@ -487,6 +445,67 @@ class PaintMagazineLoadService:
                 _logger.exception("[MAGAZINE_LOAD] Failed to get vision resolver")
                 return None
         return None
+
+    def _verify_current_capture_pose(
+        self,
+        group_name: str,
+        *,
+        position_tolerance_mm: float = 2.0,
+        orientation_tolerance_deg: float = 2.0,
+    ) -> tuple[bool, str]:
+        """Verify the live robot pose against the configured capture group."""
+        expected = self._validated_pose(self._navigation.get_group_position(group_name))
+        robot_service = getattr(self._path_executor, "_robot_service", None)
+        getter = getattr(robot_service, "get_current_position_fresh", None)
+        if not callable(getter):
+            getter = getattr(robot_service, "get_current_position", None)
+        try:
+            actual = self._validated_pose(getter()) if callable(getter) else None
+        except Exception:
+            _logger.exception("[MAGAZINE_CAPTURE_POSE] Failed to read the live robot pose")
+            actual = None
+        if expected is None:
+            return False, f"Magazine capture group '{group_name}' has no valid configured pose"
+        if actual is None:
+            return False, "Fresh robot pose is unavailable before magazine capture"
+
+        xyz_delta = [actual[index] - expected[index] for index in range(3)]
+        angle_delta = [
+            (actual[index] - expected[index] + 180.0) % 360.0 - 180.0
+            for index in range(3, 6)
+        ]
+        position_error = math.sqrt(sum(delta * delta for delta in xyz_delta))
+        orientation_error = max(abs(delta) for delta in angle_delta)
+        verified = (
+            position_error <= float(position_tolerance_mm)
+            and orientation_error <= float(orientation_tolerance_deg)
+        )
+        _logger.info(
+            "[MAGAZINE_CAPTURE_POSE] group=%s verified=%s "
+            "configured=(%.3f, %.3f, %.3f, %.3f, %.3f, %.3f) "
+            "actual=(%.3f, %.3f, %.3f, %.3f, %.3f, %.3f) "
+            "delta_xyz=(%.3f, %.3f, %.3f) delta_rpy=(%.3f, %.3f, %.3f) "
+            "position_error_mm=%.3f tolerance_mm=%.3f "
+            "orientation_error_deg=%.3f tolerance_deg=%.3f",
+            str(group_name),
+            verified,
+            *expected,
+            *actual,
+            *xyz_delta,
+            *angle_delta,
+            position_error,
+            float(position_tolerance_mm),
+            orientation_error,
+            float(orientation_tolerance_deg),
+        )
+        if not verified:
+            return False, (
+                f"Magazine capture refused: robot is not at configured group '{group_name}' "
+                f"(position error {position_error:.3f} mm, allowed {position_tolerance_mm:.3f} mm; "
+                f"orientation error {orientation_error:.3f} deg, allowed "
+                f"{orientation_tolerance_deg:.3f} deg)"
+            )
+        return True, ""
 
     @staticmethod
     def _validated_pose(pose) -> list[float] | None:

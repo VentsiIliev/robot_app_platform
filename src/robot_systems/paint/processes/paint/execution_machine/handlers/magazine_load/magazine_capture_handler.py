@@ -44,6 +44,18 @@ def handle_magazine_capture(ctx: PaintExecutionContext) -> PaintExecutionState:
         )
         return PaintExecutionState.MAGAZINE_PREPARE_PICKUP_RELEASE
 
+    capture_pose_ok, capture_pose_error = (
+        ctx.production_service._magazine_load_service._verify_current_capture_pose(
+            ctx.magazine_group,
+            position_tolerance_mm=2.0,
+            orientation_tolerance_deg=2.0,
+        )
+    )
+    if not capture_pose_ok:
+        _logger.error("[MAGAZINE_CAPTURE_POSE] %s", capture_pose_error)
+        ctx.set_result(False, capture_pose_error)
+        return PaintExecutionState.ERROR
+
     capture_started = perf_counter()
     ctx.magazine_snapshot = ctx.production_service._capture_snapshot_service.capture_snapshot(
         source="paint_magazine_load"
