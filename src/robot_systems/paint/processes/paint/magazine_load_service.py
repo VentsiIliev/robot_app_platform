@@ -377,6 +377,54 @@ class PaintMagazineLoadService:
             frame=self._frame_name,
         )
         center_resolve_elapsed = monotonic() - center_resolve_started
+        comparison_request = VisionPoseRequest(
+            x_pixels=float(center_px[0]),
+            y_pixels=float(center_px[1]),
+            z_mm=z,
+            rx_degrees=rx,
+            ry_degrees=ry,
+            rz_degrees=float(pickup_rz),
+        )
+        calibration_camera_result = resolver.resolve(
+            comparison_request,
+            camera_point,
+            frame="calibration",
+        )
+        magazine_camera_result = resolver.resolve(
+            comparison_request,
+            camera_point,
+            frame=self._frame_name,
+        )
+        calibration_tool_result = resolver.resolve(
+            comparison_request,
+            target_point,
+            frame="calibration",
+        )
+        _logger.info(
+            "[MAGAZINE_TARGET_DIAGNOSTIC] same_pixel_frame_comparison px=(%.3f, %.3f) "
+            "calibration_camera_xy=(%.3f, %.3f) magazine_camera_xy=(%.3f, %.3f) "
+            "camera_frame_delta_xy=(%.3f, %.3f) actual_capture_delta_xy=(%.3f, %.3f) "
+            "calibration_%s_xy=(%.3f, %.3f) magazine_%s_xy=(%.3f, %.3f) "
+            "tool_frame_delta_xy=(%.3f, %.3f)",
+            float(center_px[0]),
+            float(center_px[1]),
+            float(calibration_camera_result.final_xy[0]),
+            float(calibration_camera_result.final_xy[1]),
+            float(magazine_camera_result.final_xy[0]),
+            float(magazine_camera_result.final_xy[1]),
+            float(magazine_camera_result.final_xy[0] - calibration_camera_result.final_xy[0]),
+            float(magazine_camera_result.final_xy[1] - calibration_camera_result.final_xy[1]),
+            float(magazine_pose[0] - mapper.source_pose.x) if mapper is not None else float("nan"),
+            float(magazine_pose[1] - mapper.source_pose.y) if mapper is not None else float("nan"),
+            str(target_point.name),
+            float(calibration_tool_result.final_xy[0]),
+            float(calibration_tool_result.final_xy[1]),
+            str(target_point.name),
+            float(center_result.final_xy[0]),
+            float(center_result.final_xy[1]),
+            float(center_result.final_xy[0] - calibration_tool_result.final_xy[0]),
+            float(center_result.final_xy[1] - calibration_tool_result.final_xy[1]),
+        )
         _logger.info(
             "[MAGAZINE_TARGET_DIAGNOSTIC] center_px=(%.3f, %.3f) point=%s "
             "homography_residual_xy=(%.3f, %.3f) mapped_plane_xy=(%.3f, %.3f) "
