@@ -52,11 +52,11 @@ class TestWorkpieceEditorViewSignals(unittest.TestCase):
         self._view._on_execute_cb({"op": "run"})
         self.assertEqual(received, [{"op": "run"}])
 
-    def test_process_contour_signal_can_be_emitted(self):
+    def test_on_custom_action_cb_emits_action_id(self):
         received = []
-        self._view.process_contour_requested.connect(lambda: received.append(True))
-        self._view.process_contour_requested.emit()
-        self.assertEqual(received, [True])
+        self._view.custom_action_requested.connect(received.append)
+        self._view._on_custom_action_cb("paint_action")
+        self.assertEqual(received, ["paint_action"])
 
     def test_on_camera_feed_cb_returns_none(self):
         self.assertIsNone(self._view._on_camera_feed_cb())

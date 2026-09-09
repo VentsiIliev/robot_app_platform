@@ -1,6 +1,6 @@
 import logging
 
-from PyQt6.QtWidgets import QHBoxLayout, QVBoxLayout, QLabel, QPushButton
+from PyQt6.QtWidgets import QVBoxLayout, QLabel
 from PyQt6.QtCore import pyqtSignal
 from contour_editor import BezierSegmentManager
 
@@ -21,12 +21,14 @@ class WorkpieceEditorView(IApplicationView):
 
     save_requested    = pyqtSignal(dict)
     execute_requested = pyqtSignal(dict)
-    process_contour_requested = pyqtSignal()
+    custom_action_requested = pyqtSignal(str)
 
-    def __init__(self, schema: WorkpieceFormSchema, segment_config: SegmentEditorConfig, workpiece_data_adapter: IWorkpieceDataAdapter, parent=None):
+    def __init__(self, schema: WorkpieceFormSchema, segment_config: SegmentEditorConfig,
+                 workpiece_data_adapter: IWorkpieceDataAdapter, ui_config=None, parent=None):
         self._schema          = schema
         self._segment_config  = segment_config
         self._workpiece_data_adapter = workpiece_data_adapter
+        self._ui_config      = ui_config
         self._editor          = None
         self._capture_handler = None
         super().__init__("WorkpieceEditor", parent)
@@ -37,15 +39,6 @@ class WorkpieceEditorView(IApplicationView):
         layout.setSpacing(0)
         try:
             self._editor = self._build_editor()
-            action_row = QHBoxLayout()
-            action_row.addStretch(1)
-            self._process_contour_button = QPushButton("Process Contour")
-            self._process_contour_button.setToolTip(
-                "Run the production paint contour preparation and preview its pixel points"
-            )
-            self._process_contour_button.clicked.connect(self.process_contour_requested.emit)
-            action_row.addWidget(self._process_contour_button)
-            layout.addLayout(action_row)
             layout.addWidget(self._editor)
         except Exception as exc:
             _logger.exception("WorkpieceEditorView: failed to build editor")
@@ -91,12 +84,14 @@ class WorkpieceEditorView(IApplicationView):
                 self._segment_config.settings_provider,
             )
             .with_layer_config(self._schema.editor_layer_config)
+            .with_ui_config(self._ui_config)
             .with_form(WorkpieceFormFactory(schema=self._schema))
             .with_widgets(VirtualKeyboardWidgetFactory())
             .with_workpiece_data_adapter(self._workpiece_data_adapter)
             .on_save(self._on_save_cb)
             .on_capture(self._on_capture_cb)
             .on_execute(self._on_execute_cb)
+            .on_custom_action(self._on_custom_action_cb)
             .on_update_camera_feed(self._on_camera_feed_cb)
             .build()
         )
@@ -115,6 +110,9 @@ class WorkpieceEditorView(IApplicationView):
 
     def _on_execute_cb(self, data: dict) -> None:
         self.execute_requested.emit(data)
+
+    def _on_custom_action_cb(self, action_id: str) -> None:
+        self.custom_action_requested.emit(action_id)
 
     def _on_capture_cb(self) -> list:
         if self._capture_handler is not None:

@@ -643,11 +643,16 @@ def _build_paint_workpiece_editor_service(robot_system):
 
 
 def _build_paint_contour_editor_application(robot_system):
+    from contour_editor import ContourEditorUiConfig, EditorButton
     from src.applications.base.widget_application import WidgetApplication
     from src.applications.base.robot_jog_service_builder import build_robot_system_jog_service
     from src.applications.workpiece_editor.workpiece_editor_factory import WorkpieceEditorFactory
 
     service = _build_paint_workpiece_editor_service(robot_system)
+    ui_config = ContourEditorUiConfig.hide(
+        EditorButton.GENERATE_PATTERN,
+        EditorButton.PREVIEW,
+    )
 
     jog_service = build_robot_system_jog_service(robot_system)
     return WidgetApplication(
@@ -655,6 +660,7 @@ def _build_paint_contour_editor_application(robot_system):
             service,
             messaging=ms,
             jog_service=jog_service,
+            ui_config=ui_config,
         )
     )
 

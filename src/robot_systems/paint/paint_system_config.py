@@ -56,7 +56,7 @@ TRAY_DRY_DURATION_MINUTES = 30
 WORKPIECE_LIBRARY_APP = False
 
 # Captures, creates, and edits workpiece contours and their paint paths.
-WORKPIECE_EDITOR_APP = False
+WORKPIECE_EDITOR_APP = True
 
 # Configures the robot, movement groups, calibration, tools, and target frames.
 ROBOT_SETTINGS_APP = True

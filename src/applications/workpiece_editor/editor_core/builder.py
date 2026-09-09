@@ -57,6 +57,10 @@ class WorkpieceEditorBuilder:
         self._base_builder.with_layer_config(layer_config)
         return self
 
+    def with_ui_config(self, ui_config):
+        self._base_builder.with_ui_config(ui_config)
+        return self
+
     def with_form(self, form_factory):
         """Configure workpiece form (optional)"""
         self._base_builder.with_form(form_factory)
@@ -87,6 +91,10 @@ class WorkpieceEditorBuilder:
     def on_execute(self, callback: Callable[[Any], None]):
         """Set callback for execute events"""
         self._base_builder.on_execute(callback)
+        return self
+
+    def on_custom_action(self, callback: Callable[[str], None]):
+        self._base_builder.on_custom_action(callback)
         return self
 
     def on_update_camera_feed(self, callback: Callable[[], None]):
@@ -143,4 +151,3 @@ class WorkpieceEditorBuilder:
     def get_workpiece_manager(self) -> Optional[WorkpieceManager]:
         """Get the WorkpieceManager instance (available after build())"""
         return self._workpiece_manager
-

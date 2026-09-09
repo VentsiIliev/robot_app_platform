@@ -11,6 +11,7 @@ from src.applications.workpiece_editor.view.workpiece_editor_view import Workpie
 class WorkpieceEditorFactory(ApplicationFactory):
     def __init__(self):
         self._messaging = None
+        self._custom_action_handler = None
 
     def _create_model(self, service: IWorkpieceEditorService) -> WorkpieceEditorModel:
         return WorkpieceEditorModel(service)
@@ -21,15 +22,27 @@ class WorkpieceEditorFactory(ApplicationFactory):
     def _create_controller(self, model: IApplicationModel, view: IApplicationView) -> IApplicationController:
         assert isinstance(model, WorkpieceEditorModel)
         assert isinstance(view, WorkpieceEditorView)
-        return WorkpieceEditorController(model, view, self._messaging)
+        return WorkpieceEditorController(
+            model,
+            view,
+            self._messaging,
+            custom_action_handler=self._custom_action_handler,
+        )
 
-    def build(self, service: IWorkpieceEditorService, messaging=None, jog_service=None):
+    def build(self, service: IWorkpieceEditorService, messaging=None, jog_service=None,
+              ui_config=None, custom_action_handler=None):
         self._messaging = messaging
+        self._custom_action_handler = custom_action_handler
         schema = service.get_form_schema()
         segment_config = service.get_segment_config()
         adapter = service.get_workpiece_data_adapter()
         model = self._create_model(service)
-        view = WorkpieceEditorView(schema=schema, segment_config=segment_config, workpiece_data_adapter=adapter)
+        view = WorkpieceEditorView(
+            schema=schema,
+            segment_config=segment_config,
+            workpiece_data_adapter=adapter,
+            ui_config=ui_config,
+        )
         controller = self._create_controller(model, view)
         return self._finalize_build(
             model=model,
