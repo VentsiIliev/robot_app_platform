@@ -309,6 +309,40 @@ class PaintMagazineLoadService:
         rx = float(magazine_pose[3])
         ry = float(magazine_pose[4])
         z = float(magazine_pose[2])
+        frame_obj = resolver.get_frame(self._frame_name)
+        mapper = getattr(frame_obj, "mapper", None)
+        if mapper is None:
+            _logger.warning(
+                "[MAGAZINE_TARGET_DIAGNOSTIC] frame=%s has no plane mapper; "
+                "capture_pose=(%.3f, %.3f, %.3f, %.3f, %.3f, %.3f)",
+                self._frame_name,
+                *(float(value) for value in magazine_pose[:6]),
+            )
+        else:
+            source_pose = mapper.source_pose
+            target_pose = mapper.target_pose
+            _logger.info(
+                "[MAGAZINE_TARGET_DIAGNOSTIC] frame=%s "
+                "capture_pose=(%.3f, %.3f, %.3f, %.3f, %.3f, %.3f) "
+                "configured_source_xy_rz=(%.3f, %.3f, %.3f) "
+                "configured_target_xy_rz=(%.3f, %.3f, %.3f) "
+                "configured_delta_xy_rz=(%.3f, %.3f, %.3f) "
+                "capture_minus_configured_target_xy_rz=(%.3f, %.3f, %.3f)",
+                self._frame_name,
+                *(float(value) for value in magazine_pose[:6]),
+                float(source_pose.x),
+                float(source_pose.y),
+                float(source_pose.rz),
+                float(target_pose.x),
+                float(target_pose.y),
+                float(target_pose.rz),
+                float(target_pose.x - source_pose.x),
+                float(target_pose.y - source_pose.y),
+                float(target_pose.rz - source_pose.rz),
+                float(magazine_pose[0] - target_pose.x),
+                float(magazine_pose[1] - target_pose.y),
+                float(magazine_pose[5] - target_pose.rz),
+            )
         robot_contour_xy = []
         contour_resolve_started = monotonic()
         for px, py in points_px:
@@ -343,6 +377,30 @@ class PaintMagazineLoadService:
             frame=self._frame_name,
         )
         center_resolve_elapsed = monotonic() - center_resolve_started
+        _logger.info(
+            "[MAGAZINE_TARGET_DIAGNOSTIC] center_px=(%.3f, %.3f) point=%s "
+            "homography_residual_xy=(%.3f, %.3f) mapped_plane_xy=(%.3f, %.3f) "
+            "plane_delta_xy=(%.3f, %.3f) tcp_rotation_delta_xy=(%.3f, %.3f) "
+            "target_point_delta_xy=(%.3f, %.3f) final_command_xy=(%.3f, %.3f) "
+            "requested_rz=%.3f reference_rz=%.3f",
+            float(center_px[0]),
+            float(center_px[1]),
+            str(target_point.name),
+            float(center_result.calibration_xy[0]),
+            float(center_result.calibration_xy[1]),
+            float(center_result.plane_xy[0]),
+            float(center_result.plane_xy[1]),
+            float(center_result.plane_xy[0] - center_result.calibration_xy[0]),
+            float(center_result.plane_xy[1] - center_result.calibration_xy[1]),
+            float(center_result.pickup_plane_reference_delta_xy[0]),
+            float(center_result.pickup_plane_reference_delta_xy[1]),
+            float(center_result.target_delta_xy[0]),
+            float(center_result.target_delta_xy[1]),
+            float(center_result.final_xy[0]),
+            float(center_result.final_xy[1]),
+            float(pickup_rz),
+            float(center_result.reference_rz or 0.0),
+        )
         _logger.info(
             "[MAGAZINE_LOAD] simple pickup target center_px=(%.3f, %.3f) pickup_xy=(%.3f, %.3f) pickup_rz=%.3f contour_points=%d",
             float(center_px[0]),
