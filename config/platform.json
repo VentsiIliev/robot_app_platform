@@ -17,7 +17,7 @@
     "show_account_button_when_dev_skip_login": false,
     "show_power_off_button": true,
     "custom_virtual_keyboard_enabled": false,
-    "fullscreen": true,
+    "fullscreen": false,
     "window_width": 1280,
     "window_height": 1024
   }
