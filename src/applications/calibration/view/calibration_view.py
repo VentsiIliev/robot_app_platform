@@ -546,10 +546,20 @@ class CalibrationView(IApplicationView):
         dialog = RobotCalibrationPreviewDialog(preview, self)
         return dialog.exec() == dialog.DialogCode.Accepted
 
-    def prompt_robot_calibration_area(self, current_area_id: str = "global") -> str | None:
+    def prompt_robot_calibration_area(
+        self,
+        current_area_id: str = "global",
+        configured_area_ids: set[str] | None = None,
+    ) -> str | None:
+        configured = {str(area_id).strip() for area_id in (configured_area_ids or set())}
         options = [(self.tr("Global (shared calibration)"), "global")]
         options.extend(
-            (definition.label, definition.id)
+            (
+                definition.label
+                if definition.id in configured
+                else f"{definition.label} ({self.tr('not configured')})",
+                definition.id,
+            )
             for definition in self._calibration_work_area_definitions
         )
         labels = [label for label, _area_id in options]

@@ -28,7 +28,6 @@ from src.engine.robot.calibration.robot_calibration.target_planning import (
     build_target_selection_plan,
 )
 from src.engine.vision.i_vision_service import IVisionService
-from src.engine.vision.calibration_vision_settings import CoordinateCalibrationProfile
 from src.shared_contracts.declarations import WorkAreaDefinition
 from src.engine.work_areas.i_work_area_service import IWorkAreaService
 from src.engine.repositories.interfaces.i_settings_service import ISettingsService
@@ -813,16 +812,23 @@ class CalibrationApplicationService(ICalibrationService):
             assignments = dict(vision.work_area_calibration_profiles or {})
             profiles = dict(vision.coordinate_calibration_profiles or {})
             profile_id = assignments.get(target)
-            if not profile_id or profile_id == "global" or profile_id not in profiles:
-                profile_id = f"{target}_local"
-                if profile_id not in profiles:
-                    profiles[profile_id] = CoordinateCalibrationProfile(
-                        matrix_path=f"calibrations/{target}/camera_to_robot.npy",
-                        reference_frame=target,
-                    )
-                assignments[target] = profile_id
-                vision.coordinate_calibration_profiles = profiles
-                vision.work_area_calibration_profiles = assignments
+            if not profile_id or profile_id == "global":
+                return (
+                    False,
+                    f"Work area '{target}' has no dedicated calibration profile. "
+                    "Configure it in Robot Settings → Targeting.",
+                )
+            profile = profiles.get(profile_id)
+            if profile is None:
+                return (
+                    False,
+                    f"Calibration profile '{profile_id}' is not defined. "
+                    "Configure it in Robot Settings → Targeting.",
+                )
+            if not str(getattr(profile, "matrix_path", "") or "").strip():
+                return False, f"Calibration profile '{profile_id}' has no matrix path"
+            if str(getattr(profile, "reference_frame", "") or "").strip().lower() != target.lower():
+                return False, f"Calibration profile '{profile_id}' must use reference frame '{target}'"
             if self._work_area_service is not None:
                 self.set_active_work_area_id(target)
 

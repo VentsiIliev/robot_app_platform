@@ -28,6 +28,16 @@
     "Target Point": "Target Point",
     "Target Frame": "Target Frame",
     "Name cannot be empty.": "Name cannot be empty.",
-    "X and Y must be valid numbers.": "X and Y must be valid numbers."
+    "X and Y must be valid numbers.": "X and Y must be valid numbers.",
+    "Use per-area vision calibration": "Use per-area vision calibration",
+    "Work Area": "Work Area",
+    "Calibration Profile": "Calibration Profile",
+    "Reference Frame": "Reference Frame",
+    "Matrix Path": "Matrix Path",
+    "Source Group": "Source Group",
+    "Target Group": "Target Group",
+    "Height Correction": "Height Correction",
+    "A local calibration profile requires a work area.": "A local calibration profile requires a work area.",
+    "A local calibration profile requires a reference frame and matrix path.": "A local calibration profile requires a reference frame and matrix path."
   }
 }

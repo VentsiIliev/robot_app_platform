@@ -9,6 +9,7 @@
   "CalibrationView": {
     "Global (shared calibration)": "Глобална (споделена калибрация)",
     "Robot Calibration Area": "Зона за калибрация на робота",
-    "Select the area to calibrate:": "Изберете зоната за калибриране:"
+    "Select the area to calibrate:": "Изберете зоната за калибриране:",
+    "not configured": "не е конфигурирана"
   }
 }

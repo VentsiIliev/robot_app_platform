@@ -1,0 +1,56 @@
+import sys
+import unittest
+
+from PyQt6.QtWidgets import QApplication
+
+from src.applications.robot_settings.view.targeting_definitions_tab import (
+    TargetingDefinitionsTab,
+)
+
+
+class TestTargetingDefinitionsTab(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls._app = QApplication.instance() or QApplication(sys.argv)
+
+    def test_calibration_profile_fields_round_trip_with_frame(self):
+        tab = TargetingDefinitionsTab()
+        payload = {
+            "coordinate_calibration_mode": "per_area",
+            "frames": [
+                {
+                    "name": "magazine",
+                    "work_area_id": "magazine",
+                    "source_navigation_group": "CALIBRATION",
+                    "target_navigation_group": "Magazine",
+                    "use_height_correction": True,
+                    "calibration_profile": "magazine_local",
+                    "calibration_reference_frame": "magazine",
+                    "calibration_matrix_path": "calibrations/magazine/camera_to_robot.npy",
+                }
+            ],
+        }
+
+        tab.load(payload)
+        saved = tab.get_values()
+
+        self.assertEqual(saved["coordinate_calibration_mode"], "per_area")
+        self.assertEqual(saved["frames"][0]["calibration_profile"], "magazine_local")
+        self.assertEqual(saved["frames"][0]["calibration_reference_frame"], "magazine")
+        self.assertEqual(
+            saved["frames"][0]["calibration_matrix_path"],
+            "calibrations/magazine/camera_to_robot.npy",
+        )
+
+    def test_loading_mode_does_not_emit_user_change(self):
+        tab = TargetingDefinitionsTab()
+        emissions = []
+        tab.definitions_changed.connect(lambda: emissions.append(True))
+
+        tab.load({"coordinate_calibration_mode": "per_area"})
+
+        self.assertEqual(emissions, [])
+
+
+if __name__ == "__main__":
+    unittest.main()

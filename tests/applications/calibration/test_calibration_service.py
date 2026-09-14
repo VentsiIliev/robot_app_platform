@@ -125,10 +125,17 @@ class TestCalibrationApplicationServiceDelegation(unittest.TestCase):
         pc.calibrate.assert_called_once()
         self.assertTrue(ok)
 
-    def test_select_robot_calibration_target_creates_area_profile(self):
+    def test_select_robot_calibration_target_uses_configured_area_profile(self):
         settings_service = MagicMock()
         settings = _make_calibration_settings()
-        settings.vision.work_area_calibration_profiles = {"paint": "global"}
+        from src.engine.vision.calibration_vision_settings import CoordinateCalibrationProfile
+        settings.vision.work_area_calibration_profiles = {"paint": "paint_local"}
+        settings.vision.coordinate_calibration_profiles = {
+            "paint_local": CoordinateCalibrationProfile(
+                matrix_path="calibrations/paint/camera_to_robot.npy",
+                reference_frame="paint",
+            )
+        }
         settings_service.load_settings.return_value = settings
         work_area_service = MagicMock()
         svc = CalibrationApplicationService(
@@ -144,12 +151,29 @@ class TestCalibrationApplicationServiceDelegation(unittest.TestCase):
         self.assertTrue(ok)
         self.assertEqual(settings.vision.calibration_target_work_area, "paint")
         profile_id = settings.vision.work_area_calibration_profiles["paint"]
-        self.assertNotEqual(profile_id, "global")
         profile = settings.vision.coordinate_calibration_profiles[profile_id]
         self.assertEqual(profile.reference_frame, "paint")
         self.assertEqual(profile.matrix_path, "calibrations/paint/camera_to_robot.npy")
         settings_service.save_settings.assert_called_once_with(settings)
         work_area_service.set_active_area_id.assert_called_once_with("paint")
+
+    def test_select_robot_calibration_target_rejects_shared_global_profile(self):
+        settings_service = MagicMock()
+        settings = _make_calibration_settings()
+        settings.vision.work_area_calibration_profiles = {"paint": "global"}
+        settings_service.load_settings.return_value = settings
+        svc = CalibrationApplicationService(
+            _make_vision(),
+            MagicMock(),
+            calibration_settings_service=settings_service,
+            work_area_definitions=[WorkAreaDefinition("paint", "Paint", "#000000")],
+        )
+
+        ok, message = svc.select_robot_calibration_target("paint")
+
+        self.assertFalse(ok)
+        self.assertIn("Robot Settings → Targeting", message)
+        settings_service.save_settings.assert_not_called()
 
     def test_calibrate_camera_and_robot_short_circuits_on_camera_failure(self):
         svc, vs, _ = _make_svc(calibrate=(False, "no cam"))

@@ -1109,6 +1109,32 @@ def _build_robot_settings_application(robot_app):
     from src.applications.robot_settings.service.robot_settings_application_service import \
         RobotSettingsApplicationService
     from src.robot_systems.paint.targeting.settings_adapter import from_editor_dict, to_editor_dict
+    from src.engine.vision.calibration_vision_settings import CalibrationVisionSettings
+
+    def _load_targeting_definitions() -> dict:
+        payload = to_editor_dict(
+            robot_app._settings_service.get(CommonSettingsID.TARGETING),
+            robot_app.get_target_point_definitions(),
+            robot_app.get_target_frame_definitions(),
+        )
+        calibration = robot_app._settings_service.get(
+            CommonSettingsID.CALIBRATION_VISION_SETTINGS
+        )
+        profiles = calibration.coordinate_calibration_profiles or {}
+        assignments = calibration.work_area_calibration_profiles or {}
+        for frame in payload.get("frames", []):
+            area_id = str(frame.get("work_area_id", "") or "").strip()
+            profile_id = assignments.get(area_id, "")
+            profile = profiles.get(profile_id)
+            frame["calibration_profile"] = profile_id
+            frame["calibration_reference_frame"] = (
+                str(getattr(profile, "reference_frame", "") or "")
+            )
+            frame["calibration_matrix_path"] = (
+                str(getattr(profile, "matrix_path", "") or "")
+            )
+        payload["coordinate_calibration_mode"] = calibration.coordinate_calibration_mode
+        return payload
 
     def _save_targeting_definitions(data) -> None:
         robot_app._settings_service.save(
@@ -1121,6 +1147,40 @@ def _build_robot_settings_application(robot_app):
             ),
         )
         robot_app.invalidate_shared_vision_resolver()
+        current = robot_app._settings_service.get(
+            CommonSettingsID.CALIBRATION_VISION_SETTINGS
+        )
+        serialized = current.to_dict()
+        coordinate = serialized.setdefault("Coordinate calibration", {})
+        coordinate["Mode"] = str(
+            data.get("coordinate_calibration_mode", current.coordinate_calibration_mode)
+            or "global"
+        )
+        profiles = dict(coordinate.get("Profiles", {}) or {})
+        assignments = dict(coordinate.get("Work area profiles", {}) or {})
+        for frame in data.get("frames", []):
+            area_id = str(frame.get("work_area_id", "") or "").strip()
+            profile_id = str(frame.get("calibration_profile", "") or "").strip()
+            if not area_id:
+                continue
+            if not profile_id:
+                assignments.pop(area_id, None)
+                continue
+            assignments[area_id] = profile_id
+            if profile_id != "global":
+                profiles[profile_id] = {
+                    "Matrix path": str(frame.get("calibration_matrix_path", "") or "").strip(),
+                    "Reference frame": str(
+                        frame.get("calibration_reference_frame", frame.get("name", "")) or ""
+                    ).strip().lower(),
+                }
+        coordinate["Profiles"] = profiles
+        coordinate["Work area profiles"] = assignments
+        robot_app._settings_service.save(
+            CommonSettingsID.CALIBRATION_VISION_SETTINGS,
+            CalibrationVisionSettings.from_dict(serialized),
+        )
+        robot_app.invalidate_shared_vision_resolver()
 
     service = RobotSettingsApplicationService(
         robot_app._settings_service,
@@ -1130,11 +1190,7 @@ def _build_robot_settings_application(robot_app):
         robot_service=robot_app.get_optional_service(CommonServiceID.ROBOT),
         tool_settings_key=CommonSettingsID.TOOL_CHANGER_CONFIG,
         navigation_service=getattr(robot_app, "_navigation", None) or robot_app.get_service(CommonServiceID.NAVIGATION),
-        load_targeting_definitions_fn=lambda: to_editor_dict(
-            robot_app._settings_service.get(CommonSettingsID.TARGETING),
-            robot_app.get_target_point_definitions(),
-            robot_app.get_target_frame_definitions(),
-        ),
+        load_targeting_definitions_fn=_load_targeting_definitions,
         save_targeting_definitions_fn=_save_targeting_definitions,
         movement_group_definitions=robot_app.get_movement_group_definitions(),
     )

@@ -40,6 +40,7 @@ class TargetingDefinitionsTab(QWidget):
         self._frames: List[dict] = []
         self._protected_points: set[str] = set()
         self._protected_frames: set[str] = set()
+        self._coordinate_calibration_mode = "global"
         self._build_ui()
 
     def _build_ui(self) -> None:
@@ -99,8 +100,17 @@ class TargetingDefinitionsTab(QWidget):
         desc.setStyleSheet("color: #555;")
         layout.addWidget(desc)
 
-        self._frames_table = QTableWidget(0, 4)
-        self._frames_table.setHorizontalHeaderLabels(["Name", "Source Group", "Target Group", "Height Correction"])
+        self._per_area_calibration = QCheckBox(_t("Use per-area vision calibration"))
+        self._per_area_calibration.setStyleSheet(DIALOG_CHECKBOX_STYLE)
+        self._per_area_calibration.toggled.connect(self._on_calibration_mode_changed)
+        layout.addWidget(self._per_area_calibration)
+
+        self._frames_table = QTableWidget(0, 8)
+        self._frames_table.setHorizontalHeaderLabels([
+            _t("Name"), _t("Work Area"), _t("Source Group"), _t("Target Group"),
+            _t("Height Correction"), _t("Calibration Profile"),
+            _t("Reference Frame"), _t("Matrix Path"),
+        ])
         self._frames_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self._frames_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self._frames_table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
@@ -136,6 +146,14 @@ class TargetingDefinitionsTab(QWidget):
         self._protected_frames = {
             str(name).strip().lower() for name in payload.get("protected_frames", [])
         }
+        self._coordinate_calibration_mode = str(
+            payload.get("coordinate_calibration_mode", "global") or "global"
+        )
+        self._per_area_calibration.blockSignals(True)
+        self._per_area_calibration.setChecked(
+            self._coordinate_calibration_mode == "per_area"
+        )
+        self._per_area_calibration.blockSignals(False)
         self._reload_points_table()
         self._reload_frames_table()
         self._update_buttons()
@@ -146,6 +164,7 @@ class TargetingDefinitionsTab(QWidget):
             "frames": [dict(item) for item in self._frames],
             "protected_points": sorted(self._protected_points),
             "protected_frames": sorted(self._protected_frames),
+            "coordinate_calibration_mode": self._coordinate_calibration_mode,
         }
 
     def _reload_points_table(self) -> None:
@@ -164,9 +183,17 @@ class TargetingDefinitionsTab(QWidget):
             row = self._frames_table.rowCount()
             self._frames_table.insertRow(row)
             self._frames_table.setItem(row, 0, QTableWidgetItem(str(frame.get("name", ""))))
-            self._frames_table.setItem(row, 1, QTableWidgetItem(str(frame.get("source_navigation_group", ""))))
-            self._frames_table.setItem(row, 2, QTableWidgetItem(str(frame.get("target_navigation_group", ""))))
-            self._frames_table.setItem(row, 3, QTableWidgetItem("Yes" if frame.get("use_height_correction", False) else "No"))
+            self._frames_table.setItem(row, 1, QTableWidgetItem(str(frame.get("work_area_id", ""))))
+            self._frames_table.setItem(row, 2, QTableWidgetItem(str(frame.get("source_navigation_group", ""))))
+            self._frames_table.setItem(row, 3, QTableWidgetItem(str(frame.get("target_navigation_group", ""))))
+            self._frames_table.setItem(row, 4, QTableWidgetItem("Yes" if frame.get("use_height_correction", False) else "No"))
+            self._frames_table.setItem(row, 5, QTableWidgetItem(str(frame.get("calibration_profile", ""))))
+            self._frames_table.setItem(row, 6, QTableWidgetItem(str(frame.get("calibration_reference_frame", ""))))
+            self._frames_table.setItem(row, 7, QTableWidgetItem(str(frame.get("calibration_matrix_path", ""))))
+
+    def _on_calibration_mode_changed(self, enabled: bool) -> None:
+        self._coordinate_calibration_mode = "per_area" if enabled else "global"
+        self.definitions_changed.emit()
 
     def _selected_point_index(self) -> int | None:
         row = self._points_table.currentRow()
@@ -437,6 +464,17 @@ class _FrameDialog(AppDialog):
         form.addRow(self._label("Source Group"), self._source)
         form.addRow(self._label("Target Group"), self._target)
         form.addRow(QLabel(""), self._height)
+        self._work_area = self._line_edit(str(data.get("work_area_id", "")))
+        self._work_area.setReadOnly(True)
+        self._profile = self._line_edit(str(data.get("calibration_profile", "")))
+        self._reference_frame = self._line_edit(
+            str(data.get("calibration_reference_frame", data.get("name", "")))
+        )
+        self._matrix_path = self._line_edit(str(data.get("calibration_matrix_path", "")))
+        form.addRow(self._label(_t("Work Area")), self._work_area)
+        form.addRow(self._label(_t("Calibration Profile")), self._profile)
+        form.addRow(self._label(_t("Reference Frame")), self._reference_frame)
+        form.addRow(self._label(_t("Matrix Path")), self._matrix_path)
         self._keyboard_bottom_spacer = QWidget(form_host)
         self._keyboard_bottom_spacer.setFixedHeight(0)
         form.addRow("", self._keyboard_bottom_spacer)
@@ -479,12 +517,32 @@ class _FrameDialog(AppDialog):
             "source_navigation_group": self._source.text().strip(),
             "target_navigation_group": self._target.text().strip(),
             "use_height_correction": self._height.isChecked(),
+            "work_area_id": self._work_area.text().strip(),
+            "calibration_profile": self._profile.text().strip(),
+            "calibration_reference_frame": self._reference_frame.text().strip().lower(),
+            "calibration_matrix_path": self._matrix_path.text().strip(),
         }
 
     def accept(self) -> None:
         if not self._name.text().strip():
             show_warning(self, _t("Target Frame"), _t("Name cannot be empty."))
             return
+        profile_id = self._profile.text().strip()
+        if profile_id and profile_id != "global":
+            if not self._work_area.text().strip():
+                show_warning(
+                    self,
+                    _t("Target Frame"),
+                    _t("A local calibration profile requires a work area."),
+                )
+                return
+            if not self._reference_frame.text().strip() or not self._matrix_path.text().strip():
+                show_warning(
+                    self,
+                    _t("Target Frame"),
+                    _t("A local calibration profile requires a reference frame and matrix path."),
+                )
+                return
         super().accept()
 
     @staticmethod

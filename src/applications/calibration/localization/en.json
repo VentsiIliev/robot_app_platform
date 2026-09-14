@@ -9,6 +9,7 @@
   "CalibrationView": {
     "Global (shared calibration)": "Global (shared calibration)",
     "Robot Calibration Area": "Robot Calibration Area",
-    "Select the area to calibrate:": "Select the area to calibrate:"
+    "Select the area to calibrate:": "Select the area to calibrate:",
+    "not configured": "not configured"
   }
 }

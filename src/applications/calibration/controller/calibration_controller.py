@@ -249,8 +249,20 @@ class CalibrationController(IApplicationController):
         if settings is None:
             self._view.append_log("✗ Calibration settings are unavailable")
             return
+        profiles = settings.vision.coordinate_calibration_profiles or {}
+        assignments = settings.vision.work_area_calibration_profiles or {}
+        configured_area_ids = {
+            area_id
+            for area_id, profile_id in assignments.items()
+            if profile_id != "global"
+            and profile_id in profiles
+            and str(getattr(profiles[profile_id], "matrix_path", "") or "").strip()
+            and str(getattr(profiles[profile_id], "reference_frame", "") or "").strip().lower()
+            == str(area_id).strip().lower()
+        }
         selected_area = self._view.prompt_robot_calibration_area(
             current_area_id=settings.vision.calibration_target_work_area,
+            configured_area_ids=configured_area_ids,
         )
         if selected_area is None:
             self._view.append_log("• Robot calibration cancelled before area selection")

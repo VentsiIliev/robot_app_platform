@@ -203,9 +203,13 @@ class TestCalibrationControllerHandlers(unittest.TestCase):
         model.calibrate_camera.assert_called_once()
 
     def test_on_calibrate_robot_calls_model(self):
-        ctrl, model, _, _ = _make_ctrl()
+        ctrl, model, view, _ = _make_ctrl()
         ctrl._on_calibrate_robot()
         model.select_robot_calibration_target.assert_called_once_with("global")
+        view.prompt_robot_calibration_area.assert_called_once_with(
+            current_area_id="global",
+            configured_area_ids=set(),
+        )
         model.calibrate_robot.assert_called_once()
 
     def test_on_calibrate_robot_stops_when_area_selection_is_cancelled(self):

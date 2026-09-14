@@ -28,6 +28,16 @@
     "Target Point": "Целева точка",
     "Target Frame": "Целева рамка",
     "Name cannot be empty.": "Името не може да бъде празно.",
-    "X and Y must be valid numbers.": "X и Y трябва да бъдат валидни числа."
+    "X and Y must be valid numbers.": "X и Y трябва да бъдат валидни числа.",
+    "Use per-area vision calibration": "Използване на калибрация на зрението по зони",
+    "Work Area": "Работна зона",
+    "Calibration Profile": "Профил за калибрация",
+    "Reference Frame": "Референтна рамка",
+    "Matrix Path": "Път до матрицата",
+    "Source Group": "Начална група",
+    "Target Group": "Целева група",
+    "Height Correction": "Корекция на височината",
+    "A local calibration profile requires a work area.": "Локалният профил за калибрация изисква работна зона.",
+    "A local calibration profile requires a reference frame and matrix path.": "Локалният профил за калибрация изисква референтна рамка и път до матрицата."
   }
 }
