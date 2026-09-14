@@ -132,7 +132,11 @@ def main() -> None:
     parser.add_argument("--destination", type=Path)
     parser.add_argument("--area", default="paint")
     parser.add_argument("--profile", default="paint_local")
-    parser.add_argument("--reference-frame", default="calibration")
+    parser.add_argument(
+        "--reference-frame",
+        required=True,
+        help="Target frame in which this area calibration is expressed (for example: paint)",
+    )
     parser.add_argument("--enable-per-area", action="store_true")
     parser.add_argument("--overwrite", action="store_true")
     migrate(parser.parse_args())

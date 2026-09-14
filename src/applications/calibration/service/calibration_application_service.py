@@ -203,6 +203,7 @@ class CalibrationApplicationService(ICalibrationService):
                  robot_service: _IRobotService = None, height_service: _IHeightService = None,
                  robot_config: _IRobotConfig = None, calib_config: _ICalibConfig = None,
                  transformer: ICoordinateTransformer = None,
+                 transformer_provider: Optional[Callable[[], ICoordinateTransformer]] = None,
                  work_area_service: Optional[IWorkAreaService] = None,
                  camera_tcp_offset_calibrator: Optional[_ICameraTcpOffsetCalibrator] = None,
                  camera_z_shift_calibrator: Optional[_ICameraZShiftCalibrator] = None,
@@ -224,6 +225,7 @@ class CalibrationApplicationService(ICalibrationService):
         self._robot_config        = robot_config
         self._calib_config        = calib_config
         self._transformer         = transformer
+        self._transformer_provider = transformer_provider
         self._work_area_service   = work_area_service
         self._camera_tcp_offset_calibrator = camera_tcp_offset_calibrator
         self._camera_z_shift_calibrator = camera_z_shift_calibrator
@@ -333,6 +335,11 @@ class CalibrationApplicationService(ICalibrationService):
             return _DEFAULT_ACCELERATION
         return self._calib_config.acceleration
 
+    def _current_transformer(self) -> ICoordinateTransformer | None:
+        if self._transformer_provider is not None:
+            return self._transformer_provider()
+        return self._transformer
+
     def _load_test_calibration_report(self) -> dict | None:
         if self._vision_service is None:
             return None
@@ -413,9 +420,10 @@ class CalibrationApplicationService(ICalibrationService):
             prediction = residual_model.predict([float(px), float(py)])
             return float(prediction[0]), float(prediction[1])
 
-        if self._transformer is None:
+        transformer = self._current_transformer()
+        if transformer is None:
             raise RuntimeError("Homography transformer unavailable")
-        return self._transformer.transform(float(px), float(py))
+        return transformer.transform(float(px), float(py))
 
     def _resolve_observer_pose(self, area_id: str = "") -> list[float] | None:
         resolved_area_id = str(area_id or "").strip()
@@ -1122,8 +1130,11 @@ class CalibrationApplicationService(ICalibrationService):
         if self._vision_service is None:
             return False
         robot_matrix = self._vision_service.camera_to_robot_matrix_path
-        storage_dir = os.path.dirname(robot_matrix)
-        camera_matrix = os.path.join(storage_dir, "camera_calibration.npz")
+        camera_matrix = getattr(
+            self._vision_service,
+            "intrinsic_camera_calibration_path",
+            os.path.join(os.path.dirname(robot_matrix), "camera_calibration.npz"),
+        )
         return os.path.isfile(robot_matrix) and os.path.isfile(camera_matrix)
 
     def test_calibration(self, model_name: str = "homography") -> tuple[bool, str]:
@@ -1155,9 +1166,10 @@ class CalibrationApplicationService(ICalibrationService):
             if frame is None:
                 return False, "No camera frame available"
 
-            if self._transformer is not None:
-                self._transformer.reload()
-            if self._transformer is None or not self._transformer.is_available():
+            transformer = self._current_transformer()
+            if transformer is not None:
+                transformer.reload()
+            if transformer is None or not transformer.is_available():
                 return False, "System not calibrated — run calibration first"
 
             report = self._load_test_calibration_report()
@@ -1461,15 +1473,16 @@ class CalibrationApplicationService(ICalibrationService):
             return False, "Robot service unavailable", {}
         if self._height_service is None or not self._height_service.is_calibrated():
             return False, "Height measuring is not calibrated", {}
-        if self._transformer is None:
+        transformer = self._current_transformer()
+        if transformer is None:
             return False, "Homography transformer unavailable", {}
         if rows < 2 or cols < 2:
             return False, "Grid rows and cols must both be at least 2", {}
         if len(corners_norm) != 4:
             return False, "Exactly 4 area corners are required", {}
 
-        self._transformer.reload()
-        if not self._transformer.is_available():
+        transformer.reload()
+        if not transformer.is_available():
             return False, "System not calibrated — run robot calibration first", {}
 
         points = self.generate_area_grid(corners_norm, rows, cols)
@@ -1500,7 +1513,7 @@ class CalibrationApplicationService(ICalibrationService):
             col_idx = index % cols
             px = xn * width
             py = yn * height
-            x_mm, y_mm = self._transformer.transform(float(px), float(py))
+            x_mm, y_mm = transformer.transform(float(px), float(py))
             state = [float(x_mm), float(y_mm), *pose_suffix]
             label = f"r{row_idx + 1}c{col_idx + 1}"
             point_states.append((label, state))
@@ -1508,7 +1521,7 @@ class CalibrationApplicationService(ICalibrationService):
                 anchor_state = state
 
         area_corners_robot_xy: list[tuple[float, float]] = [
-            self._transformer.transform(float(xn * width), float(yn * height))
+            transformer.transform(float(xn * width), float(yn * height))
             for xn, yn in corners_norm
         ]
         existing_grid_xy = [(float(s[0]), float(s[1])) for _, s in point_states]
@@ -1653,7 +1666,7 @@ class CalibrationApplicationService(ICalibrationService):
                             for i, (sub_x, sub_y, search_r) in enumerate(sub_results):
                                 subs_xy.append((sub_x, sub_y))
                                 try:
-                                    sub_px, sub_py = self._transformer.inverse_transform(sub_x, sub_y)
+                                    sub_px, sub_py = transformer.inverse_transform(sub_x, sub_y)
                                     subs_norm.append((sub_px / width, sub_py / height))
                                 except Exception:
                                     subs_norm.append((-1.0, -1.0))
@@ -1662,7 +1675,7 @@ class CalibrationApplicationService(ICalibrationService):
                                 for k in range(n_pts):
                                     angle = 2 * math.pi * k / n_pts
                                     try:
-                                        cpx, cpy = self._transformer.inverse_transform(
+                                        cpx, cpy = transformer.inverse_transform(
                                             ux + search_r * math.cos(angle),
                                             uy + search_r * math.sin(angle),
                                         )

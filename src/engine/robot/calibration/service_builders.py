@@ -29,6 +29,11 @@ class _CalibrationArtifactVisionProxy:
             return self._locked_matrix_path
         return self._resolve_matrix_path()
 
+    @property
+    def intrinsic_camera_calibration_path(self) -> str:
+        global_matrix_path = self._vision_service.camera_to_robot_matrix_path
+        return os.path.join(os.path.dirname(global_matrix_path), "camera_calibration.npz")
+
     def begin_calibration(self) -> None:
         if self._locked_matrix_path is not None:
             raise RuntimeError("A calibration artifact destination is already locked")
@@ -78,6 +83,11 @@ class _CalibrationArtifactVisionProxy:
         if parent:
             os.makedirs(parent, exist_ok=True)
         return resolved
+
+
+def build_calibration_artifact_vision_proxy(vision_service, settings_service):
+    """Route calibration artifacts using the currently selected destination."""
+    return _CalibrationArtifactVisionProxy(vision_service, settings_service)
 
 
 def build_robot_system_calibration_service(robot_system) -> RobotCalibrationService:

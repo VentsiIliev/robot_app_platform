@@ -10,6 +10,28 @@ from src.engine.vision.calibration_vision_settings import CoordinateCalibrationP
 
 
 class TestCalibrationArtifactRouting(unittest.TestCase):
+    def test_intrinsic_calibration_remains_in_the_shared_camera_directory(self):
+        vision = MagicMock()
+        vision.camera_to_robot_matrix_path = "/tmp/vision/data/global.npy"
+        settings_service = MagicMock()
+        settings_service.get.return_value = SimpleNamespace(
+            calibration_target_work_area="paint",
+            work_area_calibration_profiles={"paint": "paint_local"},
+            coordinate_calibration_profiles={
+                "paint_local": CoordinateCalibrationProfile(
+                    matrix_path="calibrations/paint/camera.npy",
+                    reference_frame="paint",
+                )
+            },
+        )
+
+        proxy = _CalibrationArtifactVisionProxy(vision, settings_service)
+
+        self.assertEqual(
+            proxy.intrinsic_camera_calibration_path,
+            "/tmp/vision/data/camera_calibration.npz",
+        )
+
     def test_destination_is_frozen_for_the_calibration_session(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             global_path = str(Path(temp_dir) / "camera.npy")

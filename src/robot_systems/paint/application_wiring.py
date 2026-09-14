@@ -940,9 +940,19 @@ def _build_calibration_application(robot_system):
     from src.engine.robot.calibration.calibration_navigation_service import CalibrationNavigationService
     from src.engine.robot.calibration.ros_tool_registry_client import RosToolRegistryClient
     from src.engine.robot.calibration.tool_tcp_calibration_service import ToolTcpCalibrationService
+    from src.engine.robot.calibration.service_builders import (
+        build_calibration_artifact_vision_proxy,
+    )
     from src.engine.vision.homography_residual_transformer import HomographyResidualTransformer
 
     vision_service = robot_system.get_optional_service(CommonServiceID.VISION)
+    calibration_vision_service = (
+        build_calibration_artifact_vision_proxy(
+            vision_service,
+            robot_system._settings_service,
+        )
+        if vision_service is not None else None
+    )
     work_area_service = robot_system.get_service(CommonServiceID.WORK_AREAS)
     robot_service = robot_system.get_optional_service(CommonServiceID.ROBOT)
     robot_config = robot_system._robot_config
@@ -960,6 +970,18 @@ def _build_calibration_application(robot_system):
         HomographyResidualTransformer(vision_service.camera_to_robot_matrix_path)
         if vision_service is not None else None
     )
+
+    def _selected_calibration_transformer():
+        if calibration_vision_service is None:
+            return None
+        matrix_path = calibration_vision_service.camera_to_robot_matrix_path
+        if robot_config is not None:
+            return HomographyResidualTransformer(
+                matrix_path,
+                camera_to_tcp_x_offset=robot_config.camera_to_tcp_x_offset,
+                camera_to_tcp_y_offset=robot_config.camera_to_tcp_y_offset,
+            )
+        return HomographyResidualTransformer(matrix_path)
     camera_tcp_offset_calibrator = (
         CameraTcpOffsetCalibrationService(
             vision_service=vision_service,
@@ -1028,13 +1050,14 @@ def _build_calibration_application(robot_system):
         return navigation.get_group_position(group_id) if navigation is not None else None
 
     service = CalibrationApplicationService(
-        vision_service=vision_service,
+        vision_service=calibration_vision_service,
         process_controller=robot_system._calibration_coordinator,
         robot_service=robot_service,
         height_service=getattr(robot_system, '_height_measuring_service', None),
         robot_config=robot_system._robot_config,
         calib_config=robot_system._robot_calibration,
         transformer=transformer,
+        transformer_provider=_selected_calibration_transformer,
         work_area_service=work_area_service,
         camera_tcp_offset_calibrator=camera_tcp_offset_calibrator,
         camera_z_shift_calibrator=camera_z_shift_calibrator,
