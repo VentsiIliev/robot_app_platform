@@ -128,6 +128,7 @@ class TestCalibrationApplicationServiceDelegation(unittest.TestCase):
     def test_select_robot_calibration_target_creates_area_profile(self):
         settings_service = MagicMock()
         settings = _make_calibration_settings()
+        settings.vision.work_area_calibration_profiles = {"paint": "global"}
         settings_service.load_settings.return_value = settings
         work_area_service = MagicMock()
         svc = CalibrationApplicationService(
@@ -143,6 +144,7 @@ class TestCalibrationApplicationServiceDelegation(unittest.TestCase):
         self.assertTrue(ok)
         self.assertEqual(settings.vision.calibration_target_work_area, "paint")
         profile_id = settings.vision.work_area_calibration_profiles["paint"]
+        self.assertNotEqual(profile_id, "global")
         profile = settings.vision.coordinate_calibration_profiles[profile_id]
         self.assertEqual(profile.reference_frame, "paint")
         self.assertEqual(profile.matrix_path, "calibrations/paint/camera_to_robot.npy")

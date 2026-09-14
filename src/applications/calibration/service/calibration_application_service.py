@@ -813,17 +813,13 @@ class CalibrationApplicationService(ICalibrationService):
             assignments = dict(vision.work_area_calibration_profiles or {})
             profiles = dict(vision.coordinate_calibration_profiles or {})
             profile_id = assignments.get(target)
-            if not profile_id or profile_id not in profiles:
-                profile_id = profile_id or f"{target}_local"
-                suffix = 2
-                base_profile_id = profile_id
-                while profile_id in profiles:
-                    profile_id = f"{base_profile_id}_{suffix}"
-                    suffix += 1
-                profiles[profile_id] = CoordinateCalibrationProfile(
-                    matrix_path=f"calibrations/{target}/camera_to_robot.npy",
-                    reference_frame=target,
-                )
+            if not profile_id or profile_id == "global" or profile_id not in profiles:
+                profile_id = f"{target}_local"
+                if profile_id not in profiles:
+                    profiles[profile_id] = CoordinateCalibrationProfile(
+                        matrix_path=f"calibrations/{target}/camera_to_robot.npy",
+                        reference_frame=target,
+                    )
                 assignments[target] = profile_id
                 vision.coordinate_calibration_profiles = profiles
                 vision.work_area_calibration_profiles = assignments
@@ -1172,7 +1168,11 @@ class CalibrationApplicationService(ICalibrationService):
     def is_calibrated(self) -> bool:
         if self._vision_service is None:
             return False
-        robot_matrix = self._vision_service.camera_to_robot_matrix_path
+        try:
+            robot_matrix = self._vision_service.camera_to_robot_matrix_path
+        except (RuntimeError, ValueError):
+            _logger.warning("Selected calibration artifact is not configured", exc_info=True)
+            return False
         camera_matrix = getattr(
             self._vision_service,
             "intrinsic_camera_calibration_path",
