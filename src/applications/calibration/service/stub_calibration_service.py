@@ -53,6 +53,10 @@ class StubCalibrationService(ICalibrationService):
         _logger.info("Stub: calibrate_robot")
         return True, "Stub: robot calibrated"
 
+    def select_robot_calibration_target(self, area_id: str) -> tuple[bool, str]:
+        _logger.info("Stub: select_robot_calibration_target area=%s", area_id)
+        return True, f"Stub: calibration target selected ({area_id})"
+
     def preview_robot_calibration(self) -> RobotCalibrationPreview:
         return RobotCalibrationPreview(ok=True, message="Stub: robot calibration preview")
 

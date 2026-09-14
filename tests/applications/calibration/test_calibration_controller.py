@@ -3,6 +3,7 @@ import unittest
 from unittest.mock import MagicMock
 
 from src.applications.calibration.controller.calibration_controller import CalibrationController
+from src.applications.calibration.service.i_calibration_service import RobotCalibrationPreview
 from src.applications.calibration.model.calibration_model import CalibrationModel
 from src.applications.calibration_settings.calibration_settings_data import CalibrationSettingsData
 from src.shared_contracts.events.vision_events import VisionTopics
@@ -25,6 +26,8 @@ def _make_model(**overrides):
     m.capture_calibration_image.return_value = overrides.get("capture",  (True,  "captured"))
     m.calibrate_camera.return_value           = overrides.get("camera",   (True,  "cam ok"))
     m.calibrate_robot.return_value            = overrides.get("robot",    (False, "not impl"))
+    m.select_robot_calibration_target.return_value = (True, "Calibration target selected: global")
+    m.preview_robot_calibration.return_value = RobotCalibrationPreview(ok=True, message="ready")
     m.calibrate_camera_and_robot.return_value = overrides.get("sequence", (True,  "all ok"))
     return m
 
@@ -43,6 +46,8 @@ def _make_view():
     v.calibrate_sequence_requested.connect = MagicMock()
     v.save_calibration_settings_requested = MagicMock()
     v.save_calibration_settings_requested.connect = MagicMock()
+    v.prompt_robot_calibration_area.return_value = "global"
+    v.confirm_robot_calibration_preview.return_value = True
     return v
 
 
@@ -200,7 +205,17 @@ class TestCalibrationControllerHandlers(unittest.TestCase):
     def test_on_calibrate_robot_calls_model(self):
         ctrl, model, _, _ = _make_ctrl()
         ctrl._on_calibrate_robot()
+        model.select_robot_calibration_target.assert_called_once_with("global")
         model.calibrate_robot.assert_called_once()
+
+    def test_on_calibrate_robot_stops_when_area_selection_is_cancelled(self):
+        ctrl, model, view, _ = _make_ctrl()
+        view.prompt_robot_calibration_area.return_value = None
+
+        ctrl._on_calibrate_robot()
+
+        model.preview_robot_calibration.assert_not_called()
+        model.calibrate_robot.assert_not_called()
 
     def test_on_calibrate_sequence_calls_model(self):
         ctrl, model, _, _ = _make_ctrl()

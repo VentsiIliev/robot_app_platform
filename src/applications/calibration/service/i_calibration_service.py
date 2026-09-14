@@ -50,6 +50,9 @@ class ICalibrationService(ABC):
     def calibrate_robot(self) -> tuple[bool, str]: ...
 
     @abstractmethod
+    def select_robot_calibration_target(self, area_id: str) -> tuple[bool, str]: ...
+
+    @abstractmethod
     def preview_robot_calibration(self) -> RobotCalibrationPreview: ...
 
     @abstractmethod

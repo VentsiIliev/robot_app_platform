@@ -47,6 +47,9 @@ class CalibrationModel(IApplicationModel):
     def calibrate_robot(self) -> tuple[bool, str]:
         return self._service.calibrate_robot()
 
+    def select_robot_calibration_target(self, area_id: str) -> tuple[bool, str]:
+        return self._service.select_robot_calibration_target(area_id)
+
     def preview_robot_calibration(self) -> RobotCalibrationPreview:
         return self._service.preview_robot_calibration()
 

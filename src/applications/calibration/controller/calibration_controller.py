@@ -245,6 +245,22 @@ class CalibrationController(IApplicationController):
         self._view.set_intrinsic_auto_capture_running(self._model.is_intrinsic_auto_capture_running())
 
     def _on_calibrate_robot(self) -> None:
+        settings = self._model.load_calibration_settings()
+        if settings is None:
+            self._view.append_log("✗ Calibration settings are unavailable")
+            return
+        selected_area = self._view.prompt_robot_calibration_area(
+            current_area_id=settings.vision.calibration_target_work_area,
+        )
+        if selected_area is None:
+            self._view.append_log("• Robot calibration cancelled before area selection")
+            return
+        selected, message = self._model.select_robot_calibration_target(selected_area)
+        if not selected:
+            self._view.append_log(f"✗ {message}")
+            return
+        self._view.append_log(f"• {message}")
+
         preview = self._model.preview_robot_calibration()
         if preview.frame is None and not preview.ok:
             self._view.append_log(f"✗ {preview.message}")

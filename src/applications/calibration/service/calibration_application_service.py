@@ -28,6 +28,7 @@ from src.engine.robot.calibration.robot_calibration.target_planning import (
     build_target_selection_plan,
 )
 from src.engine.vision.i_vision_service import IVisionService
+from src.engine.vision.calibration_vision_settings import CoordinateCalibrationProfile
 from src.shared_contracts.declarations import WorkAreaDefinition
 from src.engine.work_areas.i_work_area_service import IWorkAreaService
 from src.engine.repositories.interfaces.i_settings_service import ISettingsService
@@ -454,7 +455,13 @@ class CalibrationApplicationService(ICalibrationService):
         return list(calib.robot_initial_position)
 
     def _get_active_work_area_polygon_px(self) -> list[tuple[float, float]]:
-        area_id = self.get_active_work_area_id()
+        settings = self._calibration_settings.load()
+        area_id = (
+            str(settings.vision.calibration_target_work_area or "global").strip()
+            if settings is not None else "global"
+        )
+        if area_id == "global":
+            return []
         if not area_id or self._work_area_service is None or self._vision_service is None:
             return []
         points_norm = self._work_area_service.get_work_area(area_id)
@@ -790,6 +797,42 @@ class CalibrationApplicationService(ICalibrationService):
         if self._process_controller is not None:
             self._process_controller.calibrate()
         return True, "Robot calibration started"
+
+    def select_robot_calibration_target(self, area_id: str) -> tuple[bool, str]:
+        target = str(area_id or "").strip()
+        available_ids = {definition.id for definition in self._work_area_definitions}
+        if target != "global" and target not in available_ids:
+            return False, f"Unknown calibration work area: {target or '<empty>'}"
+
+        settings = self._calibration_settings.load()
+        if settings is None:
+            return False, "Calibration settings are unavailable"
+
+        vision = settings.vision
+        if target != "global":
+            assignments = dict(vision.work_area_calibration_profiles or {})
+            profiles = dict(vision.coordinate_calibration_profiles or {})
+            profile_id = assignments.get(target)
+            if not profile_id or profile_id not in profiles:
+                profile_id = profile_id or f"{target}_local"
+                suffix = 2
+                base_profile_id = profile_id
+                while profile_id in profiles:
+                    profile_id = f"{base_profile_id}_{suffix}"
+                    suffix += 1
+                profiles[profile_id] = CoordinateCalibrationProfile(
+                    matrix_path=f"calibrations/{target}/camera_to_robot.npy",
+                    reference_frame=target,
+                )
+                assignments[target] = profile_id
+                vision.coordinate_calibration_profiles = profiles
+                vision.work_area_calibration_profiles = assignments
+            if self._work_area_service is not None:
+                self.set_active_work_area_id(target)
+
+        vision.calibration_target_work_area = target
+        self._calibration_settings.save(settings)
+        return True, f"Calibration target selected: {target}"
 
     def preview_robot_calibration(self) -> RobotCalibrationPreview:
         frame = self._vision_service.get_latest_frame()

@@ -13,6 +13,7 @@ from PyQt6.QtWidgets import (
     QFormLayout,
     QHBoxLayout,
     QDoubleSpinBox,
+    QInputDialog,
     QSpinBox,
     QVBoxLayout,
 )
@@ -313,6 +314,7 @@ class CalibrationView(IApplicationView):
         self._crosshair_on = False
         self._magnifier_on = False
         self._robot_overlay_payload: dict | None = None
+        self._calibration_work_area_definitions = list(work_area_definitions or [])
         self._work_area_definitions = [
             definition for definition in (work_area_definitions or []) if definition.supports_height_mapping
         ]
@@ -543,6 +545,29 @@ class CalibrationView(IApplicationView):
     def confirm_robot_calibration_preview(self, preview: RobotCalibrationPreview) -> bool:
         dialog = RobotCalibrationPreviewDialog(preview, self)
         return dialog.exec() == dialog.DialogCode.Accepted
+
+    def prompt_robot_calibration_area(self, current_area_id: str = "global") -> str | None:
+        options = [(self.tr("Global (shared calibration)"), "global")]
+        options.extend(
+            (definition.label, definition.id)
+            for definition in self._calibration_work_area_definitions
+        )
+        labels = [label for label, _area_id in options]
+        current = next(
+            (index for index, (_label, area_id) in enumerate(options) if area_id == current_area_id),
+            0,
+        )
+        selected_label, accepted = QInputDialog.getItem(
+            self,
+            self.tr("Robot Calibration Area"),
+            self.tr("Select the area to calibrate:"),
+            labels,
+            current,
+            False,
+        )
+        if not accepted:
+            return None
+        return next(area_id for label, area_id in options if label == selected_label)
 
     @property
     def work_area_definitions(self) -> list[WorkAreaDefinition]:

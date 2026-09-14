@@ -9,6 +9,7 @@ from src.engine.common_settings_ids import CommonSettingsID
 from src.engine.robot.configuration import RobotCalibrationSettings
 from src.engine.robot.height_measuring.settings import HeightMeasuringModuleSettings
 from src.engine.vision.calibration_vision_settings import CalibrationVisionSettings
+from src.shared_contracts.declarations import WorkAreaDefinition
 
 
 def _make_calibration_settings():
@@ -123,6 +124,30 @@ class TestCalibrationApplicationServiceDelegation(unittest.TestCase):
         ok, msg = svc.calibrate_robot()
         pc.calibrate.assert_called_once()
         self.assertTrue(ok)
+
+    def test_select_robot_calibration_target_creates_area_profile(self):
+        settings_service = MagicMock()
+        settings = _make_calibration_settings()
+        settings_service.load_settings.return_value = settings
+        work_area_service = MagicMock()
+        svc = CalibrationApplicationService(
+            _make_vision(),
+            MagicMock(),
+            calibration_settings_service=settings_service,
+            work_area_service=work_area_service,
+            work_area_definitions=[WorkAreaDefinition("paint", "Paint", "#000000")],
+        )
+
+        ok, _message = svc.select_robot_calibration_target("paint")
+
+        self.assertTrue(ok)
+        self.assertEqual(settings.vision.calibration_target_work_area, "paint")
+        profile_id = settings.vision.work_area_calibration_profiles["paint"]
+        profile = settings.vision.coordinate_calibration_profiles[profile_id]
+        self.assertEqual(profile.reference_frame, "paint")
+        self.assertEqual(profile.matrix_path, "calibrations/paint/camera_to_robot.npy")
+        settings_service.save_settings.assert_called_once_with(settings)
+        work_area_service.set_active_area_id.assert_called_once_with("paint")
 
     def test_calibrate_camera_and_robot_short_circuits_on_camera_failure(self):
         svc, vs, _ = _make_svc(calibrate=(False, "no cam"))

@@ -5,5 +5,10 @@
   "Calibration": {
     "Calibration Running": "Calibration Running",
     "Calibration is currently running.\nPlease stop it before leaving.": "Calibration is currently running.\nPlease stop it before leaving."
+  },
+  "CalibrationView": {
+    "Global (shared calibration)": "Global (shared calibration)",
+    "Robot Calibration Area": "Robot Calibration Area",
+    "Select the area to calibrate:": "Select the area to calibrate:"
   }
 }
