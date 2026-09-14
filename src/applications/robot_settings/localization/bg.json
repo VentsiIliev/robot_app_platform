@@ -37,6 +37,11 @@
     "Source Group": "Начална група",
     "Target Group": "Целева група",
     "Height Correction": "Корекция на височината",
+    "Vision Calibration": "Калибрация на зрението",
+    "Not configured": "Не е конфигурирана",
+    "Global": "Глобална",
+    "Local": "Локална",
+    "Local calibration requires a work area.": "Локалната калибрация изисква работна зона.",
     "A local calibration profile requires a work area.": "Локалният профил за калибрация изисква работна зона.",
     "A local calibration profile requires a reference frame and matrix path.": "Локалният профил за калибрация изисква референтна рамка и път до матрицата."
   }

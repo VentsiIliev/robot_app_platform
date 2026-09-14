@@ -37,6 +37,11 @@
     "Source Group": "Source Group",
     "Target Group": "Target Group",
     "Height Correction": "Height Correction",
+    "Vision Calibration": "Vision Calibration",
+    "Not configured": "Not configured",
+    "Global": "Global",
+    "Local": "Local",
+    "Local calibration requires a work area.": "Local calibration requires a work area.",
     "A local calibration profile requires a work area.": "A local calibration profile requires a work area.",
     "A local calibration profile requires a reference frame and matrix path.": "A local calibration profile requires a reference frame and matrix path."
   }

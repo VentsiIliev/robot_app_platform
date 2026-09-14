@@ -5,6 +5,7 @@ from typing import List
 from PyQt6.QtCore import QCoreApplication, Qt, QTimer, pyqtSignal
 from PyQt6.QtWidgets import (
     QCheckBox,
+    QComboBox,
     QDialog,
     QFormLayout,
     QGroupBox,
@@ -29,6 +30,37 @@ from src.applications.base.widgets.custom_virtual_keyboard import KeyboardLineEd
 def _t(text: str) -> str:
     translated = QCoreApplication.translate("RobotSettings", text)
     return translated or text
+
+
+def _calibration_choice(frame: dict) -> str:
+    profile_id = str(frame.get("calibration_profile", "") or "").strip()
+    if not profile_id:
+        return "none"
+    return "global" if profile_id == "global" else "local"
+
+
+def _apply_calibration_choice(frame: dict, choice: str) -> dict:
+    result = dict(frame)
+    area_id = str(result.get("work_area_id", "") or "").strip()
+    if choice == "global":
+        result.update(
+            calibration_profile="global",
+            calibration_reference_frame="",
+            calibration_matrix_path="",
+        )
+    elif choice == "local" and area_id:
+        result.update(
+            calibration_profile=f"{area_id}_local",
+            calibration_reference_frame=area_id.lower(),
+            calibration_matrix_path=f"calibrations/{area_id}/camera_to_robot.npy",
+        )
+    else:
+        result.update(
+            calibration_profile="",
+            calibration_reference_frame="",
+            calibration_matrix_path="",
+        )
+    return result
 
 
 class TargetingDefinitionsTab(QWidget):
@@ -105,11 +137,10 @@ class TargetingDefinitionsTab(QWidget):
         self._per_area_calibration.toggled.connect(self._on_calibration_mode_changed)
         layout.addWidget(self._per_area_calibration)
 
-        self._frames_table = QTableWidget(0, 8)
+        self._frames_table = QTableWidget(0, 6)
         self._frames_table.setHorizontalHeaderLabels([
             _t("Name"), _t("Work Area"), _t("Source Group"), _t("Target Group"),
-            _t("Height Correction"), _t("Calibration Profile"),
-            _t("Reference Frame"), _t("Matrix Path"),
+            _t("Height Correction"), _t("Vision Calibration"),
         ])
         self._frames_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self._frames_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
@@ -187,9 +218,14 @@ class TargetingDefinitionsTab(QWidget):
             self._frames_table.setItem(row, 2, QTableWidgetItem(str(frame.get("source_navigation_group", ""))))
             self._frames_table.setItem(row, 3, QTableWidgetItem(str(frame.get("target_navigation_group", ""))))
             self._frames_table.setItem(row, 4, QTableWidgetItem("Yes" if frame.get("use_height_correction", False) else "No"))
-            self._frames_table.setItem(row, 5, QTableWidgetItem(str(frame.get("calibration_profile", ""))))
-            self._frames_table.setItem(row, 6, QTableWidgetItem(str(frame.get("calibration_reference_frame", ""))))
-            self._frames_table.setItem(row, 7, QTableWidgetItem(str(frame.get("calibration_matrix_path", ""))))
+            choice_labels = {
+                "none": _t("Not configured"),
+                "global": _t("Global"),
+                "local": _t("Local"),
+            }
+            self._frames_table.setItem(
+                row, 5, QTableWidgetItem(choice_labels[_calibration_choice(frame)])
+            )
 
     def _on_calibration_mode_changed(self, enabled: bool) -> None:
         self._coordinate_calibration_mode = "per_area" if enabled else "global"
@@ -466,15 +502,15 @@ class _FrameDialog(AppDialog):
         form.addRow(QLabel(""), self._height)
         self._work_area = self._line_edit(str(data.get("work_area_id", "")))
         self._work_area.setReadOnly(True)
-        self._profile = self._line_edit(str(data.get("calibration_profile", "")))
-        self._reference_frame = self._line_edit(
-            str(data.get("calibration_reference_frame", data.get("name", "")))
-        )
-        self._matrix_path = self._line_edit(str(data.get("calibration_matrix_path", "")))
+        self._calibration_choice = QComboBox()
+        self._calibration_choice.setStyleSheet(DIALOG_INPUT_STYLE)
+        self._calibration_choice.addItem(_t("Not configured"), "none")
+        self._calibration_choice.addItem(_t("Global"), "global")
+        self._calibration_choice.addItem(_t("Local"), "local")
+        choice_index = self._calibration_choice.findData(_calibration_choice(data))
+        self._calibration_choice.setCurrentIndex(max(0, choice_index))
         form.addRow(self._label(_t("Work Area")), self._work_area)
-        form.addRow(self._label(_t("Calibration Profile")), self._profile)
-        form.addRow(self._label(_t("Reference Frame")), self._reference_frame)
-        form.addRow(self._label(_t("Matrix Path")), self._matrix_path)
+        form.addRow(self._label(_t("Vision Calibration")), self._calibration_choice)
         self._keyboard_bottom_spacer = QWidget(form_host)
         self._keyboard_bottom_spacer.setFixedHeight(0)
         form.addRow("", self._keyboard_bottom_spacer)
@@ -512,37 +548,29 @@ class _FrameDialog(AppDialog):
             )
 
     def get_values(self) -> dict:
-        return {
+        values = {
             "name": self._name.text().strip().lower(),
             "source_navigation_group": self._source.text().strip(),
             "target_navigation_group": self._target.text().strip(),
             "use_height_correction": self._height.isChecked(),
             "work_area_id": self._work_area.text().strip(),
-            "calibration_profile": self._profile.text().strip(),
-            "calibration_reference_frame": self._reference_frame.text().strip().lower(),
-            "calibration_matrix_path": self._matrix_path.text().strip(),
         }
+        return _apply_calibration_choice(
+            values,
+            str(self._calibration_choice.currentData() or "none"),
+        )
 
     def accept(self) -> None:
         if not self._name.text().strip():
             show_warning(self, _t("Target Frame"), _t("Name cannot be empty."))
             return
-        profile_id = self._profile.text().strip()
-        if profile_id and profile_id != "global":
-            if not self._work_area.text().strip():
-                show_warning(
-                    self,
-                    _t("Target Frame"),
-                    _t("A local calibration profile requires a work area."),
-                )
-                return
-            if not self._reference_frame.text().strip() or not self._matrix_path.text().strip():
-                show_warning(
-                    self,
-                    _t("Target Frame"),
-                    _t("A local calibration profile requires a reference frame and matrix path."),
-                )
-                return
+        if self._calibration_choice.currentData() == "local" and not self._work_area.text().strip():
+            show_warning(
+                self,
+                _t("Target Frame"),
+                _t("Local calibration requires a work area."),
+            )
+            return
         super().accept()
 
     @staticmethod
