@@ -175,6 +175,46 @@ class TestCalibrationApplicationServiceDelegation(unittest.TestCase):
         self.assertIn("Robot Settings → Targeting", message)
         settings_service.save_settings.assert_not_called()
 
+    def test_local_test_pose_uses_area_observer_z_and_orientation(self):
+        settings_service = MagicMock()
+        settings = _make_calibration_settings()
+        settings.vision.calibration_target_work_area = "magazine"
+        settings_service.load_settings.return_value = settings
+        observer = [10.0, 20.0, 150.0, -179.0, 1.0, 359.0]
+        svc = CalibrationApplicationService(
+            _make_vision(),
+            MagicMock(),
+            calibration_settings_service=settings_service,
+            observer_group_provider=lambda area_id: "Magazine" if area_id == "magazine" else None,
+            observer_position_provider=lambda group_id: observer if group_id == "Magazine" else None,
+        )
+
+        ok, message, suffix = svc._test_motion_pose_suffix(
+            [11.0, 19.0, 151.0, 181.0, 1.5, -1.0]
+        )
+
+        self.assertTrue(ok, message)
+        self.assertEqual(suffix, [150.0, -179.0, 1.0, 359.0])
+
+    def test_local_test_pose_rejects_robot_away_from_area_observer(self):
+        settings_service = MagicMock()
+        settings = _make_calibration_settings()
+        settings.vision.calibration_target_work_area = "magazine"
+        settings_service.load_settings.return_value = settings
+        svc = CalibrationApplicationService(
+            _make_vision(),
+            MagicMock(),
+            calibration_settings_service=settings_service,
+            observer_group_provider=lambda _area_id: "Magazine",
+            observer_position_provider=lambda _group_id: [10, 20, 150, -179, 1, 0],
+        )
+
+        ok, message, suffix = svc._test_motion_pose_suffix([100, 20, 150, -179, 1, 0])
+
+        self.assertFalse(ok)
+        self.assertIn("Magazine", message)
+        self.assertIsNone(suffix)
+
     def test_calibrate_camera_and_robot_short_circuits_on_camera_failure(self):
         svc, vs, _ = _make_svc(calibrate=(False, "no cam"))
         ok, msg = svc.calibrate_camera_and_robot()

@@ -1171,6 +1171,52 @@ class CalibrationApplicationService(ICalibrationService):
             return True, ""
         return False, f"Move to the observer position '{observer_group}' first"
 
+    @staticmethod
+    def _angular_distance_degrees(first: float, second: float) -> float:
+        return abs((float(first) - float(second) + 180.0) % 360.0 - 180.0)
+
+    def _test_motion_pose_suffix(
+        self,
+        current_position: Sequence[float],
+    ) -> tuple[bool, str, list[float] | None]:
+        settings = self._calibration_settings.load()
+        area_id = (
+            str(settings.vision.calibration_target_work_area or "global").strip()
+            if settings is not None else "global"
+        )
+        shared_z = float(self._calib_config.z_target if self._calib_config else 300)
+        if area_id == "global":
+            return True, "", [shared_z, *[float(value) for value in current_position[3:6]]]
+
+        observer_group = (
+            self._observer_group_provider(area_id)
+            if self._observer_group_provider is not None else None
+        )
+        if not observer_group:
+            return False, f"No observer group is configured for work area '{area_id}'", None
+        observer = (
+            self._observer_position_provider(observer_group)
+            if self._observer_position_provider is not None else None
+        )
+        if not observer or len(observer) < 6:
+            return False, f"Observer position '{observer_group}' is not configured", None
+
+        xyz_ok = all(
+            abs(float(current_position[index]) - float(observer[index])) <= 5.0
+            for index in range(3)
+        )
+        angles_ok = all(
+            self._angular_distance_degrees(current_position[index], observer[index]) <= 2.0
+            for index in range(3, 6)
+        )
+        if not xyz_ok or not angles_ok:
+            return (
+                False,
+                f"Move to the observer position '{observer_group}' for work area '{area_id}' first",
+                None,
+            )
+        return True, "", [float(value) for value in observer[2:6]]
+
     def is_calibrated(self) -> bool:
         if self._vision_service is None:
             return False
@@ -1230,12 +1276,14 @@ class CalibrationApplicationService(ICalibrationService):
             if not current_pos or len(current_pos) < 6:
                 return False, "Failed to get current robot position"
 
-            rx, ry, rz = current_pos[3], current_pos[4], current_pos[5]
+            pose_ok, pose_message, pose_suffix = self._test_motion_pose_suffix(current_pos)
+            if not pose_ok or pose_suffix is None:
+                return False, pose_message
+            z_target, rx, ry, rz = pose_suffix
             tool     = self._robot_tool()
             user     = self._robot_user()
             velocity = self._movement_velocity()
             accel    = self._movement_acceleration()
-            z_target = self._calib_config.z_target if self._calib_config else 300
             image_center_px = (
                 float(self._vision_service.get_camera_width()) / 2.0,
                 float(self._vision_service.get_camera_height()) / 2.0,
