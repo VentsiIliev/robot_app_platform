@@ -78,6 +78,8 @@ from src.engine.robot.calibration.robot_calibration.states.robot_calibration_sta
 
 _logger = logging.getLogger(__name__)
 
+_STATE_TRANSITION_DELAY_S = 0.01
+
 
 class RefactoredRobotCalibrationPipeline:
     """
@@ -411,7 +413,10 @@ class RefactoredRobotCalibrationPipeline:
             self.calibration_context.progress.total_calibration_start_time = self.calibration_context.total_calibration_start_time
 
             # Run the state machine
-            self.calibration_state_machine.start_execution(delay=0.2)
+            # Handlers own their required robot/camera stabilization waits. Keep
+            # only a short scheduler yield here; a 0.2 s unconditional delay
+            # added several minutes across large marker sets.
+            self.calibration_state_machine.start_execution(delay=_STATE_TRANSITION_DELAY_S)
 
             # Check final state
             final_state = self.calibration_state_machine.current_state

@@ -107,6 +107,10 @@ class CameraTcpOffsetCalibrationConfig:
     recenter_alignment_threshold_mm: float = 0.5
     min_samples: int = 3
     max_acceptance_std_mm: float = 10.0
+    verification_enabled: bool = True
+    verification_samples: int = 3
+    verification_max_error_mm: float = 5.0
+    verification_confirmation_tolerance_mm: float = 0.75
 
     @classmethod
     def from_dict(cls, data: Dict) -> 'CameraTcpOffsetCalibrationConfig':
@@ -132,6 +136,12 @@ class CameraTcpOffsetCalibrationConfig:
             recenter_alignment_threshold_mm=float(data.get("recenter_alignment_threshold_mm", 0.5)),
             min_samples=int(data.get("min_samples", 3)),
             max_acceptance_std_mm=float(data.get("max_acceptance_std_mm", 10.0)),
+            verification_enabled=bool(data.get("verification_enabled", True)),
+            verification_samples=max(1, int(data.get("verification_samples", 3))),
+            verification_max_error_mm=float(data.get("verification_max_error_mm", 5.0)),
+            verification_confirmation_tolerance_mm=float(
+                data.get("verification_confirmation_tolerance_mm", 0.75)
+            ),
         )
 
     def to_dict(self) -> Dict:
@@ -157,6 +167,10 @@ class CameraTcpOffsetCalibrationConfig:
             "recenter_alignment_threshold_mm": self.recenter_alignment_threshold_mm,
             "min_samples": self.min_samples,
             "max_acceptance_std_mm": self.max_acceptance_std_mm,
+            "verification_enabled": self.verification_enabled,
+            "verification_samples": self.verification_samples,
+            "verification_max_error_mm": self.verification_max_error_mm,
+            "verification_confirmation_tolerance_mm": self.verification_confirmation_tolerance_mm,
         }
 
 

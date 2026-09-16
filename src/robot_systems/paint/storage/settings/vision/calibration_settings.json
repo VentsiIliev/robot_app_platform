@@ -4,20 +4,18 @@
     "Chessboard height": 15,
     "Square size (mm)": 15.0,
     "Reference board mode": "auto",
-    "ChArUco board width": 15,
-    "ChArUco board height": 15,
+    "ChArUco board width": 19,
+    "ChArUco board height": 12,
     "ChArUco square size (mm)": 15.0,
     "ChArUco marker size (mm)": 11.0,
     "Skip frames": 30
   },
   "Coordinate calibration": {
-    "Mode": "global",
+    "Mode": "per_area",
     "Calibration target": "global",
     "Profiles": {},
     "Work area profiles": {
-      "paint": "global",
-      "magazine": "global",
-      "vertical_shaft_alignment": "global"
+      "paint": "global"
     }
   }
 }

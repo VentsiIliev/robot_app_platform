@@ -41,6 +41,7 @@ class PaintProcessSettingsController(IApplicationController, BackgroundWorker):
         self._view.set_plate_route_pose_current_requested.connect(self._on_set_plate_route_pose_current)
         self._view.add_fixed_magazine_current_requested.connect(self._on_add_fixed_magazine_current)
         self._view.capture_plate_corner_requested.connect(self._on_capture_plate_corner)
+        self._view.clear_plate_corners_requested.connect(self._on_clear_plate_corners)
         self._view.move_to_plate_corner_requested.connect(self._on_move_to_plate_corner)
         self._view.move_to_safe_travel_waypoint_requested.connect(self._on_move_to_safe_travel_waypoint)
 
@@ -72,6 +73,10 @@ class PaintProcessSettingsController(IApplicationController, BackgroundWorker):
             pass
         try:
             self._view.capture_plate_corner_requested.disconnect(self._on_capture_plate_corner)
+        except Exception:
+            pass
+        try:
+            self._view.clear_plate_corners_requested.disconnect(self._on_clear_plate_corners)
         except Exception:
             pass
         try:
@@ -407,6 +412,14 @@ class PaintProcessSettingsController(IApplicationController, BackgroundWorker):
             self._t(captured_label).format(
                 tool=tool,
                 user=user,
+            )
+        )
+
+    def _on_clear_plate_corners(self) -> None:
+        self._view.clear_plate_corners()
+        self._view.set_status(
+            self._t(
+                "Tray corners cleared. Capture all four corners using the new robot tool/user, then save settings."
             )
         )
 

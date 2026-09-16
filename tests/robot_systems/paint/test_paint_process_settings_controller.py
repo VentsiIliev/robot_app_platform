@@ -57,6 +57,14 @@ class _FakeView:
     def set_dropoff_safe_travel_position(self, position: list[float]) -> None:
         self.values_set = {"dropoff_safe_travel_position": ", ".join(f"{value:.3f}" for value in position)}
 
+    def clear_plate_corners(self) -> None:
+        values = self.values()
+        values["dropoff_plate_corners"] = {}
+        values["dropoff_plate_robot_tool"] = -1
+        values["dropoff_plate_robot_user"] = -1
+        values["dropoff_plate_robot_frame"] = "Not captured"
+        self.values_set = values
+
 
 class TestPaintProcessSettingsController(unittest.TestCase):
     def test_selecting_servo_contact_requires_pump_and_sensor(self):
@@ -257,6 +265,25 @@ class TestPaintProcessSettingsController(unittest.TestCase):
         model.get_current_robot_position.assert_called_once_with()
         self.assertEqual({"dropoff_safe_travel_position": "1.000, 2.000, 3.000, 4.000, 5.000, 6.000"}, view.values_set)
         self.assertIn("Paint-to-dropoff safe travel pose set", view.status)
+
+    def test_clear_plate_corners_resets_poses_and_robot_frame_metadata(self):
+        model = _FakeModel(dropoff_configured=True)
+        view = _FakeView()
+        view.values_set = {
+            "dropoff_plate_corners": {"dropoff_plate_bottom_left": "1, 2, 3, 4, 5, 6"},
+            "dropoff_plate_robot_tool": 0,
+            "dropoff_plate_robot_user": 1,
+            "dropoff_plate_robot_frame": "Tool 0, User 1",
+        }
+        controller = PaintProcessSettingsController(model, view)
+
+        controller._on_clear_plate_corners()
+
+        self.assertEqual({}, view.values_set["dropoff_plate_corners"])
+        self.assertEqual(-1, view.values_set["dropoff_plate_robot_tool"])
+        self.assertEqual(-1, view.values_set["dropoff_plate_robot_user"])
+        self.assertEqual("Not captured", view.values_set["dropoff_plate_robot_frame"])
+        self.assertIn("Capture all four corners", view.status)
 
     def test_save_rejects_enabled_safe_travel_without_captured_pose(self):
         model = _FakeModel(dropoff_configured=True)

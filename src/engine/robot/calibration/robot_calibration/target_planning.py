@@ -159,14 +159,17 @@ def build_partitioned_target_selection_plan(
         preferred_ids=[],
         seed_ids=[*homography_ids, *residual_ids],
     )
-    # Sort all selected markers by ascending ID (≈ left-to-right, top-to-bottom
-    # on the ChArUco board).  Each group independently selects spread-out markers
-    # including corners, so the old group-concatenation order caused the robot to
-    # revisit the same spatial regions once per group.  Merging and sorting
-    # globally minimises total travel distance while the per-group label lists
-    # (homography_ids / residual_ids / validation_ids) are unchanged and still
-    # used at finalization to route each point to the correct model.
-    execution_ids = sorted({*homography_ids, *residual_ids, *validation_ids})
+    # Collect homography points first so an online navigation model becomes
+    # available early. Within that group, and for all remaining points, use a
+    # nearest-neighbour route based on the frozen image geometry.
+    image_center = np.array([float(image_width) / 2.0, float(image_height) / 2.0])
+    ordered_homography = _nearest_neighbor_order(normalized, homography_ids, image_center)
+    route_start = normalized[ordered_homography[-1]] if ordered_homography else image_center
+    remaining_ids = sorted({*residual_ids, *validation_ids})
+    execution_ids = [
+        *ordered_homography,
+        *_nearest_neighbor_order(normalized, remaining_ids, route_start),
+    ]
     report = {
         "available_ids": available_ids,
         "preferred_available_ids": preferred_available_ids,
@@ -201,6 +204,28 @@ def build_partitioned_target_selection_plan(
         validation_ids=validation_ids,
         execution_ids=execution_ids,
     )
+
+
+def _nearest_neighbor_order(
+    points_by_id: dict[int, np.ndarray],
+    marker_ids: list[int],
+    start_point: np.ndarray,
+) -> list[int]:
+    remaining = {int(marker_id) for marker_id in marker_ids}
+    ordered: list[int] = []
+    current = np.asarray(start_point, dtype=np.float64).reshape(2)
+    while remaining:
+        next_id = min(
+            remaining,
+            key=lambda marker_id: (
+                float(np.linalg.norm(points_by_id[marker_id] - current)),
+                marker_id,
+            ),
+        )
+        ordered.append(next_id)
+        remaining.remove(next_id)
+        current = points_by_id[next_id]
+    return ordered
 
 
 def _select_spread_ids(

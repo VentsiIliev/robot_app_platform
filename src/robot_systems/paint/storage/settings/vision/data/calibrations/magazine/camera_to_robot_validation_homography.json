@@ -1,0 +1,631 @@
+{
+  "model": "homography",
+  "selected_test_ids": [
+    23,
+    33,
+    34,
+    41,
+    42,
+    44,
+    52,
+    53,
+    61,
+    63,
+    70,
+    71,
+    80,
+    82,
+    90,
+    91
+  ],
+  "training_ids": [
+    2,
+    9,
+    14,
+    16,
+    38,
+    40,
+    43,
+    51,
+    55,
+    72,
+    78,
+    83,
+    89,
+    95,
+    100,
+    104,
+    105,
+    111,
+    113
+  ],
+  "excluded_calibration_ids": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    35,
+    36,
+    37,
+    38,
+    39,
+    40,
+    43,
+    45,
+    46,
+    47,
+    48,
+    49,
+    50,
+    51,
+    54,
+    55,
+    56,
+    57,
+    58,
+    59,
+    60,
+    62,
+    64,
+    65,
+    66,
+    67,
+    68,
+    69,
+    72,
+    73,
+    74,
+    75,
+    76,
+    77,
+    78,
+    79,
+    81,
+    83,
+    84,
+    85,
+    86,
+    87,
+    88,
+    89,
+    92,
+    93,
+    94,
+    95,
+    96,
+    97,
+    98,
+    99,
+    100,
+    101,
+    102,
+    103,
+    104,
+    105,
+    106,
+    107,
+    108,
+    109,
+    110,
+    111,
+    112,
+    113
+  ],
+  "selection_report": {
+    "available_ids": [
+      23,
+      33,
+      34,
+      41,
+      42,
+      44,
+      52,
+      53,
+      61,
+      63,
+      70,
+      71,
+      80,
+      82,
+      90,
+      91
+    ],
+    "known_unreachable_ids": [],
+    "selected_ids": [
+      23,
+      33,
+      34,
+      41,
+      42,
+      44,
+      52,
+      53,
+      61,
+      63,
+      70,
+      71,
+      80,
+      82,
+      90,
+      91
+    ],
+    "selection_strategy": "all_ascending"
+  },
+  "image_center_px": [
+    640.0,
+    360.0
+  ],
+  "results": [
+    {
+      "marker_id": 23,
+      "success": true,
+      "predicted_xy_mm": [
+        94.75728774269973,
+        -132.03821749538736
+      ],
+      "observed_marker_point_px": [
+        638.6392822265625,
+        360.7293701171875
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        -1.3607177734375,
+        0.7293701171875
+      ],
+      "observed_center_distance_px": 1.5438696922975121,
+      "robot_xy_mm": [
+        94.75861348303283,
+        -132.03722762419034
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 33,
+      "success": true,
+      "predicted_xy_mm": [
+        83.50880539493181,
+        -149.32278611517611
+      ],
+      "observed_marker_point_px": [
+        639.0695190429688,
+        360.7948913574219
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        -0.93048095703125,
+        0.794891357421875
+      ],
+      "observed_center_distance_px": 1.2237839194489286,
+      "robot_xy_mm": [
+        83.50950446072031,
+        -149.32944958503012
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 34,
+      "success": true,
+      "predicted_xy_mm": [
+        90.29055030271275,
+        -177.49819555462562
+      ],
+      "observed_marker_point_px": [
+        638.8243408203125,
+        360.72406005859375
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        -1.1756591796875,
+        0.72406005859375
+      ],
+      "observed_center_distance_px": 1.3807380183200106,
+      "robot_xy_mm": [
+        90.29826013589492,
+        -177.5019998959123
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 41,
+      "success": true,
+      "predicted_xy_mm": [
+        58.50746175428735,
+        -110.62913238290184
+      ],
+      "observed_marker_point_px": [
+        639.77001953125,
+        359.8768005371094
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        -0.22998046875,
+        -0.123199462890625
+      ],
+      "observed_center_distance_px": 0.26090060111660957,
+      "robot_xy_mm": [
+        58.510253961376044,
+        -110.62744239167849
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 42,
+      "success": true,
+      "predicted_xy_mm": [
+        65.37528464572817,
+        -138.4666447601919
+      ],
+      "observed_marker_point_px": [
+        640.0083618164062,
+        360.7756042480469
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        0.00836181640625,
+        0.775604248046875
+      ],
+      "observed_center_distance_px": 0.7756493212541156,
+      "robot_xy_mm": [
+        65.38270111862538,
+        -138.46811174597488
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 44,
+      "success": true,
+      "predicted_xy_mm": [
+        79.2212238165657,
+        -195.01823423361296
+      ],
+      "observed_marker_point_px": [
+        638.7149047851562,
+        360.9613342285156
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        -1.28509521484375,
+        0.961334228515625
+      ],
+      "observed_center_distance_px": 1.6048779424398716,
+      "robot_xy_mm": [
+        79.2272714059295,
+        -195.02195846944915
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 52,
+      "success": true,
+      "predicted_xy_mm": [
+        54.13445000706297,
+        -156.02449054016904
+      ],
+      "observed_marker_point_px": [
+        639.6802368164062,
+        360.6789245605469
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        -0.31976318359375,
+        0.678924560546875
+      ],
+      "observed_center_distance_px": 0.7504578952184977,
+      "robot_xy_mm": [
+        54.140089122511114,
+        -156.0236350282733
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 53,
+      "success": true,
+      "predicted_xy_mm": [
+        61.0935430480337,
+        -184.13766973770785
+      ],
+      "observed_marker_point_px": [
+        639.0914916992188,
+        360.72894287109375
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        -0.90850830078125,
+        0.72894287109375
+      ],
+      "observed_center_distance_px": 1.1647939911876408,
+      "robot_xy_mm": [
+        61.101883563159795,
+        -184.14111158728142
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 61,
+      "success": true,
+      "predicted_xy_mm": [
+        36.1850547604831,
+        -145.49703931116238
+      ],
+      "observed_marker_point_px": [
+        639.43115234375,
+        360.58721923828125
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        -0.56884765625,
+        0.58721923828125
+      ],
+      "observed_center_distance_px": 0.8175659544212501,
+      "robot_xy_mm": [
+        36.185561814381344,
+        -145.49738035104514
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 63,
+      "success": true,
+      "predicted_xy_mm": [
+        49.811971947841364,
+        -201.478053957254
+      ],
+      "observed_marker_point_px": [
+        639.1568603515625,
+        360.3955078125
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        -0.8431396484375,
+        0.3955078125
+      ],
+      "observed_center_distance_px": 0.9312952789077406,
+      "robot_xy_mm": [
+        49.81711778387926,
+        -201.48000482615058
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 70,
+      "success": true,
+      "predicted_xy_mm": [
+        18.132603934889882,
+        -134.97909533361016
+      ],
+      "observed_marker_point_px": [
+        639.96044921875,
+        360.5990295410156
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        -0.03955078125,
+        0.599029541015625
+      ],
+      "observed_center_distance_px": 0.6003337865778301,
+      "robot_xy_mm": [
+        18.135310589401875,
+        -134.97811542397224
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 71,
+      "success": true,
+      "predicted_xy_mm": [
+        24.934953959186235,
+        -162.80141587718325
+      ],
+      "observed_marker_point_px": [
+        639.5928344726562,
+        360.9100646972656
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        -0.40716552734375,
+        0.910064697265625
+      ],
+      "observed_center_distance_px": 0.996996248672124,
+      "robot_xy_mm": [
+        24.938413770834998,
+        -162.80733980843064
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 80,
+      "success": true,
+      "predicted_xy_mm": [
+        6.752221089628491,
+        -152.04342208415682
+      ],
+      "observed_marker_point_px": [
+        640.7371826171875,
+        360.80487060546875
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        0.7371826171875,
+        0.80487060546875
+      ],
+      "observed_center_distance_px": 1.091446243582818,
+      "robot_xy_mm": [
+        6.75560049262719,
+        -152.04313195028064
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 82,
+      "success": true,
+      "predicted_xy_mm": [
+        20.663568228043896,
+        -207.78577541352732
+      ],
+      "observed_marker_point_px": [
+        639.5335693359375,
+        360.77020263671875
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        -0.4664306640625,
+        0.77020263671875
+      ],
+      "observed_center_distance_px": 0.900427490687784,
+      "robot_xy_mm": [
+        20.675217266788977,
+        -207.79304993574013
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 90,
+      "success": true,
+      "predicted_xy_mm": [
+        -4.564232524238411,
+        -169.3115365813883
+      ],
+      "observed_marker_point_px": [
+        640.4586791992188,
+        359.80828857421875
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        0.45867919921875,
+        -0.19171142578125
+      ],
+      "observed_center_distance_px": 0.4971316511458846,
+      "robot_xy_mm": [
+        -4.560209151087625,
+        -169.30502631997274
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 91,
+      "success": true,
+      "predicted_xy_mm": [
+        2.4161121167748494,
+        -197.03870641893286
+      ],
+      "observed_marker_point_px": [
+        639.906494140625,
+        360.431884765625
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        -0.093505859375,
+        0.431884765625
+      ],
+      "observed_center_distance_px": 0.44189115912905347,
+      "robot_xy_mm": [
+        2.4202341287221927,
+        -197.04235341924567
+      ],
+      "note": "visual inspection target reached"
+    }
+  ],
+  "summary": {
+    "status": "completed",
+    "tested_count": 16,
+    "successful_count": 16,
+    "failed_count": 0,
+    "visible_count": 16,
+    "center_offset_px": {
+      "count": 16,
+      "mean": 0.9363849496504795,
+      "median": 0.9158613847977624,
+      "max": 1.6048779424398716
+    },
+    "center_offset_dx_px": {
+      "count": 16,
+      "mean": -0.4640388488769531,
+      "median": -0.436798095703125,
+      "min": -1.3607177734375,
+      "max": 0.7371826171875
+    },
+    "center_offset_dy_px": {
+      "count": 16,
+      "mean": 0.5985622406005859,
+      "median": 0.72650146484375,
+      "min": -0.19171142578125,
+      "max": 0.961334228515625
+    }
+  }
+}

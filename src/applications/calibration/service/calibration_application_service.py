@@ -340,6 +340,65 @@ class CalibrationApplicationService(ICalibrationService):
             return self._transformer_provider()
         return self._transformer
 
+    def _select_active_work_area_for_test(self) -> tuple[bool, str]:
+        """Route a visual test from the runtime work area, not a stale UI target."""
+        settings = self._calibration_settings.load()
+        if settings is None:
+            return False, "Calibration settings are unavailable"
+
+        vision = settings.vision
+        mode = str(vision.coordinate_calibration_mode or "global").strip().lower()
+        active_area_id = self.get_active_work_area_id()
+        if mode != "per_area":
+            target_area_id = "global"
+            profile_id = "global"
+        else:
+            if not active_area_id:
+                return False, "No active work area is set; navigate to the area before testing calibration"
+            declared_ids = {definition.id for definition in self._work_area_definitions}
+            if active_area_id not in declared_ids:
+                return False, f"Active work area '{active_area_id}' is not declared"
+
+            profile_id = str(
+                (vision.work_area_calibration_profiles or {}).get(active_area_id, "") or ""
+            ).strip()
+            if not profile_id:
+                return (
+                    False,
+                    f"Active work area '{active_area_id}' has no assigned calibration profile. "
+                    "Configure it in Robot Settings → Targeting.",
+                )
+            target_area_id = "global" if profile_id == "global" else active_area_id
+            if profile_id != "global":
+                profile = (vision.coordinate_calibration_profiles or {}).get(profile_id)
+                if profile is None:
+                    return False, f"Calibration profile '{profile_id}' is not defined"
+                reference_frame = str(profile.reference_frame or "").strip().lower()
+                if reference_frame != active_area_id.lower():
+                    return (
+                        False,
+                        f"Calibration profile '{profile_id}' must use reference frame "
+                        f"'{active_area_id}'",
+                    )
+
+        if vision.calibration_target_work_area != target_area_id:
+            vision.calibration_target_work_area = target_area_id
+            self._calibration_settings.save(settings)
+
+        try:
+            matrix_path = self._vision_service.camera_to_robot_matrix_path
+        except (RuntimeError, ValueError) as exc:
+            return False, str(exc)
+        _logger.info(
+            "Test calibration routing: active_work_area=%s mode=%s profile=%s target=%s matrix=%s",
+            active_area_id or "<none>",
+            mode,
+            profile_id,
+            target_area_id,
+            matrix_path,
+        )
+        return True, ""
+
     def _load_test_calibration_report(self) -> dict | None:
         if self._vision_service is None:
             return None
@@ -1201,21 +1260,28 @@ class CalibrationApplicationService(ICalibrationService):
         if not observer or len(observer) < 6:
             return False, f"Observer position '{observer_group}' is not configured", None
 
-        xyz_ok = all(
+        xy_ok = all(
             abs(float(current_position[index]) - float(observer[index])) <= 5.0
-            for index in range(3)
+            for index in range(2)
         )
+        z_ok = min(
+            abs(float(current_position[2]) - float(observer[2])),
+            abs(float(current_position[2]) - shared_z),
+        ) <= 5.0
         angles_ok = all(
             self._angular_distance_degrees(current_position[index], observer[index]) <= 2.0
             for index in range(3, 6)
         )
-        if not xyz_ok or not angles_ok:
+        if not xy_ok or not z_ok or not angles_ok:
             return (
                 False,
                 f"Move to the observer position '{observer_group}' for work area '{area_id}' first",
                 None,
             )
-        return True, "", [float(value) for value in observer[2:6]]
+        # Per-area calibration starts at the observer pose, then captures aligned
+        # samples at the configured calibration Z. Visual testing must use that
+        # same Z while retaining the area's observer orientation.
+        return True, "", [shared_z, *[float(value) for value in observer[3:6]]]
 
     def is_calibrated(self) -> bool:
         if self._vision_service is None:
@@ -1243,6 +1309,10 @@ class CalibrationApplicationService(ICalibrationService):
         model_name = str(model_name or "homography").strip().lower()
         if model_name not in {"homography", "homography_residual"}:
             return False, f"Unsupported test calibration model: {model_name}"
+
+        routing_ok, routing_message = self._select_active_work_area_for_test()
+        if not routing_ok:
+            return False, routing_message
 
         auto_brightness_locked = False
         auto_brightness_adjustment_locked = False

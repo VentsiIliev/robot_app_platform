@@ -159,8 +159,10 @@ class RobotSettings:
     robot_ip: str = "192.168.58.2"
     robot_tool: int = 0
     robot_user: int = 0
+    use_automatic_camera_to_tcp_offset: bool = True
     camera_to_tcp_x_offset: float = 0.0
     camera_to_tcp_y_offset: float = 0.0
+    camera_to_tcp_rotation_residuals: List[Dict[str, float]] = field(default_factory=list)
     camera_z_shift_x_per_mm_px: float = 0.0
     camera_z_shift_y_per_mm_px: float = 0.0
     camera_z_shift_x_per_mm: float = 0.0
@@ -184,8 +186,20 @@ class RobotSettings:
             robot_ip=data.get("ROBOT_IP", "192.168.58.2"),
             robot_tool=data.get("ROBOT_TOOL", 0),
             robot_user=data.get("ROBOT_USER", 0),
+            use_automatic_camera_to_tcp_offset=data.get(
+                "USE_AUTOMATIC_CAMERA_TO_TCP_OFFSET", True
+            ),
             camera_to_tcp_x_offset=data.get("CAMERA_TO_TCP_X_OFFSET", 0.0),
             camera_to_tcp_y_offset=data.get("CAMERA_TO_TCP_Y_OFFSET", 0.0),
+            camera_to_tcp_rotation_residuals=[
+                {
+                    "angle_deg": float(item.get("angle_deg", 0.0)),
+                    "x_mm": float(item.get("x_mm", 0.0)),
+                    "y_mm": float(item.get("y_mm", 0.0)),
+                }
+                for item in (data.get("CAMERA_TO_TCP_ROTATION_RESIDUALS", []) or [])
+                if isinstance(item, dict)
+            ],
             camera_z_shift_x_per_mm_px=data.get("CAMERA_Z_SHIFT_X_PER_MM_PX", 0.0),
             camera_z_shift_y_per_mm_px=data.get("CAMERA_Z_SHIFT_Y_PER_MM_PX", 0.0),
             camera_z_shift_x_per_mm=data.get("CAMERA_Z_SHIFT_X_PER_MM", 0.0),
@@ -205,8 +219,10 @@ class RobotSettings:
             "ROBOT_IP": self.robot_ip,
             "ROBOT_TOOL": self.robot_tool,
             "ROBOT_USER": self.robot_user,
+            "USE_AUTOMATIC_CAMERA_TO_TCP_OFFSET": self.use_automatic_camera_to_tcp_offset,
             "CAMERA_TO_TCP_X_OFFSET": self.camera_to_tcp_x_offset,
             "CAMERA_TO_TCP_Y_OFFSET": self.camera_to_tcp_y_offset,
+            "CAMERA_TO_TCP_ROTATION_RESIDUALS": self.camera_to_tcp_rotation_residuals,
             "CAMERA_Z_SHIFT_X_PER_MM_PX": self.camera_z_shift_x_per_mm_px,
             "CAMERA_Z_SHIFT_Y_PER_MM_PX": self.camera_z_shift_y_per_mm_px,
             "CAMERA_Z_SHIFT_X_PER_MM": self.camera_z_shift_x_per_mm,

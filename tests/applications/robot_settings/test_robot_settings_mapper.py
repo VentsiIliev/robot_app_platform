@@ -50,6 +50,7 @@ class TestRobotSettingsMapperToFlatDict(unittest.TestCase):
 
     def test_tcp_offsets_present(self):
         flat = RobotSettingsMapper.to_flat_dict(self.config)
+        self.assertEqual(flat["use_automatic_camera_to_tcp_offset"], "True")
         self.assertEqual(flat["camera_to_tcp_x_offset"], 1.5)
         self.assertEqual(flat["camera_to_tcp_y_offset"], 2.5)
 
@@ -104,6 +105,13 @@ class TestRobotSettingsMapperFromFlatDict(unittest.TestCase):
         flat = dict(self.flat, robot_tool=3)
         result = RobotSettingsMapper.from_flat_dict(flat, self.base)
         self.assertEqual(result.robot_tool, 3)
+
+    def test_can_disable_automatic_camera_to_tcp_offset(self):
+        result = RobotSettingsMapper.from_flat_dict(
+            dict(self.flat, use_automatic_camera_to_tcp_offset="False"),
+            self.base,
+        )
+        self.assertFalse(result.use_automatic_camera_to_tcp_offset)
 
     def test_roundtrip_safety_limits(self):
         flat = dict(self.flat, safety_x_min=-999, safety_x_max=999)

@@ -48,6 +48,7 @@ class VisionTargetResolver:
         registry: PointRegistry,
         camera_to_tcp_x_offset: float = 0.0,
         camera_to_tcp_y_offset: float = 0.0,
+        camera_to_tcp_rotation_residuals=None,
         frames: Optional[Dict[str, TargetFrame]] = None,
         calibration_mode: str = "global",
         profile_transformers: Optional[Dict[str, ICoordinateTransformer]] = None,
@@ -59,6 +60,7 @@ class VisionTargetResolver:
         self._registry = registry
         self._tcp_x = float(camera_to_tcp_x_offset)
         self._tcp_y = float(camera_to_tcp_y_offset)
+        self._tcp_rotation_residuals = list(camera_to_tcp_rotation_residuals or [])
         self._frames: Dict[str, TargetFrame] = {
             str(name).strip().lower(): value for name, value in (frames or {}).items()
         }
@@ -133,6 +135,16 @@ class VisionTargetResolver:
         # correct for all other angles.
         reference_rz = _reference_rz(active_mapper)
         reference_orientation = (target.rx_degrees, target.ry_degrees, reference_rz)
+        # First correct the camera-centre pose for the remaining verified sweep
+        # error, then add the selected point's rotated camera->point offset.
+        # The named tool point is the operator-taught camera->TCP command point;
+        # use that same vector for its sweep.  This preserves the empirically
+        # correct cancellation without replacing the automatic camera sweep used
+        # by camera targets.
+        is_taught_tool = str(point.name).strip().lower() == "tool"
+        sweep_offset_x = float(point.offset_x) if is_taught_tool else self._tcp_x
+        sweep_offset_y = float(point.offset_y) if is_taught_tool else self._tcp_y
+        rotation_residuals = [] if is_taught_tool else self._tcp_rotation_residuals
         final_x, final_y, final_z = command_xyz_from_selected_xyz(
             plane_xy[0],
             plane_xy[1],
@@ -140,14 +152,15 @@ class VisionTargetResolver:
             orientation=(target.rx_degrees, target.ry_degrees, current_rz),
             point_offset_x=point.offset_x,
             point_offset_y=point.offset_y,
-            camera_to_tcp_x_offset=self._tcp_x,
-            camera_to_tcp_y_offset=self._tcp_y,
+            camera_to_tcp_x_offset=sweep_offset_x,
+            camera_to_tcp_y_offset=sweep_offset_y,
             reference_orientation=reference_orientation,
+            camera_to_tcp_rotation_residuals=rotation_residuals,
         )
         final_xy = (final_x, final_y)
         tcp_delta = tcp_delta_xyz(
-            self._tcp_x,
-            self._tcp_y,
+            sweep_offset_x,
+            sweep_offset_y,
             current_orientation=(target.rx_degrees, target.ry_degrees, current_rz),
             reference_orientation=reference_orientation,
         )
@@ -166,7 +179,7 @@ class VisionTargetResolver:
         _logger.log(
             TRACE_LOG_LEVEL,
             "[TARGETING] point=%s frame=%s pixels=(%.3f, %.3f) calibration_xy=(%.3f, %.3f) plane_xy=(%.3f, %.3f) "
-            "orientation=(%.3f, %.3f, %.3f) reference_rz=%.3f tcp_delta=(%.3f, %.3f, %.3f) point_offset_local=(%.3f, %.3f) "
+            "orientation=(%.3f, %.3f, %.3f) reference_rz=%.3f sweep_offset=(%.3f, %.3f) tcp_delta=(%.3f, %.3f, %.3f) point_offset_local=(%.3f, %.3f) "
             "point_delta_rotated=(%.3f, %.3f, %.3f) final_xyz=(%.3f, %.3f, %.3f)",
             str(point.name),
             str(frame or ""),
@@ -180,6 +193,8 @@ class VisionTargetResolver:
             float(target.ry_degrees),
             float(current_rz),
             float(reference_rz),
+            sweep_offset_x,
+            sweep_offset_y,
             float(tcp_delta[0]),
             float(tcp_delta[1]),
             float(tcp_delta[2]),

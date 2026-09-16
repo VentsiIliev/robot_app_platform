@@ -4,6 +4,7 @@ from src.engine.robot.calibration.robot_calibration.logging import (
     construct_align_robot_log_message,
 )
 from src.engine.robot.calibration.robot_calibration.ppm_utils import clear_ppm_probe
+from src.engine.robot.calibration.robot_calibration.online_navigation import predict_robot_xy
 from src.engine.robot.calibration.robot_calibration.states.error_handling import (
     fail_calibration,
 )
@@ -22,6 +23,17 @@ from src.engine.robot.calibration.robot_calibration.states.robot_calibration_sta
 _logger = logging.getLogger(__name__)
 
 wait_to_reach_position = True  # TODO set to False only for testing!
+
+_POSITION_TOLERANCE_MM = 0.05
+_ORIENTATION_TOLERANCE_DEG = 0.05
+_MAX_ONLINE_NAVIGATION_ADJUSTMENT_MM = 75.0
+
+
+def _poses_close(first, second) -> bool:
+    return (
+        all(abs(float(first[i]) - float(second[i])) <= _POSITION_TOLERANCE_MM for i in range(3))
+        and all(abs(float(first[i]) - float(second[i])) <= _ORIENTATION_TOLERANCE_DEG for i in range(3, 6))
+    )
 
 
 def _move_to_initial_align_target(context, target_position, marker_id):
@@ -45,23 +57,27 @@ def _move_to_initial_align_target(context, target_position, marker_id):
         [round(float(v), 3) for v in final_position],
     )
 
-    z_result = context.calibration_robot_controller.move_to_position(
-        staged_z_position, blocking=wait_to_reach_position
-    )
+    z_result = True
+    if not _poses_close(current_pose, staged_z_position):
+        z_result = context.calibration_robot_controller.move_to_position(
+            staged_z_position, blocking=wait_to_reach_position
+        )
     if not z_result:
         _logger.info("Initial align Z-stage failed for marker %s", marker_id)
         return False
 
-    xy_result = context.calibration_robot_controller.move_to_position(
-        staged_xy_position, blocking=wait_to_reach_position
-    )
+    xy_result = True
+    if not _poses_close(staged_z_position, staged_xy_position):
+        xy_result = context.calibration_robot_controller.move_to_position(
+            staged_xy_position, blocking=wait_to_reach_position
+        )
     if not xy_result:
         _logger.info("Initial align XY-stage failed for marker %s", marker_id)
         return False
 
-    return context.calibration_robot_controller.move_to_position(
-        final_position, blocking=wait_to_reach_position
-    )
+    if _poses_close(staged_xy_position, final_position):
+        return True
+    return context.calibration_robot_controller.move_to_position(final_position, blocking=wait_to_reach_position)
 
 
 def handle_align_robot_state(context) -> RobotCalibrationStates:
@@ -105,7 +121,28 @@ def handle_align_robot_state(context) -> RobotCalibrationStates:
     x_new = x + current_to_marker[0]
     y_new = y + current_to_marker[1]
     z_new = progress.z_target
-    new_position = [x_new, y_new, z_new, rx, ry, rz]
+
+    prediction = predict_robot_xy(context, marker_id)
+    if prediction is not None:
+        adjustment_mm = ((prediction.robot_xy[0] - x_new) ** 2 + (prediction.robot_xy[1] - y_new) ** 2) ** 0.5
+        if adjustment_mm <= _MAX_ONLINE_NAVIGATION_ADJUSTMENT_MM:
+            x_new, y_new = prediction.robot_xy
+            _logger.info(
+                "Using online navigation homography for marker %s: target=(%.3f, %.3f) "
+                "samples=%d median_training_error=%.3fmm legacy_adjustment=%.3fmm",
+                marker_id, x_new, y_new, prediction.sample_count,
+                prediction.median_training_error_mm, adjustment_mm,
+            )
+        else:
+            _logger.warning(
+                "Online navigation prediction rejected for marker %s: %.3fmm from legacy target exceeds %.3fmm guard",
+                marker_id, adjustment_mm, _MAX_ONLINE_NAVIGATION_ADJUSTMENT_MM,
+            )
+    # Keep every calibration sample in one camera frame.  Reusing the live
+    # orientation here chains small controller/readback errors from marker to
+    # marker, so the correspondence set is collected with a gradually tilting
+    # camera.  X/Y are the only axes that should vary between targets.
+    new_position = [x_new, y_new, z_new, crx, cry, crz]
 
     _logger.info(
         "Align target debug for marker %s: calib_pose=%s current_pose=%s raw_marker_offset_mm=%s "
@@ -126,8 +163,11 @@ def handle_align_robot_state(context) -> RobotCalibrationStates:
         retry_attempted = True
         recovery_marker_id = get_recovery_marker_id(context)
         if recovery_marker_id in context.robot_positions_for_calibration:
+            recovery_pose = list(context.robot_positions_for_calibration[recovery_marker_id])
+            recovery_pose[2] = z_new
+            recovery_pose[3:6] = [crx, cry, crz]
             context.calibration_robot_controller.move_to_position(
-                context.robot_positions_for_calibration[recovery_marker_id], blocking=wait_to_reach_position
+                recovery_pose, blocking=wait_to_reach_position
             )
         result = _move_to_initial_align_target(context, new_position, marker_id)
 
@@ -144,6 +184,7 @@ def handle_align_robot_state(context) -> RobotCalibrationStates:
                 return RobotCalibrationStates.ALIGN_ROBOT
             return fail_calibration(context, message)
 
+    settle_s = float(getattr(context, "post_align_settle_s", 0.3))
     message = construct_align_robot_log_message(
         marker_id=marker_id,
         calib_to_marker=calib_to_marker,
@@ -152,6 +193,8 @@ def handle_align_robot_state(context) -> RobotCalibrationStates:
         z_target=context.Z_target,
         result=result,
         retry_attempted=retry_attempted,
+        actual_target_pose=new_position,
+        settle_s=settle_s,
     )
     _logger.info(message)
     _logger.info(
@@ -163,7 +206,6 @@ def handle_align_robot_state(context) -> RobotCalibrationStates:
     )
 
     if result:
-        settle_s = float(getattr(context, "post_align_settle_s", 0.3))
         if context.interruptible_sleep(settle_s):
             return RobotCalibrationStates.CANCELLED
         context.calibration_robot_controller.reset_derivative_state()

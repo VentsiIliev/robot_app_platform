@@ -3,6 +3,7 @@
     "display_name": "English"
   },
   "RobotSettings": {
+    "Use Automatic Camera-to-TCP Offset": "Use Automatic Camera-to-TCP Offset",
     "Set Current Position": "Set Current Position",
     "Could not read robot position.\nMake sure the robot is connected.": "Could not read robot position.\nMake sure the robot is connected.",
     "Remove Group": "Remove Group",

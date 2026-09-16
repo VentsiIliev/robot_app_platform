@@ -175,7 +175,7 @@ class TestCalibrationApplicationServiceDelegation(unittest.TestCase):
         self.assertIn("Robot Settings → Targeting", message)
         settings_service.save_settings.assert_not_called()
 
-    def test_local_test_pose_uses_area_observer_z_and_orientation(self):
+    def test_local_test_pose_uses_target_z_and_area_observer_orientation(self):
         settings_service = MagicMock()
         settings = _make_calibration_settings()
         settings.vision.calibration_target_work_area = "magazine"
@@ -185,6 +185,7 @@ class TestCalibrationApplicationServiceDelegation(unittest.TestCase):
             _make_vision(),
             MagicMock(),
             calibration_settings_service=settings_service,
+            calib_config=SimpleNamespace(z_target=150.0),
             observer_group_provider=lambda area_id: "Magazine" if area_id == "magazine" else None,
             observer_position_provider=lambda group_id: observer if group_id == "Magazine" else None,
         )
@@ -195,6 +196,27 @@ class TestCalibrationApplicationServiceDelegation(unittest.TestCase):
 
         self.assertTrue(ok, message)
         self.assertEqual(suffix, [150.0, -179.0, 1.0, 359.0])
+
+    def test_local_test_pose_uses_calibration_target_z_not_observer_z(self):
+        settings_service = MagicMock()
+        settings = _make_calibration_settings()
+        settings.vision.calibration_target_work_area = "magazine"
+        settings_service.load_settings.return_value = settings
+        svc = CalibrationApplicationService(
+            _make_vision(),
+            MagicMock(),
+            calibration_settings_service=settings_service,
+            calib_config=SimpleNamespace(z_target=150.0),
+            observer_group_provider=lambda _area_id: "Magazine",
+            observer_position_provider=lambda _group_id: [42.5, -174.3, 251.436, -179.99, 0.0, 0.0],
+        )
+
+        ok, message, suffix = svc._test_motion_pose_suffix(
+            [42.5, -174.3, 251.436, -179.99, 0.0, 0.0]
+        )
+
+        self.assertTrue(ok, message)
+        self.assertEqual(suffix, [150.0, -179.99, 0.0, 0.0])
 
     def test_local_test_pose_rejects_robot_away_from_area_observer(self):
         settings_service = MagicMock()
@@ -214,6 +236,59 @@ class TestCalibrationApplicationServiceDelegation(unittest.TestCase):
         self.assertFalse(ok)
         self.assertIn("Magazine", message)
         self.assertIsNone(suffix)
+
+    def test_visual_test_routes_from_active_work_area_in_per_area_mode(self):
+        settings_service = MagicMock()
+        settings = _make_calibration_settings()
+        settings.vision.coordinate_calibration_mode = "per_area"
+        settings.vision.calibration_target_work_area = "paint"
+        settings.vision.work_area_calibration_profiles = {"magazine": "magazine_local"}
+        from src.engine.vision.calibration_vision_settings import CoordinateCalibrationProfile
+        settings.vision.coordinate_calibration_profiles = {
+            "magazine_local": CoordinateCalibrationProfile(
+                matrix_path="calibrations/magazine/camera_to_robot.npy",
+                reference_frame="magazine",
+            )
+        }
+        settings_service.load_settings.return_value = settings
+        work_area_service = MagicMock()
+        work_area_service.get_active_area_id.return_value = "magazine"
+        vision = _make_vision()
+        vision.camera_to_robot_matrix_path = "/tmp/calibrations/magazine/camera_to_robot.npy"
+        svc = CalibrationApplicationService(
+            vision,
+            MagicMock(),
+            calibration_settings_service=settings_service,
+            work_area_service=work_area_service,
+            work_area_definitions=[WorkAreaDefinition("magazine", "Magazine", "#000000")],
+        )
+
+        ok, message = svc._select_active_work_area_for_test()
+
+        self.assertTrue(ok, message)
+        self.assertEqual(settings.vision.calibration_target_work_area, "magazine")
+        settings_service.save_settings.assert_called_once_with(settings)
+
+    def test_visual_test_rejects_active_area_without_profile_in_per_area_mode(self):
+        settings_service = MagicMock()
+        settings = _make_calibration_settings()
+        settings.vision.coordinate_calibration_mode = "per_area"
+        settings_service.load_settings.return_value = settings
+        work_area_service = MagicMock()
+        work_area_service.get_active_area_id.return_value = "magazine"
+        svc = CalibrationApplicationService(
+            _make_vision(),
+            MagicMock(),
+            calibration_settings_service=settings_service,
+            work_area_service=work_area_service,
+            work_area_definitions=[WorkAreaDefinition("magazine", "Magazine", "#000000")],
+        )
+
+        ok, message = svc._select_active_work_area_for_test()
+
+        self.assertFalse(ok)
+        self.assertIn("no assigned calibration profile", message)
+        settings_service.save_settings.assert_not_called()
 
     def test_calibrate_camera_and_robot_short_circuits_on_camera_failure(self):
         svc, vs, _ = _make_svc(calibrate=(False, "no cam"))

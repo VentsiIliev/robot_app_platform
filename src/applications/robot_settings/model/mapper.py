@@ -14,6 +14,9 @@ class RobotSettingsMapper:
             "robot_ip":            settings.robot_ip,
             "robot_tool":          settings.robot_tool,
             "robot_user":          settings.robot_user,
+            "use_automatic_camera_to_tcp_offset": str(
+                settings.use_automatic_camera_to_tcp_offset
+            ),
             "camera_to_tcp_x_offset":  settings.camera_to_tcp_x_offset,
             "camera_to_tcp_y_offset":  settings.camera_to_tcp_y_offset,
             "camera_z_shift_x_per_mm_px": settings.camera_z_shift_x_per_mm_px,
@@ -58,6 +61,13 @@ class RobotSettingsMapper:
         c.robot_ip            = flat.get("robot_ip",            c.robot_ip)
         c.robot_tool          = int(flat.get("robot_tool",      c.robot_tool))
         c.robot_user          = int(flat.get("robot_user",      c.robot_user))
+        automatic_offset = flat.get(
+            "use_automatic_camera_to_tcp_offset",
+            str(c.use_automatic_camera_to_tcp_offset),
+        )
+        c.use_automatic_camera_to_tcp_offset = automatic_offset in (
+            "True", "true", True, 1
+        )
         c.camera_to_tcp_x_offset = float(flat.get("camera_to_tcp_x_offset", c.camera_to_tcp_x_offset))
         c.camera_to_tcp_y_offset = float(flat.get("camera_to_tcp_y_offset", c.camera_to_tcp_y_offset))
         c.camera_z_shift_x_per_mm_px = float(flat.get("camera_z_shift_x_per_mm_px", c.camera_z_shift_x_per_mm_px))

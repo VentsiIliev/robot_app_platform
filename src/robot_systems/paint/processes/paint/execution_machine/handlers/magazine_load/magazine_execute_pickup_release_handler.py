@@ -483,7 +483,12 @@ def _execute_magazine_servo_contact_pickup_release(
         )
         if not result.success:
             discard_prepared()
-            if result.timed_out or result.message == "timeout":
+            no_workpiece_detected = (
+                result.timed_out
+                or result.message == "timeout"
+                or result.message == "sensor_controlled_fast_lin_condition_not_detected"
+            )
+            if no_workpiece_detected:
                 off_ok, off_msg = executor._motion.turn_vacuum_off()
                 recovered, recovery_error = return_to_fixed_pose("after no contact")
                 recovery_failures = []
@@ -494,7 +499,7 @@ def _execute_magazine_servo_contact_pickup_release(
                         f"return to fixed magazine pose failed: {recovery_error}"
                     )
                 if recovery_failures:
-                    return False, "Magazine servo pickup timed out; " + "; ".join(recovery_failures)
+                    return False, "Magazine servo pickup found no workpiece; " + "; ".join(recovery_failures)
                 return False, NO_WORKPIECE_AT_MAGAZINE
             return False, f"Magazine servo contact pickup failed: {result.message}"
         if not pickup_condition_is_active_after_retract(condition):

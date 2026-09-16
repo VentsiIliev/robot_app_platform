@@ -67,6 +67,33 @@ class TestPerAreaCoordinateCalibration(unittest.TestCase):
             "magazine": TargetFrame("magazine", work_area_id="magazine", mapper=mapper),
         }
 
+    def test_manual_camera_to_tcp_offset_comes_from_targeting_tool_point(self):
+        system = _RoutingSystem()
+        system._robot_config = SimpleNamespace(
+            use_automatic_camera_to_tcp_offset=False,
+            camera_to_tcp_x_offset=1.0,
+            camera_to_tcp_y_offset=2.0,
+        )
+        provider = MagicMock()
+        provider.build_point_registry.return_value = PointRegistry([
+            EndEffectorPoint("camera", 0.0, 0.0),
+            EndEffectorPoint("tool", 79.14, 32.76),
+        ])
+        system._targeting_provider = provider
+
+        self.assertEqual((79.14, 32.76), system._get_camera_to_tcp_offsets())
+
+    def test_automatic_camera_to_tcp_offset_uses_robot_config_result(self):
+        system = _RoutingSystem()
+        system._robot_config = SimpleNamespace(
+            use_automatic_camera_to_tcp_offset=True,
+            camera_to_tcp_x_offset=76.365,
+            camera_to_tcp_y_offset=24.56,
+        )
+
+        self.assertEqual((76.365, 24.56), system._get_camera_to_tcp_offsets())
+
+
     def test_global_mode_preserves_existing_mapper(self):
         resolver = VisionTargetResolver(_Transformer(), self.registry, frames=self.frames)
         result = resolver.resolve(_request(), self.registry.by_name("camera"), frame="magazine")
@@ -143,6 +170,26 @@ class TestPerAreaCoordinateCalibration(unittest.TestCase):
 
         self.assertEqual(routing["work_area_profile_ids"], {"paint": "global"})
         self.assertNotIn("future", routing["profile_transformers"])
+
+    def test_legacy_global_profile_definition_is_ignored(self):
+        system = _RoutingSystem()
+        system._settings_service = MagicMock()
+        system._settings_service.get.return_value = SimpleNamespace(
+            coordinate_calibration_mode="per_area",
+            coordinate_calibration_profiles={
+                "global": CoordinateCalibrationProfile(
+                    matrix_path="calibrations/magazine/camera_to_robot.npy",
+                    reference_frame="magazine",
+                )
+            },
+            work_area_calibration_profiles={"paint": "global"},
+        )
+
+        global_transformer = _Transformer()
+        routing = system._build_coordinate_calibration_routing(global_transformer)
+
+        self.assertIs(routing["profile_transformers"]["global"], global_transformer)
+        self.assertEqual(routing["profile_reference_frames"]["global"], "calibration")
 
     def test_assignment_requires_a_target_frame(self):
         system = _RoutingSystem()

@@ -171,6 +171,14 @@ class PaintMagazineLoadService:
     def _wait_after_pause_resume(self, context: MagazineLoadContext) -> bool:
         return self._wait(1.0, context.motion_cancel_requested)
 
+    def _mark_magazine_capture_area_active(self) -> None:
+        if self._work_area_service is None:
+            return
+        self._work_area_service.set_active_area_id(self._frame_name)
+        mark_verified = getattr(self._work_area_service, "mark_active_area_verified", None)
+        if callable(mark_verified):
+            mark_verified(self._frame_name)
+
     def _resolve_work_area_center_release_pose(
         self,
         *,

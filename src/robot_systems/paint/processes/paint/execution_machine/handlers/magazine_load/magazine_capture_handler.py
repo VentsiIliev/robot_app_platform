@@ -44,13 +44,47 @@ def handle_magazine_capture(ctx: PaintExecutionContext) -> PaintExecutionState:
         )
         return PaintExecutionState.MAGAZINE_PREPARE_PICKUP_RELEASE
 
+    load_service = ctx.production_service._magazine_load_service
     capture_pose_ok, capture_pose_error = (
-        ctx.production_service._magazine_load_service._verify_current_capture_pose(
+        load_service._verify_current_capture_pose(
             ctx.magazine_group,
             position_tolerance_mm=2.0,
             orientation_tolerance_deg=2.0,
         )
     )
+    if not capture_pose_ok and not ctx.motion_cancel_requested():
+        _logger.warning(
+            "[MAGAZINE_CAPTURE_POSE] Endpoint is outside capture tolerance after "
+            "settling; commanding one exact correction move to '%s'",
+            ctx.magazine_group,
+        )
+        correction_kwargs = {
+            "velocity": min(50.0, float(ctx.magazine_config.move_to_magazine_vel_percent)),
+            "acceleration": min(20.0, float(ctx.magazine_config.move_to_magazine_acc_percent)),
+            "motion_type": ctx.magazine_config.move_to_magazine_motion_type,
+            "blendR": 0.0,
+        }
+        if ctx.magazine_fixed_pickup_pose is not None:
+            corrected = load_service._move_to_pose_with_pause_resume_recovery(
+                ctx,
+                PaintExecutionState.MAGAZINE_CAPTURE,
+                ctx.magazine_fixed_pickup_pose,
+                ctx.magazine_group,
+                **correction_kwargs,
+            )
+        else:
+            corrected = load_service._move_to_group_with_pause_resume_recovery(
+                ctx,
+                PaintExecutionState.MAGAZINE_CAPTURE,
+                ctx.magazine_group,
+                **correction_kwargs,
+            )
+        if corrected and load_service._wait(0.3, ctx.motion_cancel_requested):
+            capture_pose_ok, capture_pose_error = load_service._verify_current_capture_pose(
+                ctx.magazine_group,
+                position_tolerance_mm=2.0,
+                orientation_tolerance_deg=2.0,
+            )
     if not capture_pose_ok:
         _logger.error("[MAGAZINE_CAPTURE_POSE] %s", capture_pose_error)
         ctx.set_result(False, capture_pose_error)

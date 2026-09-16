@@ -12,18 +12,18 @@
   "pivot_contact_side": "positive",
   "mirror_xz_ry_execution_rotation_value": true,
   "pickup_axis_alignment_sign_value": 1.0,
-  "enable_vacuum_pump": true,
+  "enable_vacuum_pump": false,
   "run_while_workpiece_found": true,
   "enable_workpiece_matching": false,
   "default_paint_velocity_percent": 100.0,
-  "default_paint_acceleration_percent": 10.0,
+  "default_paint_acceleration_percent": 80.00000000000001,
   "paint_process_acceleration_scale_percent": 100.0,
   "default_paint_offset_mm": 2.0,
-  "unmatched_paint_pass_count": 2,
+  "unmatched_paint_pass_count": 1,
   "unmatched_second_pass": {
     "use_pass_1_settings": true,
     "velocity_percent": 10.0,
-    "acceleration_percent": 10.0,
+    "acceleration_percent": 1.0,
     "offset_mm": 0.0
   },
   "closed_contour_overlap_mm": 10.0,
@@ -34,16 +34,16 @@
     "approach_offset_mm": 15.0,
     "contact_offset_mm": 20.0,
     "initial_lift_clearance_mm": 50.0,
-    "approach_vel_percent": 80.0,
-    "approach_acc_percent": 60.0,
+    "approach_vel_percent": 100.0,
+    "approach_acc_percent": 80.0,
     "approach_motion_type": "ptp",
     "approach_blendR": 20.0,
-    "descend_vel_percent": 60.0,
-    "descend_acc_percent": 40.0,
+    "descend_vel_percent": 100.0,
+    "descend_acc_percent": 60.0,
     "descend_motion_type": "linear",
     "descend_blendR": 0.0,
-    "lift_align_vel_percent": 80.0,
-    "lift_align_acc_percent": 60.0,
+    "lift_align_vel_percent": 100.0,
+    "lift_align_acc_percent": 80.0,
     "lift_align_motion_type": "ptp",
     "lift_align_blendR": 20.0,
     "change_plane_vel_percent": 10.0,
@@ -51,15 +51,15 @@
     "change_plane_motion_type": "ptp",
     "change_plane_blendR": 20.0,
     "combine_change_plane_with_first_contact": true,
-    "stage_transition_vel_percent": 80.0,
-    "stage_transition_acc_percent": 60.0,
+    "stage_transition_vel_percent": 100.0,
+    "stage_transition_acc_percent": 80.0,
     "stage_transition_motion_type": "ptp",
     "stage_transition_blendR": 20.0,
-    "first_contact_vel_percent": 80.0,
-    "first_contact_acc_percent": 60.0,
+    "first_contact_vel_percent": 100.0,
+    "first_contact_acc_percent": 100.0,
     "first_contact_motion_type": "linear",
     "first_contact_blendR": 0.0,
-    "pickup_contact_mode": "sensor_controlled_fast_lin",
+    "pickup_contact_mode": "planned",
     "servo_contact_linear_mm_s": 10.0,
     "servo_contact_min_z_mm": 0.0,
     "servo_contact_fast_lin_velocity_percent": 10.0,
@@ -109,11 +109,44 @@
     "corridor_maximum_acceleration_percent": 60.0,
     "sub_zero_approach_z_mm": 50.0,
     "sub_zero_exit_blendR_mm": 10.0,
-    "release_align_vel_percent": 70.0,
-    "release_align_acc_percent": 50.0,
+    "release_align_vel_percent": 100.0,
+    "release_align_acc_percent": 100.0,
     "release_align_motion_type": "ptp",
     "release_align_blendR": 0.0,
-    "plate_corners": [],
+    "plate_corners": [
+      [
+        -697.854,
+        -301.722,
+        22.769,
+        -179.976,
+        0.003,
+        -0.029
+      ],
+      [
+        -427.845,
+        -301.729,
+        22.779,
+        -179.974,
+        0.006,
+        -0.025
+      ],
+      [
+        -427.675,
+        158.05,
+        22.799,
+        -179.971,
+        0.006,
+        -0.023
+      ],
+      [
+        -654.348,
+        158.013,
+        22.793,
+        -179.966,
+        0.001,
+        -0.028
+      ]
+    ],
     "plate_release_z_offset_mm": 0.0,
     "plate_approach_clearance_mm": 50.0,
     "plate_margin_left_mm": 10.0,
@@ -122,71 +155,90 @@
     "plate_margin_top_mm": 10.0,
     "plate_spacing_x_mm": 10.0,
     "plate_spacing_y_mm": 10.0,
-    "plate_robot_tool": -1,
-    "plate_robot_user": -1,
-    "plate_passage_gate_pose": [],
-    "plate_next_cycle_midpoint_enabled": false,
-    "plate_next_cycle_midpoint_pose": [],
+    "plate_robot_tool": 1,
+    "plate_robot_user": 1,
+    "plate_passage_gate_pose": [
+      -364.116,
+      130.218,
+      150.0,
+      179.995,
+      -0.001,
+      -0.01
+    ],
+    "plate_next_cycle_midpoint_enabled": true,
+    "plate_next_cycle_midpoint_pose": [
+      17.448440053602603,
+      12.279448078692786,
+      149.95506593440152,
+      179.9702524085312,
+      -0.0010050982537887164,
+      -0.00813299124167727
+    ],
     "plate_use_center_waypoint": true,
-    "plate_distribute_unwind": false,
+    "plate_distribute_unwind": true,
     "plate_motion_profiles": [
       {
-        "key": "entry_gate",
-        "vel_percent": 70.0,
+        "vel_percent": 100.0,
         "acc_percent": 50.0,
         "motion_type": "ptp",
-        "blendR": 20.0
+        "blendR": 20.0,
+        "key": "entry_gate"
       },
       {
-        "key": "entry_center",
-        "vel_percent": 70.0,
-        "acc_percent": 50.0,
+        "vel_percent": 100.0,
+        "acc_percent": 60.0,
         "motion_type": "ptp",
-        "blendR": 20.0
+        "blendR": 20.0,
+        "key": "entry_center"
       },
       {
-        "key": "center_to_dropoff",
-        "vel_percent": 70.0,
-        "acc_percent": 50.0,
+        "vel_percent": 100.0,
+        "acc_percent": 80.0,
         "motion_type": "ptp",
-        "blendR": 0.0
+        "blendR": 0.0,
+        "key": "center_to_dropoff"
       },
       {
-        "key": "exit_center",
-        "vel_percent": 70.0,
-        "acc_percent": 50.0,
+        "vel_percent": 100.0,
+        "acc_percent": 80.0,
         "motion_type": "ptp",
-        "blendR": 20.0
+        "blendR": 20.0,
+        "key": "exit_center"
       },
       {
-        "key": "exit_gate",
-        "vel_percent": 70.0,
-        "acc_percent": 50.0,
+        "vel_percent": 100.0,
+        "acc_percent": 80.0,
         "motion_type": "ptp",
-        "blendR": 20.0
+        "blendR": 20.0,
+        "key": "exit_gate"
       },
       {
-        "key": "gate_to_next_midpoint",
-        "vel_percent": 60.0,
-        "acc_percent": 40.0,
+        "vel_percent": 100.0,
+        "acc_percent": 80.0,
         "motion_type": "ptp",
-        "blendR": 20.0
+        "blendR": 20.0,
+        "key": "gate_to_next_midpoint"
       },
       {
-        "key": "gate_to_next_start",
-        "vel_percent": 60.0,
-        "acc_percent": 40.0,
+        "vel_percent": 100.0,
+        "acc_percent": 80.0,
         "motion_type": "ptp",
-        "blendR": 0.0
+        "blendR": 100.0,
+        "key": "gate_to_next_start"
       }
     ]
   },
   "magazine_load": {
     "enabled": true,
-    "pickup_mode": "fixed_group_sensor_controlled_fast_lin",
+    "pickup_mode": "vision_planned",
     "fixed_pickup_group_id": "Magazine Fixed Pickup",
     "fixed_pickup_group_ids": [],
-    "fixed_pickup_sources": [],
+    "fixed_pickup_sources": [
+      {
+        "enabled": true,
+        "movement_group_id": "Magazine Fixed Pickup"
+      }
+    ],
     "fixed_pickup_position_tolerance_mm": 1.0,
     "fixed_pickup_orientation_tolerance_deg": 0.5,
     "full_retract_before_release": true,
@@ -194,12 +246,12 @@
     "short_retract_distance_mm": 10.0,
     "magazine_group_id": "Magazine",
     "calibration_group_id": "CALIBRATION",
-    "move_to_magazine_vel_percent": 60.0,
-    "move_to_magazine_acc_percent": 40.0,
+    "move_to_magazine_vel_percent": 100.0,
+    "move_to_magazine_acc_percent": 100.0,
     "move_to_magazine_motion_type": "ptp",
     "move_to_magazine_blendR": 0.0,
-    "transfer_to_calibration_vel_percent": 80.0,
-    "transfer_to_calibration_acc_percent": 60.0,
+    "transfer_to_calibration_vel_percent": 100.0,
+    "transfer_to_calibration_acc_percent": 100.0,
     "transfer_to_calibration_motion_type": "ptp",
     "transfer_to_calibration_blendR": 0.0,
     "release_z_mm": 50.0,
@@ -207,7 +259,7 @@
     "release_settle_s": 0.2
   },
   "safe_travel": {
-    "enabled": true,
+    "enabled": false,
     "position": [
       -29.024,
       126.781,
@@ -226,10 +278,10 @@
           -0.028,
           0.099
         ],
-        "vel_percent": 80.0,
-        "acc_percent": 60.0,
+        "vel_percent": 4.0,
+        "acc_percent": 80.0,
         "motion_type": "ptp",
-        "blendR": 20.0
+        "blendR": 0.0
       }
     ],
     "movement_group_id": "Magazine"
@@ -363,8 +415,8 @@
     "unwind_vel_percent": 50.0,
     "unwind_acc_percent": 20.0,
     "unwind_queue_if_busy": true,
-    "calibration_move_vel_percent": 80.0,
-    "calibration_move_acc_percent": 60.0,
+    "calibration_move_vel_percent": 100.0,
+    "calibration_move_acc_percent": 100.0,
     "calibration_move_motion_type": "ptp",
     "calibration_move_blendR": 0.0
   },

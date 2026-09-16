@@ -368,6 +368,21 @@ class PaintProductionService:
             except Exception:
                 _logger.exception("Failed to capture settings for paint cycle %d", cycle_index)
                 return False, "Failed to read paint process settings"
+        latest_magazine_config = getattr(process_config, "magazine_load", None)
+        if latest_magazine_config is not None:
+            magazine_config = latest_magazine_config
+            pickup_mode = str(
+                getattr(magazine_config, "pickup_mode", "") or ""
+            ).strip().lower()
+            if pickup_mode != "fixed_group_sensor_controlled_fast_lin":
+                # Vision strategies always acquire from the camera observer.
+                # Do not let a fixed-source choice made from an older settings
+                # snapshot leak into this cycle.
+                magazine_group = str(
+                    getattr(magazine_config, "magazine_group_id", "Magazine")
+                    or "Magazine"
+                ).strip()
+                magazine_source = None
         cycle_strategy = self._effective_dropoff_strategy(process_config, cycle_index)
         set_cycle_strategy = getattr(self._path_executor, "set_cycle_dropoff_strategy", None)
         if callable(set_cycle_strategy):

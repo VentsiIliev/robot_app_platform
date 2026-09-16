@@ -13,6 +13,7 @@ from src.engine.repositories.interfaces.i_settings_service import ISettingsServi
 from src.engine.robot.configuration import RobotCalibrationSettings, RobotSettings
 from src.engine.robot.configuration.robot_calibration_settings import AxisMappingConfig
 from src.engine.robot.enums.axis import AxisMapping, Direction, ImageAxis, ImageToRobotMapping
+from src.engine.robot.targeting.target_point_geometry import tcp_delta_xy
 from src.engine.vision.homography_residual_transformer import HomographyResidualTransformer
 
 _logger = logging.getLogger(__name__)
@@ -438,8 +439,22 @@ class CameraTcpOffsetCalibrationService:
                     f"(limit {max_std:.3f}mm)"
                 )
 
+            rotation_residuals: list[dict[str, float]] = []
+            if bool(getattr(cfg, "verification_enabled", True)):
+                verified = self._verify_solved_offset(
+                    reference_pose=reference_pose,
+                    reference_rz=approach_rz,
+                    offset_x=offset_x,
+                    offset_y=offset_y,
+                    effective_iterations=effective_iterations,
+                )
+                if verified is None:
+                    return False, "Camera-to-TCP post-solve verification failed"
+                rotation_residuals = verified
+
             self._robot_config.camera_to_tcp_x_offset = offset_x
             self._robot_config.camera_to_tcp_y_offset = offset_y
+            self._robot_config.camera_to_tcp_rotation_residuals = rotation_residuals
             self._settings.save(self._robot_config_key, self._robot_config)
             if self._on_offsets_saved is not None:
                 try:
@@ -455,7 +470,8 @@ class CameraTcpOffsetCalibrationService:
             return True, (
                 f"Camera-to-TCP offset calibrated: X={offset_x:.3f} mm, Y={offset_y:.3f} mm "
                 f"(residual std X={std_x:.3f}, Y={std_y:.3f}; "
-                f"sample std X={sample_std_x:.3f}, Y={sample_std_y:.3f})"
+                f"sample std X={sample_std_x:.3f}, Y={sample_std_y:.3f}; "
+                f"rotation residual points={len(rotation_residuals)})"
             )
         finally:
             if draw_contours_was_enabled:
@@ -467,6 +483,120 @@ class CameraTcpOffsetCalibrationService:
             if auto_brightness_locked and hasattr(self._vision, "unlock_auto_brightness_region"):
                 _logger.info("Restoring dynamic auto brightness region after standalone TCP calibration")
                 self._vision.unlock_auto_brightness_region()
+
+    def _verify_solved_offset(
+        self,
+        *,
+        reference_pose: list[float],
+        reference_rz: float,
+        offset_x: float,
+        offset_y: float,
+        effective_iterations: int,
+    ) -> Optional[list[dict[str, float]]]:
+        """Measure and validate the command correction left by the rigid sweep model."""
+        cfg = self._calibration_settings.camera_tcp_offset
+        count = min(effective_iterations, max(1, int(getattr(cfg, "verification_samples", 3))))
+        sample_indexes = sorted(
+            {
+                max(1, round(1 + index * (effective_iterations - 1) / max(1, count - 1)))
+                for index in range(count)
+            }
+        )
+        residuals: list[dict[str, float]] = [
+            {"angle_deg": 0.0, "x_mm": 0.0, "y_mm": 0.0}
+        ]
+        tolerance = max(0.0, float(getattr(cfg, "verification_max_error_mm", 5.0)))
+        confirmation_tolerance = max(
+            0.0,
+            float(getattr(cfg, "verification_confirmation_tolerance_mm", 0.75)),
+        )
+        try:
+            for sample_index in sample_indexes:
+                angle_deg = float(sample_index) * float(cfg.rotation_step_deg)
+                sample_rz = float(reference_rz) + angle_deg
+                sweep_x, sweep_y = tcp_delta_xy(
+                    offset_x, offset_y, sample_rz, reference_rz
+                )
+                predicted_pose = list(reference_pose)
+                predicted_pose[0] = float(reference_pose[0]) - sweep_x
+                predicted_pose[1] = float(reference_pose[1]) - sweep_y
+                predicted_pose[5] = sample_rz
+                if not self._move(
+                    predicted_pose,
+                    cfg.velocity,
+                    cfg.acceleration,
+                    f"verification {angle_deg:.3f}deg predicted",
+                ):
+                    return None
+                if self._interruptible_sleep(cfg.settle_time_s):
+                    return None
+                correction = self._measure_center_correction(
+                    cfg.marker_id, angle_deg, f"verification {angle_deg:.3f}deg"
+                )
+                if correction is None:
+                    return None
+                correction_x, correction_y = correction
+                if math.hypot(correction_x, correction_y) > tolerance:
+                    _logger.error(
+                        "Camera TCP verification correction at %.3fdeg is %.3fmm, above %.3fmm limit",
+                        angle_deg,
+                        math.hypot(correction_x, correction_y),
+                        tolerance,
+                    )
+                    return None
+
+                corrected_pose = list(predicted_pose)
+                corrected_pose[0] += correction_x
+                corrected_pose[1] += correction_y
+                if not self._move_linear(
+                    corrected_pose,
+                    cfg.velocity,
+                    cfg.acceleration,
+                    f"verification {angle_deg:.3f}deg corrected",
+                ):
+                    return None
+                if self._interruptible_sleep(cfg.settle_time_s):
+                    return None
+                remaining = self._measure_center_correction(
+                    cfg.marker_id, angle_deg, f"verification {angle_deg:.3f}deg confirm"
+                )
+                if remaining is None or math.hypot(*remaining) > confirmation_tolerance:
+                    _logger.error(
+                        "Camera TCP corrected verification failed at %.3fdeg: remaining=%s limit=%.3fmm",
+                        angle_deg,
+                        remaining,
+                        confirmation_tolerance,
+                    )
+                    return None
+                residuals.append(
+                    {"angle_deg": angle_deg, "x_mm": correction_x, "y_mm": correction_y}
+                )
+                _logger.info(
+                    "Camera TCP verification: angle=%.3fdeg residual=(%.3f, %.3f)mm remaining=(%.3f, %.3f)mm",
+                    angle_deg,
+                    correction_x,
+                    correction_y,
+                    remaining[0],
+                    remaining[1],
+                )
+        finally:
+            self._move(reference_pose, cfg.velocity, cfg.acceleration, "verification final reference restore")
+        return residuals
+
+    def _measure_center_correction(
+        self, marker_id: int, camera_rotation_deg: float, label: str
+    ) -> Optional[tuple[float, float]]:
+        detection = self._detect_marker_center(marker_id, label, n_avg=5)
+        if detection is None or self._image_to_robot_mapping is None:
+            return None
+        pixel_x = float(detection[0] - self._vision.get_camera_width() / 2.0)
+        pixel_y = float(detection[1] - self._vision.get_camera_height() / 2.0)
+        theta = math.radians(float(camera_rotation_deg))
+        derotated_x = pixel_x * math.cos(theta) + pixel_y * math.sin(theta)
+        derotated_y = -pixel_x * math.sin(theta) + pixel_y * math.cos(theta)
+        return self._image_to_robot_mapping.map_pixel_error_to_robot_delta(
+            derotated_x, derotated_y
+        )
 
     def _refresh_runtime_settings(self) -> None:
         try:

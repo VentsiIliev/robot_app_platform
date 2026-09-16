@@ -44,8 +44,8 @@ class IntrinsicCaptureConfig:
     probe_drx_deg: float = 3.0             # roll probe angle for tilt sensitivity (0 = skip)
     probe_dry_deg: float = 3.0             # pitch probe angle for tilt sensitivity (0 = skip)
     probe_drz_deg: float = 0.0             # yaw probe angle for tilt sensitivity (0 = skip)
-    # ChArUco sweep mode (replaces Jacobian+servo when board_type == "charuco")
-    charuco_sweep_x_mm: float = 100.0     # half-range: sweeps -x … +x around home
+    # ChArUco mapped capture bounds (maximum displacement around the start pose)
+    charuco_sweep_x_mm: float = 100.0
     charuco_sweep_y_mm: float = 100.0
     charuco_min_corners: int = 6          # minimum detected corners to accept a frame
     charuco_rz_deg: float = 15.0          # ±yaw angle added at each grid position (0 = skip)

@@ -16,6 +16,19 @@ from src.robot_systems.paint.processes.paint.config import (
 _logger = logging.getLogger(__name__)
 _PAINT_PROCESS = PAINT_PROCESS_CONFIG
 _PAINT_EXECUTION_TARGET_POINT = "tool"
+
+
+def _effective_camera_to_tcp_offsets(robot_system, robot_config=None) -> tuple[float, float]:
+    resolver = getattr(robot_system, "_get_camera_to_tcp_offsets", None)
+    if callable(resolver):
+        return resolver()
+    config = robot_config or getattr(robot_system, "_robot_config", None)
+    return (
+        float(getattr(config, "camera_to_tcp_x_offset", 0.0)),
+        float(getattr(config, "camera_to_tcp_y_offset", 0.0)),
+    )
+
+
 def _bypass_contour_preparation_enabled() -> bool:
     return bool(paint_system_config.BYPASS_CONTOUR_PREPARATION)
 
@@ -290,6 +303,8 @@ def _build_dryer_release_coordinator(robot_system):
 
 
 def _build_paint_path_executor(robot_system):
+    from copy import deepcopy
+
     from src.robot_systems.paint.processes.paint.execute import (
         PaintExecutorDependencies,
         PaintExecutorContactMotionConfig,
@@ -305,6 +320,16 @@ def _build_paint_path_executor(robot_system):
     dryer_release = getattr(robot_system, "_dryer_release_coordinator", None)
     dryer_ready = getattr(dryer_release, "wait_until_ready_for_release", None)
     release_callback = getattr(dryer_release, "on_workpiece_release_verified", None)
+
+    def effective_robot_config():
+        current = robot_system._settings_service.get(CommonSettingsID.ROBOT_CONFIG)
+        if not hasattr(current, "camera_to_tcp_x_offset"):
+            return current
+        resolved = deepcopy(current)
+        tcp_x, tcp_y = _effective_camera_to_tcp_offsets(robot_system, current)
+        resolved.camera_to_tcp_x_offset = tcp_x
+        resolved.camera_to_tcp_y_offset = tcp_y
+        return resolved
 
     def vacuum_pump_enabled() -> bool:
         peripheral_config = robot_system._settings_service.get(SettingsID.PERIPHERALS)
@@ -337,7 +362,7 @@ def _build_paint_path_executor(robot_system):
             getattr(robot_system, "_navigation", None).get_group_position("CALIBRATION")
             if getattr(robot_system, "_navigation", None) is not None else None
         ),
-        robot_config_provider=lambda: robot_system._settings_service.get(CommonSettingsID.ROBOT_CONFIG),
+        robot_config_provider=effective_robot_config,
         vacuum_pump=getattr(robot_system, "_vacuum_pump", None),
         vacuum_pump_enabled_provider=vacuum_pump_enabled,
         vacuum_sensor=robot_system.get_optional_service(ServiceID.VACUUM_SENSOR),
@@ -352,6 +377,9 @@ def _build_paint_path_executor(robot_system):
         pickup_user=int(getattr(robot_config, "robot_user", 0)) if robot_config is not None else 0,
         debug_dump_dir=debug_dump_dir,
     )
+    effective_tcp_x, effective_tcp_y = _effective_camera_to_tcp_offsets(
+        robot_system, robot_config
+    )
     contact_motion_config = PaintExecutorContactMotionConfig(
         motion_plane=pivot_profile.motion_plane,
         translation_axis=pivot_profile.translation_axis,
@@ -360,8 +388,8 @@ def _build_paint_path_executor(robot_system):
         flip_xz_ry_execution_rotation_direction=pivot_profile.mirror_execution_rotation,
         mirror_xz_ry_pickup_handoff=pivot_profile.mirror_pickup_handoff,
         apply_camera_to_tcp_for_pickup=paint_config.apply_camera_to_tcp_for_pickup,
-        camera_to_tcp_x_offset=float(getattr(robot_config, "camera_to_tcp_x_offset", 0.0)) if robot_config is not None else 0.0,
-        camera_to_tcp_y_offset=float(getattr(robot_config, "camera_to_tcp_y_offset", 0.0)) if robot_config is not None else 0.0,
+        camera_to_tcp_x_offset=effective_tcp_x,
+        camera_to_tcp_y_offset=effective_tcp_y,
     )
     return PaintWorkpiecePathExecutor(
         dependencies=dependencies,
@@ -956,6 +984,9 @@ def _build_calibration_application(robot_system):
     work_area_service = robot_system.get_service(CommonServiceID.WORK_AREAS)
     robot_service = robot_system.get_optional_service(CommonServiceID.ROBOT)
     robot_config = robot_system._robot_config
+    effective_tcp_x, effective_tcp_y = _effective_camera_to_tcp_offsets(
+        robot_system, robot_config
+    )
     navigation_service = CalibrationNavigationService(
         robot_system.get_service(CommonServiceID.NAVIGATION),
         before_move=(lambda: work_area_service.set_active_area_id("paint")),
@@ -963,8 +994,8 @@ def _build_calibration_application(robot_system):
     transformer = (
         HomographyResidualTransformer(
             vision_service.camera_to_robot_matrix_path,
-            camera_to_tcp_x_offset=robot_config.camera_to_tcp_x_offset,
-            camera_to_tcp_y_offset=robot_config.camera_to_tcp_y_offset,
+            camera_to_tcp_x_offset=effective_tcp_x,
+            camera_to_tcp_y_offset=effective_tcp_y,
         )
         if vision_service is not None and robot_config is not None else
         HomographyResidualTransformer(vision_service.camera_to_robot_matrix_path)
@@ -978,8 +1009,8 @@ def _build_calibration_application(robot_system):
         if robot_config is not None:
             return HomographyResidualTransformer(
                 matrix_path,
-                camera_to_tcp_x_offset=robot_config.camera_to_tcp_x_offset,
-                camera_to_tcp_y_offset=robot_config.camera_to_tcp_y_offset,
+                camera_to_tcp_x_offset=effective_tcp_x,
+                camera_to_tcp_y_offset=effective_tcp_y,
             )
         return HomographyResidualTransformer(matrix_path)
     camera_tcp_offset_calibrator = (
@@ -1157,6 +1188,9 @@ def _build_robot_settings_application(robot_app):
             or "global"
         )
         profiles = dict(coordinate.get("Profiles", {}) or {})
+        # ``global`` is the built-in vision calibration, not an editable local
+        # profile. Remove legacy entries previously emitted by the editor.
+        profiles.pop("global", None)
         assignments = dict(coordinate.get("Work area profiles", {}) or {})
         for frame in data.get("frames", []):
             area_id = str(frame.get("work_area_id", "") or "").strip()

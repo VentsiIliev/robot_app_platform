@@ -18,6 +18,9 @@ from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_move_to_magazine_handler import (
     handle_magazine_move_to_magazine,
 )
+from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_capture_handler import (
+    handle_magazine_capture,
+)
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_prepare_pickup_release_handler import (
     handle_magazine_prepare_pickup_release,
 )
@@ -62,6 +65,7 @@ class TestFixedMagazinePickup(unittest.TestCase):
             "Magazine",
             load_service._move_to_group_with_pause_resume_recovery.call_args.args[2],
         )
+        load_service._mark_magazine_capture_area_active.assert_called_once_with()
         service._restore_capture_view.assert_not_called()
 
     def test_auto_discovery_approaches_and_retracts_at_configured_z(self):
@@ -223,6 +227,7 @@ class TestFixedMagazinePickup(unittest.TestCase):
         self.assertEqual(pose, call.args[2])
         self.assertEqual("Magazine Fixed Pickup", call.args[3])
         load_service._move_to_group_with_pause_resume_recovery.assert_not_called()
+        load_service._mark_magazine_capture_area_active.assert_called_once_with()
 
     def test_fixed_mode_retries_one_exact_move_after_endpoint_miss(self):
         load_service = MagicMock()
@@ -244,6 +249,42 @@ class TestFixedMagazinePickup(unittest.TestCase):
         correction = load_service._move_to_group_with_pause_resume_recovery.call_args_list[1]
         self.assertEqual(0.0, correction.kwargs["blendR"])
 
+    def test_capture_retries_one_exact_move_after_settled_endpoint_miss(self):
+        load_service = MagicMock()
+        load_service._verify_current_capture_pose.side_effect = [
+            (False, "position error 4.370 mm"),
+            (True, ""),
+        ]
+        load_service._move_to_group_with_pause_resume_recovery.return_value = True
+        load_service._wait.return_value = True
+        service = MagicMock()
+        service._magazine_load_service = load_service
+        service._capture_snapshot_service.capture_snapshot.return_value = MagicMock(
+            contours=[]
+        )
+        config = PaintMagazineLoadConfig(
+            enabled=True,
+            pickup_mode=MAGAZINE_PICKUP_MODE_VISION_PLANNED,
+            move_to_magazine_vel_percent=100.0,
+            move_to_magazine_acc_percent=100.0,
+        )
+        ctx = self._context(service, config)
+        ctx.magazine_group = "Magazine"
+
+        next_state = handle_magazine_capture(ctx)
+
+        self.assertEqual(PaintExecutionState.COMPLETED, next_state)
+        self.assertEqual(2, load_service._verify_current_capture_pose.call_count)
+        correction = load_service._move_to_group_with_pause_resume_recovery.call_args
+        self.assertEqual("Magazine", correction.args[2])
+        self.assertEqual(50.0, correction.kwargs["velocity"])
+        self.assertEqual(20.0, correction.kwargs["acceleration"])
+        self.assertEqual(0.0, correction.kwargs["blendR"])
+        load_service._wait.assert_called_once_with(0.3, ctx.motion_cancel_requested)
+        service._capture_snapshot_service.capture_snapshot.assert_called_once_with(
+            source="paint_magazine_load"
+        )
+
     def test_verified_prepositioned_fixed_group_skips_duplicate_move(self):
         load_service = MagicMock()
         service = MagicMock()
@@ -264,6 +305,7 @@ class TestFixedMagazinePickup(unittest.TestCase):
             position_tolerance_mm=config.fixed_pickup_position_tolerance_mm,
             orientation_tolerance_deg=config.fixed_pickup_orientation_tolerance_deg,
         )
+        load_service._mark_magazine_capture_area_active.assert_called_once_with()
         load_service._move_to_group_with_pause_resume_recovery.assert_not_called()
 
     def test_fixed_prepare_does_not_use_snapshot_or_vision_target_resolver(self):

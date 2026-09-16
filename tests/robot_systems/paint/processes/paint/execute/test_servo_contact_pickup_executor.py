@@ -283,6 +283,54 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
             [label for label, _ in motion.sequences],
         )
 
+    def test_magazine_minimum_z_without_vacuum_advances_as_no_workpiece(self):
+        robot = _FakeRobot()
+        robot.support_prepared = True
+        robot.position[2] = 100.0
+        motion = _FakeMotion()
+        pickup_motion = SimpleNamespace(
+            servo_contact_linear_mm_s=100.0,
+            servo_contact_min_z_mm=0.0,
+            servo_contact_timeout_s=1.0,
+            servo_contact_poll_interval_s=0.01,
+            servo_contact_preflight_read_attempts=2,
+            servo_contact_read_failure_limit=3,
+            servo_contact_retract_linear_mm_s=25.0,
+        )
+        owner = SimpleNamespace(
+            _robot_service=robot,
+            _motion=motion,
+            _pickup_condition=lambda: False,
+            _pickup_tool=1,
+            _pickup_user=0,
+            _paint_process_config=lambda: SimpleNamespace(pickup_motion=pickup_motion),
+        )
+        waypoints = (
+            ("approach", [0, 0, 100, 0, 0, 0], 10, 10, "ptp", 0),
+            ("contact", [0, 0, 0, 0, 0, 0], 10, 10, "linear", 0),
+            ("lift", [0, 0, 50, 0, 0, 0], 10, 10, "ptp", 0),
+            ("release", [20, 30, 40, 0, 0, 0], 10, 10, "ptp", 0),
+        )
+
+        ok, message = _execute_magazine_servo_contact_pickup_release(
+            owner,
+            waypoints,
+            retract_reference_pose=[0, 0, 100, 0, 0, 0],
+            release_label="calibration",
+        )
+
+        self.assertFalse(ok)
+        self.assertEqual(NO_WORKPIECE_AT_MAGAZINE, message)
+        self.assertEqual(1, motion.vacuum_off)
+        self.assertEqual(["prepared-1"], robot.discarded_prepared)
+        self.assertEqual(
+            [
+                "Magazine pickup approach before servo contact",
+                "Magazine pickup recovery to fixed pose",
+            ],
+            [label for label, _ in motion.sequences],
+        )
+
     def test_magazine_contact_timeout_returns_to_fixed_magazine_pose(self):
         robot = _FakeRobot()
         robot.support_prepared = True

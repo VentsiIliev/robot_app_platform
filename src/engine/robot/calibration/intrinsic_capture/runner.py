@@ -178,9 +178,11 @@ def _predict_tilt_sign(
 
 def capture_charuco_sweep_dataset(
     get_pose_fn: Callable[[], List[float]],
+    move_relative_fn: Callable[..., bool],
     move_absolute_fn: Callable[[List[float]], bool],
     grab_frame_fn: Callable[[], np.ndarray],
     save_frame_fn: Callable[[np.ndarray, str], Optional[str]],
+    image_info: ImageInfo,
     pattern_size: Tuple[int, int],
     square_size_mm: float,
     marker_size_mm: float,
@@ -200,6 +202,9 @@ def capture_charuco_sweep_dataset(
     max_detection_retries: int = 1,
     detection_callback: Optional[Callable] = None,
     rz_deg: float = 0.0,
+    margin_px: float = 60.0,
+    probe_dx_mm: float = 20.0,
+    probe_dy_mm: float = 20.0,
 ) -> List[CaptureSample]:
     from src.engine.vision.implementation.VisionSystem.features.calibration.charuco import AutoCharucoBoardDetector
 
@@ -243,10 +248,10 @@ def capture_charuco_sweep_dataset(
         raise RuntimeError(f"ChArUco board not detected at home pose ({home_n} corners, need >={min_corners}).")
 
     home_result = detector.detect(home_frame)
-    home_uv = None
-    if home_result.charuco_corners is not None:
-        c = home_result.charuco_corners.reshape(-1, 2)
-        home_uv = np.array([float(np.mean(c[:, 0])), float(np.mean(c[:, 1]))])
+    if home_result.charuco_corners is None:
+        raise RuntimeError("ChArUco board center unavailable at home pose.")
+    c = home_result.charuco_corners.reshape(-1, 2)
+    home_uv = np.array([float(np.mean(c[:, 0])), float(np.mean(c[:, 1]))])
 
     def _detection_result(frame: np.ndarray):
         result = detector.detect(frame)
@@ -270,41 +275,96 @@ def capture_charuco_sweep_dataset(
             _, n, bbox, center = _detection_result(frame)
         return frame, n, bbox, center
 
-    xs = np.linspace(-sweep_x_mm, sweep_x_mm, grid_cols) if grid_cols > 1 else [0.0]
-    ys = np.linspace(-sweep_y_mm, sweep_y_mm, grid_rows) if grid_rows > 1 else [0.0]
+    def _detect(frame: np.ndarray) -> BoardDetection:
+        _, n, bbox, center = _detection_result(frame)
+        if n < min_corners or bbox is None or center is None:
+            return BoardDetection(found=False)
+        x1, y1, x2, y2 = bbox
+        return BoardDetection(
+            found=True,
+            center_px=(float(center[0]), float(center[1])),
+            bbox_px=bbox,
+            width_px=x2 - x1,
+            height_px=y2 - y1,
+        )
+
+    def _move_relative_stable(**kwargs) -> bool:
+        ok = move_relative_fn(**kwargs)
+        if ok and stabilization_delay_s > 0:
+            time.sleep(stabilization_delay_s)
+        return ok
+
+    def _move_absolute_stable(pose: List[float]) -> bool:
+        ok = move_absolute_fn(pose)
+        if ok and stabilization_delay_s > 0:
+            time.sleep(stabilization_delay_s)
+        return ok
+
+    progress_cb("Probing robot X/Y axes to map board motion in the image...")
+    jacobian = estimate_local_xy_jacobian(
+        get_pose_fn=get_pose_fn,
+        move_relative_fn=_move_relative_stable,
+        move_absolute_fn=_move_absolute_stable,
+        grab_frame_fn=grab_frame_fn,
+        detect_fn=_detect,
+        probe_dx_mm=probe_dx_mm,
+        probe_dy_mm=probe_dy_mm,
+        probe_drx_deg=0.0,
+        probe_dry_deg=0.0,
+        probe_drz_deg=0.0,
+        max_detection_retries=max_detection_retries,
+        move_absolute_fast_fn=move_absolute_fn,
+    )
+    progress_cb(f"Axis mapping complete: J={np.array2string(jacobian.J, precision=3)}")
+
+    home_det = _detect(home_frame)
+    feasible = compute_feasible_region(image_info, home_det, margin_px=margin_px)
+    regions = make_grid_regions(feasible, grid_rows=grid_rows, grid_cols=grid_cols)
     candidates: List[Tuple[str, List[float]]] = []
-    for ri, dy in enumerate(ys):
-        for ci, dx in enumerate(xs):
-            prefix = f"r{ri}_c{ci}"
-            base = [home_pose[0] + float(dx), home_pose[1] + float(dy), home_pose[2], home_pose[3], home_pose[4], home_pose[5]]
-            candidates.append((f"{prefix}_neutral", base))
-            if tilt_deg > 0:
-                for axis_index, axis_prefix in ((3, "rx"), (4, "ry")):
-                    pos = list(base)
-                    neg = list(base)
-                    pos[axis_index] += tilt_deg
-                    neg[axis_index] -= tilt_deg
-                    candidates.append((f"{prefix}_{axis_prefix}+", pos))
-                    candidates.append((f"{prefix}_{axis_prefix}-", neg))
-            if rz_deg > 0:
+    for region in regions:
+        dx, dy = jacobian.robot_delta_from_pixel_error(
+            region.center_px[0] - float(home_uv[0]),
+            region.center_px[1] - float(home_uv[1]),
+        )
+        # The configured sweep remains a hard bound, but no longer defines
+        # direction. Axis mapping decides which robot direction reaches the
+        # requested image location.
+        dx = float(np.clip(dx, -abs(sweep_x_mm), abs(sweep_x_mm)))
+        dy = float(np.clip(dy, -abs(sweep_y_mm), abs(sweep_y_mm)))
+        prefix = region.name
+        base = [
+            home_pose[0] + dx,
+            home_pose[1] + dy,
+            home_pose[2],
+            home_pose[3],
+            home_pose[4],
+            home_pose[5],
+        ]
+        candidates.append((f"{prefix}_neutral", base))
+        if tilt_deg > 0:
+            for axis_index, axis_prefix in ((3, "rx"), (4, "ry")):
                 pos = list(base)
                 neg = list(base)
-                pos[5] += rz_deg
-                neg[5] -= rz_deg
-                candidates.append((f"{prefix}_rz+", pos))
-                candidates.append((f"{prefix}_rz-", neg))
-            if z_delta_mm > 0:
-                pos = list(base)
-                neg = list(base)
-                pos[2] += z_delta_mm
-                neg[2] -= z_delta_mm
-                candidates.append((f"{prefix}_z+", pos))
-                candidates.append((f"{prefix}_z-", neg))
+                pos[axis_index] += tilt_deg
+                neg[axis_index] -= tilt_deg
+                candidates.append((f"{prefix}_{axis_prefix}+", pos))
+                candidates.append((f"{prefix}_{axis_prefix}-", neg))
+        if rz_deg > 0:
+            pos = list(base)
+            neg = list(base)
+            pos[5] += rz_deg
+            neg[5] -= rz_deg
+            candidates.append((f"{prefix}_rz+", pos))
+            candidates.append((f"{prefix}_rz-", neg))
+        if z_delta_mm > 0:
+            pos = list(base)
+            neg = list(base)
+            pos[2] += z_delta_mm
+            neg[2] -= z_delta_mm
+            candidates.append((f"{prefix}_z+", pos))
+            candidates.append((f"{prefix}_z-", neg))
 
     samples: List[CaptureSample] = []
-    j_data: List[Tuple[np.ndarray, np.ndarray]] = []
-    saved_bboxes: List[Tuple] = []
-    frame_hw: Optional[Tuple[int, int]] = None
 
     def _record(frame: np.ndarray, tag: str, pose: List[float], n: int, bbox, center) -> None:
         path = save_frame_fn(frame, tag)
@@ -314,15 +374,9 @@ def capture_charuco_sweep_dataset(
         samples.append(CaptureSample(tag.rsplit("_", 1)[0], tag.rsplit("_", 1)[1], current_pose, path))
         progress_cb(f"  Saved ({n} corners) -> {path}")
         if bbox is not None:
-            saved_bboxes.append(bbox)
             if detection_callback is not None:
                 h, w = frame.shape[:2]
                 detection_callback(bbox, (w, h))
-        if tag.endswith("_neutral") and home_uv is not None and center is not None:
-            d_robot = np.array(pose[:2]) - np.array(home_pose[:2])
-            d_uv = center - home_uv
-            if np.linalg.norm(d_robot) > 1.0:
-                j_data.append((d_robot, d_uv))
 
     for idx, (tag, pose) in enumerate(candidates):
         if stop_event.is_set():
@@ -335,43 +389,10 @@ def capture_charuco_sweep_dataset(
         if stabilization_delay_s > 0:
             time.sleep(stabilization_delay_s)
         frame, n, bbox, center = _grab_and_detect()
-        if frame_hw is None and frame is not None:
-            frame_hw = frame.shape[:2]
         if n < min_corners:
             progress_cb(f"  Only {n} corners (need >={min_corners}) - skipping.")
             continue
         _record(frame, tag, pose, n, bbox, center)
-
-    if not stop_event.is_set() and len(j_data) >= 3 and frame_hw is not None and home_uv is not None:
-        A = np.array([d[0] for d in j_data])
-        B = np.array([d[1] for d in j_data])
-        J_inv = np.linalg.pinv(np.linalg.lstsq(A, B, rcond=None)[0].T)
-        gcols, grows = 8, 6
-        h, w = frame_hw
-        cw, ch = w / gcols, h / grows
-        grid = np.zeros((grows, gcols), dtype=np.float32)
-        for (x1, y1, x2, y2) in saved_bboxes:
-            for r in range(max(0, int(y1 / ch)), min(grows, int(y2 / ch) + 1)):
-                for c in range(max(0, int(x1 / cw)), min(gcols, int(x2 / cw) + 1)):
-                    grid[r, c] += 1
-        gap_cells = [(r, c) for r in range(grows) for c in range(gcols) if grid[r, c] == 0]
-        for r, c in gap_cells:
-            if stop_event.is_set():
-                break
-            target_uv = np.array([(c + 0.5) * cw, (r + 0.5) * ch])
-            d_robot = J_inv @ (target_uv - home_uv)
-            gap_pose = list(home_pose)
-            gap_pose[0] += float(d_robot[0])
-            gap_pose[1] += float(d_robot[1])
-            tag = f"gap_r{r}_c{c}_neutral"
-            if not move_absolute_fn(gap_pose):
-                continue
-            if stabilization_delay_s > 0:
-                time.sleep(stabilization_delay_s)
-            frame, n, bbox, center = _grab_and_detect()
-            if n < min_corners:
-                continue
-            _record(frame, tag, gap_pose, n, bbox, center)
 
     move_absolute_fn(home_pose)
     progress_cb(f"Sweep complete: {len(samples)} frames captured.")
@@ -415,9 +436,11 @@ def capture_intrinsic_dataset(
     if board_type == BoardType.CHARUCO:
         return capture_charuco_sweep_dataset(
             get_pose_fn=get_pose_fn,
+            move_relative_fn=move_relative_fn,
             move_absolute_fn=move_absolute_fn,
             grab_frame_fn=grab_frame_fn,
             save_frame_fn=save_frame_fn,
+            image_info=image_info,
             pattern_size=pattern_size,
             square_size_mm=square_size_mm,
             marker_size_mm=marker_size_mm,
@@ -437,6 +460,9 @@ def capture_intrinsic_dataset(
             max_detection_retries=max_detection_retries,
             detection_callback=detection_callback,
             rz_deg=charuco_rz_deg,
+            margin_px=margin_px,
+            probe_dx_mm=probe_dx_mm,
+            probe_dy_mm=probe_dy_mm,
         )
 
     samples: List[CaptureSample] = []

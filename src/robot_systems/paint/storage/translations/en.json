@@ -260,6 +260,8 @@
     "Plate Top-Left Pose": "Plate Top-Left Pose",
     "Capture Top-Left From Current Pose": "Capture Top-Left From Current Pose",
     "Captured Robot Frame": "Captured Robot Frame",
+    "Clear Tray Corners": "Clear Tray Corners",
+    "Tray corners cleared. Capture all four corners using the new robot tool/user, then save settings.": "Tray corners cleared. Capture all four corners using the new robot tool/user, then save settings.",
     "Plate Passage Gate Pose": "Plate Passage Gate Pose",
     "Use Gate-to-Next-Cycle Midpoint": "Use Gate-to-Next-Cycle Midpoint",
     "Gate-to-Next-Cycle Midpoint Pose": "Gate-to-Next-Cycle Midpoint Pose",

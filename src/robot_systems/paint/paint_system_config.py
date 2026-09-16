@@ -78,7 +78,7 @@ WORK_AREA_SETTINGS_APP = True
 CAMERA_SETTINGS_APP = True
 
 # Configures and runs vision and robot calibration-related setup operations.
-CALIBRATION_SETTINGS_APP = False
+CALIBRATION_SETTINGS_APP = True
 
 # Configures paint-process motion, pickup, cleanup, and drop-off behavior.
 PAINT_PROCESS_SETTINGS_APP = True
@@ -99,7 +99,7 @@ INTRINSIC_CAPTURE_APP = False
 HAND_EYE_CALIBRATION_APP = False
 
 # Detects a target and validates its resolved robot pickup position.
-PICK_TARGET_APP = False
+PICK_TARGET_APP = True
 
 # Teaches and verifies the robot movement planes used by paint execution.
 PAINT_MOTION_PLANE_SETUP_APP = False
@@ -108,4 +108,4 @@ PAINT_MOTION_PLANE_SETUP_APP = False
 PAINT_MOTION_RECIPE_APP = False
 
 # Test application for marker-based shaft alignment and robot-pose compensation.
-SHAFT_ALIGNMENT_APP = True
+SHAFT_ALIGNMENT_APP = False

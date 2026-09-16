@@ -24,6 +24,7 @@ from src.engine.robot.calibration.robot_calibration.states.handle_height_sample_
     handle_height_sample_state,
 )
 from src.engine.robot.calibration.robot_calibration.states.iterate_alignment import (
+    _should_verify_stable_near_target,
     handle_iterate_alignment_state,
 )
 from src.engine.robot.calibration.robot_calibration.states.robot_calibration_states import RobotCalibrationStates
@@ -239,10 +240,35 @@ class TestAlignRobotHandler(unittest.TestCase):
 
     def test_move_failure_returns_error(self):
         ctx = _make_context()
+        ctx.image_to_robot_mapping.map.return_value = (10.0, 0.0)
         ctx.calibration_robot_controller.move_to_position.return_value = False
         ctx.robot_positions_for_calibration = {}
         result = handle_align_robot_state(ctx)
         self.assertEqual(result, RobotCalibrationStates.ERROR)
+
+    def test_skips_duplicate_stages_when_approach_and_target_z_match(self):
+        ctx = _make_context()
+        ctx.image_to_robot_mapping.map.return_value = (10.0, 0.0)
+
+        result = handle_align_robot_state(ctx)
+
+        self.assertEqual(result, RobotCalibrationStates.ITERATE_ALIGNMENT)
+        ctx.calibration_robot_controller.move_to_position.assert_called_once_with(
+            [10.0, 0.0, 100.0, 0, 0, 0], blocking=True
+        )
+
+    def test_target_uses_calibration_orientation_not_live_readback(self):
+        ctx = _make_context()
+        ctx.image_to_robot_mapping.map.return_value = (10.0, 0.0)
+        ctx.calibration_robot_controller.get_current_position.return_value = [0, 0, 99, 11, 12, 13]
+        ctx.calibration_robot_controller.get_calibration_position.return_value = [0, 0, 250, 21, 22, 23]
+
+        result = handle_align_robot_state(ctx)
+
+        self.assertEqual(result, RobotCalibrationStates.ITERATE_ALIGNMENT)
+        commanded_poses = [call.args[0] for call in ctx.calibration_robot_controller.move_to_position.call_args_list]
+        self.assertEqual(commanded_poses[-1], [10.0, 0.0, 100.0, 21, 22, 23])
+        self.assertTrue(all(pose[2:] == [100.0, 21, 22, 23] for pose in commanded_poses))
 
     def test_returns_cancelled_when_stop_event_fires_in_post_move_wait(self):
         ctx = _make_context()
@@ -266,6 +292,18 @@ import numpy as np
 
 
 class TestIterateAlignmentHandler(unittest.TestCase):
+
+    def test_stable_near_target_errors_trigger_verification_candidate(self):
+        state = {"error_history_mm": [0.29, 0.28], "force_correction": False}
+        self.assertTrue(_should_verify_stable_near_target(state, 0.27, 0.25))
+
+    def test_verification_rejection_forces_one_correction(self):
+        state = {"error_history_mm": [0.29, 0.28], "force_correction": True}
+        self.assertFalse(_should_verify_stable_near_target(state, 0.27, 0.25))
+
+    def test_unstable_near_target_errors_do_not_trigger_verification(self):
+        state = {"error_history_mm": [0.24, 0.39], "force_correction": False}
+        self.assertFalse(_should_verify_stable_near_target(state, 0.28, 0.25))
 
     def _aligned_ctx(self):
         """Context where alignment succeeds on first iteration."""
@@ -371,6 +409,23 @@ class TestIterateAlignmentHandler(unittest.TestCase):
         result = handle_iterate_alignment_state(ctx)
         self.assertEqual(result, RobotCalibrationStates.SAMPLE_HEIGHT)
 
+    def test_acceptable_alignment_gets_two_bounded_improvement_attempts(self):
+        ctx = self._aligned_ctx()
+        ctx.alignment_threshold_mm = 1.0
+        ctx.calibration_vision.PPM = 1.0
+        ctx.calibration_vision.marker_top_left_corners = {0: np.array([320.8, 240.0])}
+        ctx.calibration_robot_controller.move_to_iterative_position.return_value = True
+
+        first = handle_iterate_alignment_state(ctx)
+        second = handle_iterate_alignment_state(ctx)
+        third = handle_iterate_alignment_state(ctx)
+
+        self.assertEqual(RobotCalibrationStates.ITERATE_ALIGNMENT, first)
+        self.assertEqual(RobotCalibrationStates.ITERATE_ALIGNMENT, second)
+        self.assertEqual(RobotCalibrationStates.SAMPLE_HEIGHT, third)
+        self.assertEqual(2, ctx._marker_retry_state["improvement_attempts"])
+        self.assertEqual(2, ctx.calibration_robot_controller.move_to_iterative_position.call_count)
+
     def test_alignment_success_returns_capture_tcp_offset_when_enabled(self):
         ctx = self._aligned_ctx()
         ctx.camera_tcp_offset_config.run_during_robot_calibration = True
@@ -391,6 +446,21 @@ class TestIterateAlignmentHandler(unittest.TestCase):
         ctx = self._not_aligned_ctx()
         result = handle_iterate_alignment_state(ctx)
         self.assertEqual(result, RobotCalibrationStates.ITERATE_ALIGNMENT)
+
+    def test_iterative_move_pins_calibration_orientation_and_target_z(self):
+        ctx = self._not_aligned_ctx()
+        ctx.Z_target = 150.0
+        ctx.calibration_robot_controller.get_iterative_align_position.return_value = [1, 2, 149.2, 21, 22, 23]
+
+        result = handle_iterate_alignment_state(ctx)
+
+        self.assertEqual(result, RobotCalibrationStates.ITERATE_ALIGNMENT)
+        call = ctx.calibration_robot_controller.get_iterative_align_position.call_args
+        self.assertFalse(call.kwargs["preserve_current_orientation"])
+        ctx.calibration_robot_controller.move_to_iterative_position.assert_called_once_with(
+            [1, 2, 150.0, 21, 22, 23],
+            blocking=True,
+        )
 
 
 # ══════════════════════════════════════════════════════════════════════════════

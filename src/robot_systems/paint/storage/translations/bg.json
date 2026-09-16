@@ -260,6 +260,8 @@
     "Plate Top-Left Pose": "Поза горе вляво на плочата",
     "Capture Top-Left From Current Pose": "Запиши горния ляв ъгъл от текущата поза",
     "Captured Robot Frame": "Записана роботна рамка",
+    "Clear Tray Corners": "Изчисти ъглите на таблата",
+    "Tray corners cleared. Capture all four corners using the new robot tool/user, then save settings.": "Ъглите на таблата са изчистени. Запишете и четирите ъгъла с новия инструмент/потребителска рамка, след което запазете настройките.",
     "Plate Passage Gate Pose": "Поза на входа към плочата",
     "Use Gate-to-Next-Cycle Midpoint": "Използвай междинна точка от входа към началото на следващия цикъл",
     "Gate-to-Next-Cycle Midpoint Pose": "Междинна поза към началото на следващия цикъл",

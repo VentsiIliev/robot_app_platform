@@ -80,6 +80,55 @@ class _FakeSettingsService:
 
 class TestCameraTcpOffsetCalibrationService(unittest.TestCase):
 
+    def test_post_solve_verification_persists_measured_angle_residuals(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            matrix_path = str(Path(tmp_dir) / "cameraToRobotMatrix_camera_center.npy")
+            np.save(matrix_path, np.eye(3, dtype=np.float32))
+            calibration_settings = RobotCalibrationSettings()
+            cfg = calibration_settings.camera_tcp_offset
+            cfg.rotation_step_deg = 45.0
+            cfg.verification_samples = 2
+            cfg.settle_time_s = 0.0
+            cfg.verification_max_error_mm = 5.0
+            service = CameraTcpOffsetCalibrationService(
+                vision_service=_FakeVisionService(matrix_path=matrix_path, detections=[]),
+                robot_service=_FakeRobotService(),
+                navigation_service=None,
+                settings_service=_FakeSettingsService(),
+                robot_config_key="robot_config",
+                robot_config=RobotSettings(),
+                calibration_settings=calibration_settings,
+                robot_tool=0,
+                robot_user=0,
+            )
+            service._image_to_robot_mapping = object()
+
+            with (
+                patch.object(service, "_move", return_value=True),
+                patch.object(service, "_move_linear", return_value=True),
+                patch.object(
+                    service,
+                    "_measure_center_correction",
+                    side_effect=[(1.0, -0.5), (0.1, 0.1), (3.0, 1.0), (0.2, -0.1)],
+                ),
+            ):
+                residuals = service._verify_solved_offset(
+                    reference_pose=[10.0, 20.0, 150.0, -180.0, 0.0, 0.0],
+                    reference_rz=0.0,
+                    offset_x=75.0,
+                    offset_y=25.0,
+                    effective_iterations=2,
+                )
+
+            self.assertEqual(
+                [
+                    {"angle_deg": 0.0, "x_mm": 0.0, "y_mm": 0.0},
+                    {"angle_deg": 45.0, "x_mm": 1.0, "y_mm": -0.5},
+                    {"angle_deg": 90.0, "x_mm": 3.0, "y_mm": 1.0},
+                ],
+                residuals,
+            )
+
     def test_calibrate_solves_and_saves_rotating_local_offset(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             matrix_path = str(Path(tmp_dir) / "cameraToRobotMatrix_camera_center.npy")
@@ -127,6 +176,7 @@ class TestCameraTcpOffsetCalibrationService(unittest.TestCase):
             cfg.settle_time_s = 0.0
             cfg.detection_attempts = 3
             cfg.retry_delay_s = 0.0
+            cfg.verification_enabled = False
 
             service = CameraTcpOffsetCalibrationService(
                 vision_service=vision,

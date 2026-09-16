@@ -3,6 +3,7 @@
     "display_name": "Български"
   },
   "RobotSettings": {
+    "Use Automatic Camera-to-TCP Offset": "Използване на автоматичното отместване камера–TCP",
     "Set Current Position": "Задаване на текуща позиция",
     "Could not read robot position.\nMake sure the robot is connected.": "Позицията на робота не може да бъде прочетена.\nУверете се, че роботът е свързан.",
     "Remove Group": "Премахване на група",

@@ -3,7 +3,7 @@
   "Width": 1280,
   "Height": 720,
   "Skip frames": 30,
-  "Capture position offset": -5.0,
+  "Capture position offset": 0.0,
   "Contour detection": false,
   "Draw contours": false,
   "Threshold": 128,
@@ -25,7 +25,7 @@
     "Erode iterations": 3
   },
   "Brightness Control": {
-    "Enable auto adjust": false,
+    "Enable auto adjust": true,
     "Kp": 0.7,
     "Ki": 0.2,
     "Kd": 0.05,
@@ -57,8 +57,8 @@
     "Chessboard height": 15,
     "Square size (mm)": 15.0,
     "Reference board mode": "auto",
-    "ChArUco board width": 15,
-    "ChArUco board height": 15,
+    "ChArUco board width": 19,
+    "ChArUco board height": 12,
     "ChArUco square size (mm)": 15.0,
     "ChArUco marker size (mm)": 11.0,
     "Skip frames": 30

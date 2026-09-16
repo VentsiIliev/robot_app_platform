@@ -34,7 +34,6 @@ _logger = logging.getLogger(__name__)
 
 wait_to_reach_position = True  # TODO set to False only for testing!
 
-
 def _get_marker_retry_state(context, marker_id: int) -> dict:
     state = getattr(context, "_marker_retry_state", None)
     if state is None or state.get("marker_id") != int(marker_id):
@@ -42,7 +41,14 @@ def _get_marker_retry_state(context, marker_id: int) -> dict:
             "marker_id": int(marker_id),
             "not_found_streak": 0,
             "strict_verification_failures": 0,
+            "strict_verification_rejections": 0,
             "near_lock_seen": False,
+            "error_history_mm": [],
+            "force_correction": False,
+            "best_acceptable_pose": None,
+            "best_acceptable_error_mm": None,
+            "improvement_attempts": 0,
+            "restored_best_pose": False,
         }
         context._marker_retry_state = state
     return state
@@ -53,7 +59,14 @@ def _reset_marker_retry_state(context, marker_id: int) -> dict:
         "marker_id": int(marker_id),
         "not_found_streak": 0,
         "strict_verification_failures": 0,
+        "strict_verification_rejections": 0,
         "near_lock_seen": False,
+        "error_history_mm": [],
+        "force_correction": False,
+        "best_acceptable_pose": None,
+        "best_acceptable_error_mm": None,
+        "improvement_attempts": 0,
+        "restored_best_pose": False,
     }
     context._marker_retry_state = state
     return state
@@ -146,6 +159,87 @@ def _get_radial_iterative_damping(context, marker_id: int, iteration_count: int)
     min_scale = 0.55 if iteration_count == 1 else 0.75
     damping = 1.0 - (1.0 - min_scale) * severity
     return float(max(min_scale, min(damping, 1.0)))
+
+
+def _should_verify_stable_near_target(
+    retry_state: dict,
+    current_error_mm: float,
+    alignment_threshold_mm: float,
+) -> bool:
+    """Avoid noisy micro-moves without relaxing the acceptance threshold.
+
+    A stable cluster just outside the threshold is sent to the existing strict
+    verification path. Strict verification must still satisfy the original
+    threshold before the marker is accepted.
+    """
+    history = retry_state.setdefault("error_history_mm", [])
+    history.append(float(current_error_mm))
+    del history[:-5]
+    if retry_state.get("force_correction") or len(history) < 3:
+        return False
+
+    recent = np.asarray(history[-3:], dtype=float)
+    return bool(
+        float(np.max(recent)) <= alignment_threshold_mm * 1.5
+        and float(np.median(recent)) <= alignment_threshold_mm * 1.2
+    )
+
+
+def _finish_verified_alignment(
+    context,
+    marker_id: int,
+    verification_frame,
+    verify_error_mm: float,
+    new_ppm: float,
+) -> RobotCalibrationStates:
+    progress = context.progress
+    artifacts = context.artifacts
+    current_pose = context.calibration_robot_controller.get_current_position()
+    _logger.info(
+        "Homography sample accepted after strict verification - marker=%d pose=[x=%.3f y=%.3f z=%.3f rx=%.4f ry=%.4f rz=%.4f] verify_error=%.3fmm iterations=%d",
+        marker_id,
+        current_pose[0], current_pose[1], current_pose[2],
+        current_pose[3], current_pose[4], current_pose[5],
+        verify_error_mm,
+        progress.iteration_count,
+    )
+    frozen_px = artifacts.camera_points_for_homography.get(int(marker_id))
+    live_px = context.calibration_vision.marker_top_left_corners.get(int(marker_id))
+    if frozen_px is not None:
+        frozen_px = np.asarray(frozen_px, dtype=float).reshape(2)
+    if live_px is not None:
+        live_px = np.asarray(live_px, dtype=float).reshape(2)
+    pixel_delta = (
+        live_px - frozen_px
+        if frozen_px is not None and live_px is not None
+        else None
+    )
+    _logger.info(
+        "[CALIB_GEOMETRY_SAMPLE] marker=%d frozen_px=%s live_aligned_px=%s "
+        "live_minus_frozen_px=%s accepted_robot_xy=(%.3f, %.3f) z=%.3f "
+        "ppm_working=%.6f initial_ppm=%s verify_error_mm=%.3f",
+        marker_id,
+        _format_point(frozen_px),
+        _format_point(live_px),
+        _format_point(pixel_delta),
+        float(current_pose[0]),
+        float(current_pose[1]),
+        float(current_pose[2]),
+        float(new_ppm),
+        (
+            f"{float(context.calibration_vision.PPM):.6f}"
+            if context.calibration_vision.PPM is not None
+            else "None"
+        ),
+        float(verify_error_mm),
+    )
+    context.robot_positions_for_calibration[marker_id] = current_pose
+    artifacts.robot_positions_for_calibration = dict(context.robot_positions_for_calibration)
+    show_live_feed(context, verification_frame, verify_error_mm, broadcast_image=context.broadcast_events)
+
+    if should_capture_tcp_offset_for_current_marker(context):
+        return RobotCalibrationStates.CAPTURE_TCP_OFFSET
+    return RobotCalibrationStates.SAMPLE_HEIGHT
 
 
 def handle_iterate_alignment_state(context) -> RobotCalibrationStates:
@@ -259,13 +353,57 @@ def handle_iterate_alignment_state(context) -> RobotCalibrationStates:
         retry_state["near_lock_seen"] = True
     processing_time = time.time() - processing_start
 
+    best_pose = retry_state.get("best_acceptable_pose")
+    if (
+        best_pose is not None
+        and int(retry_state.get("improvement_attempts", 0)) > 0
+        and current_error_mm > alignment_threshold_mm
+        and not retry_state.get("restored_best_pose")
+    ):
+        best_error = float(retry_state.get("best_acceptable_error_mm", alignment_threshold_mm))
+        _logger.info(
+            "Marker %s bounded improvement became worse (%.3fmm > %.3fmm); "
+            "restoring best verified pose %.3fmm.",
+            marker_id,
+            current_error_mm,
+            alignment_threshold_mm,
+            best_error,
+        )
+        retry_state["restored_best_pose"] = True
+        if not context.calibration_robot_controller.move_to_iterative_position(
+            list(best_pose), blocking=wait_to_reach_position
+        ):
+            retry_state["restored_best_pose"] = False
+            return fail_calibration(
+                context,
+                f"Calibration failed: Could not restore best verified pose for marker {marker_id}.",
+            )
+        if context.interruptible_sleep(adaptive_stability_wait(context, best_error)):
+            return RobotCalibrationStates.CANCELLED
+        context._last_error_mm_for_sampling = best_error
+        return RobotCalibrationStates.ITERATE_ALIGNMENT
+
     alignment_success = current_error_mm <= alignment_threshold_mm
+    stable_near_target = _should_verify_stable_near_target(
+        retry_state,
+        current_error_mm,
+        alignment_threshold_mm,
+    )
+    should_verify = alignment_success or stable_near_target
     movement_time = stability_time = None
     result = None
 
-    if alignment_success:
+    if should_verify:
         retry_state["near_lock_seen"] = True
         settle_s = 0.5
+        if stable_near_target and not alignment_success:
+            _logger.info(
+                "Marker %s is stable near threshold at iteration %s (error=%.3fmm); "
+                "using strict verification instead of another micro-move.",
+                marker_id,
+                progress.iteration_count,
+                current_error_mm,
+            )
         _logger.info(
             "Marker %s reached threshold at iteration %s (error=%.3fmm). "
             "Settling for %.2fs before strict re-verification.",
@@ -289,6 +427,7 @@ def handle_iterate_alignment_state(context) -> RobotCalibrationStates:
 
         if verify_error_mm is None:
             retry_state["strict_verification_failures"] += 1
+            retry_state["force_correction"] = True
             _logger.warning(
                 "Strict post-settle verification failed for marker %s: marker not found. Continuing iterative alignment.",
                 marker_id,
@@ -312,66 +451,129 @@ def handle_iterate_alignment_state(context) -> RobotCalibrationStates:
             return RobotCalibrationStates.ITERATE_ALIGNMENT
 
         if verify_error_mm > alignment_threshold_mm:
+            retry_state["strict_verification_rejections"] += 1
+            retry_state["force_correction"] = True
             _logger.info(
-                "Strict post-settle verification rejected marker %s: verify_error=%.3fmm threshold=%.3fmm offsets_px=(%.2f, %.2f). Continuing alignment.",
+                "Strict post-settle verification rejected marker %s: verify_error=%.3fmm threshold=%.3fmm offsets_px=(%.2f, %.2f) rejection=%d. Continuing alignment.",
                 marker_id,
                 verify_error_mm,
                 alignment_threshold_mm,
                 verify_offset_x_px,
                 verify_offset_y_px,
+                retry_state["strict_verification_rejections"],
             )
             show_live_feed(context, verification_frame, verify_error_mm, broadcast_image=context.broadcast_events)
             context._last_error_mm_for_sampling = verify_error_mm
+            max_strict_rejections = max(
+                1,
+                int(getattr(context, "max_strict_verification_rejections", 3) or 3),
+            )
+            if retry_state["strict_verification_rejections"] >= max_strict_rejections:
+                _logger.warning(
+                    "Marker %s failed strict near-target verification %s times; "
+                    "using a nearby fallback instead of continuing micro-corrections.",
+                    marker_id,
+                    retry_state["strict_verification_rejections"],
+                )
+                if try_activate_fallback_target(
+                    context,
+                    marker_id,
+                    f"strict near-target verification rejected {retry_state['strict_verification_rejections']} times",
+                ):
+                    _reset_marker_retry_state(context, marker_id)
+                    progress.iteration_count = 0
+                    return RobotCalibrationStates.ALIGN_ROBOT
             return RobotCalibrationStates.ITERATE_ALIGNMENT
 
         retry_state["strict_verification_failures"] = 0
+        retry_state["strict_verification_rejections"] = 0
         retry_state["near_lock_seen"] = False
+        retry_state["force_correction"] = False
         current_pose = context.calibration_robot_controller.get_current_position()
-        _logger.info(
-            "Homography sample accepted after strict verification - marker=%d pose=[x=%.3f y=%.3f z=%.3f rx=%.4f ry=%.4f rz=%.4f] verify_error=%.3fmm iterations=%d",
-            marker_id,
-            current_pose[0], current_pose[1], current_pose[2],
-            current_pose[3], current_pose[4], current_pose[5],
-            verify_error_mm,
-            progress.iteration_count,
+        best_error = retry_state.get("best_acceptable_error_mm")
+        improvement_margin_mm = max(
+            0.0,
+            float(getattr(context, "alignment_improvement_margin_mm", 0.03) or 0.03),
         )
-        frozen_px = artifacts.camera_points_for_homography.get(int(marker_id))
-        live_px = context.calibration_vision.marker_top_left_corners.get(int(marker_id))
-        if frozen_px is not None:
-            frozen_px = np.asarray(frozen_px, dtype=float).reshape(2)
-        if live_px is not None:
-            live_px = np.asarray(live_px, dtype=float).reshape(2)
-        pixel_delta = (
-            live_px - frozen_px
-            if frozen_px is not None and live_px is not None
-            else None
-        )
-        _logger.info(
-            "[CALIB_GEOMETRY_SAMPLE] marker=%d frozen_px=%s live_aligned_px=%s "
-            "live_minus_frozen_px=%s accepted_robot_xy=(%.3f, %.3f) z=%.3f "
-            "ppm_working=%.6f initial_ppm=%s verify_error_mm=%.3f",
-            marker_id,
-            _format_point(frozen_px),
-            _format_point(live_px),
-            _format_point(pixel_delta),
-            float(current_pose[0]),
-            float(current_pose[1]),
-            float(current_pose[2]),
-            float(new_ppm),
-            (
-                f"{float(context.calibration_vision.PPM):.6f}"
-                if context.calibration_vision.PPM is not None
-                else "None"
-            ),
-            float(verify_error_mm),
-        )
-        context.robot_positions_for_calibration[marker_id] = current_pose
-        artifacts.robot_positions_for_calibration = dict(context.robot_positions_for_calibration)
-        show_live_feed(context, verification_frame, verify_error_mm, broadcast_image=context.broadcast_events)
+        if best_error is None or verify_error_mm < float(best_error) - improvement_margin_mm:
+            retry_state["best_acceptable_pose"] = list(current_pose)
+            retry_state["best_acceptable_error_mm"] = float(verify_error_mm)
+            retry_state["restored_best_pose"] = False
+            best_error = float(verify_error_mm)
 
-        if should_capture_tcp_offset_for_current_marker(context):
-            return RobotCalibrationStates.CAPTURE_TCP_OFFSET
-        return RobotCalibrationStates.SAMPLE_HEIGHT
+        improvement_target_mm = min(
+            alignment_threshold_mm,
+            max(
+                0.0,
+                float(
+                    getattr(
+                        context,
+                        "alignment_improvement_target_mm",
+                        alignment_threshold_mm * 0.6,
+                    )
+                ),
+            ),
+        )
+        max_improvement_attempts = max(
+            0,
+            int(getattr(context, "alignment_improvement_attempts", 2) or 0),
+        )
+        improvement_attempts = int(retry_state.get("improvement_attempts", 0))
+
+        if verify_error_mm <= improvement_target_mm or retry_state.get("restored_best_pose"):
+            return _finish_verified_alignment(
+                context, marker_id, verification_frame, verify_error_mm, new_ppm
+            )
+
+        if improvement_attempts >= max_improvement_attempts:
+            best_pose = retry_state.get("best_acceptable_pose")
+            best_error = float(retry_state.get("best_acceptable_error_mm", verify_error_mm))
+            pose_delta = (
+                np.max(np.abs(np.asarray(current_pose[:6], dtype=float) - np.asarray(best_pose[:6], dtype=float)))
+                if best_pose is not None
+                else 0.0
+            )
+            if best_pose is not None and pose_delta > 0.01 and best_error < verify_error_mm:
+                _logger.info(
+                    "Marker %s improvement attempts exhausted; restoring best verified pose "
+                    "(best=%.3fmm current=%.3fmm).",
+                    marker_id,
+                    best_error,
+                    verify_error_mm,
+                )
+                retry_state["restored_best_pose"] = True
+                if not context.calibration_robot_controller.move_to_iterative_position(
+                    list(best_pose), blocking=wait_to_reach_position
+                ):
+                    retry_state["restored_best_pose"] = False
+                    return fail_calibration(
+                        context,
+                        f"Calibration failed: Could not restore best verified pose for marker {marker_id}.",
+                    )
+                if context.interruptible_sleep(adaptive_stability_wait(context, best_error)):
+                    return RobotCalibrationStates.CANCELLED
+                context._last_error_mm_for_sampling = best_error
+                return RobotCalibrationStates.ITERATE_ALIGNMENT
+            return _finish_verified_alignment(
+                context, marker_id, verification_frame, verify_error_mm, new_ppm
+            )
+
+        retry_state["improvement_attempts"] = improvement_attempts + 1
+        current_error_mm = float(verify_error_mm)
+        current_error_px = float(np.hypot(verify_offset_x_px, verify_offset_y_px))
+        offset_x_mm = float(verify_offset_x_px) / new_ppm
+        offset_y_mm = float(verify_offset_y_px) / new_ppm
+        retry_state["force_correction"] = True
+        _logger.info(
+            "Marker %s is acceptable at %.3fmm; attempting bounded improvement %d/%d "
+            "toward %.3fmm (saved best=%.3fmm).",
+            marker_id,
+            verify_error_mm,
+            retry_state["improvement_attempts"],
+            max_improvement_attempts,
+            improvement_target_mm,
+            float(best_error),
+        )
 
     mapped_x_mm, mapped_y_mm = context.image_to_robot_mapping.map(offset_x_mm, offset_y_mm)
     damping = _get_radial_iterative_damping(context, marker_id, progress.iteration_count)
@@ -390,16 +592,17 @@ def handle_iterate_alignment_state(context) -> RobotCalibrationStates:
     )
 
     try:
-        """
-        # Preserve the current tool orientation during iterative alignment.
-        # The fine-alignment loop must only correct X/Y. Z is locked separately to the
-        # calibration plane; otherwise tiny live Z readback/settling differences can be
-        # copied into each new target and accumulate into Z drift, changing camera scale
-        # and making small visual corrections stop converging.
-        """
         iterative_position = context.calibration_robot_controller.get_iterative_align_position(
-            current_error_mm, mapped_x_mm, mapped_y_mm, alignment_threshold_mm,preserve_current_orientation=True
+            current_error_mm,
+            mapped_x_mm,
+            mapped_y_mm,
+            alignment_threshold_mm,
+            preserve_current_orientation=False,
         )
+        # The controller supplies the calibration-start RX/RY/RZ when current
+        # orientation preservation is disabled.  Pin Z as well so readback
+        # noise cannot accumulate across fine-alignment moves.
+        iterative_position[2] = progress.z_target
     except RuntimeError as exc:
         _logger.error("Cannot compute iterative position: %s", exc)
         if try_activate_fallback_target(context, marker_id, "iterative movement failure"):
@@ -429,6 +632,7 @@ def handle_iterate_alignment_state(context) -> RobotCalibrationStates:
             f"Check robot connectivity and safety systems.",
         )
 
+    retry_state["force_correction"] = False
     store_ppm_probe(context, robot_pos_now, current_error_px)
     scaled_wait = adaptive_stability_wait(context, current_error_mm)
     _logger.debug(

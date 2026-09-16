@@ -209,6 +209,21 @@ class PickTargetApplicationService(IPickTargetService):
                         self._target_point,
                         frame=self._active_frame,
                     )
+                    _logger.info(
+                        "[PICK_TARGET_RESOLVE] target=%s frame=%s rz=%.3f pixels=(%.3f, %.3f) "
+                        "calibration_xy=(%.3f, %.3f) plane_xy=(%.3f, %.3f) final_xy=(%.3f, %.3f)",
+                        str(getattr(self._target_point, "name", "")),
+                        self._active_frame,
+                        float(self._pickup_plane_rz),
+                        float(px),
+                        float(py),
+                        float(result.calibration_xy[0]),
+                        float(result.calibration_xy[1]),
+                        float(result.plane_xy[0]),
+                        float(result.plane_xy[1]),
+                        float(result.final_xy[0]),
+                        float(result.final_xy[1]),
+                    )
                     robot_targets.append(result.robot_pose())
             except Exception:
                 _logger.exception("Failed to process contour centroid")

@@ -943,19 +943,24 @@ class _PlateCornerTable(QWidget):
         layout.addWidget(self._table)
         actions = QHBoxLayout()
         actions.addStretch()
+        self._clear = QPushButton(_t("Clear Tray Corners"))
         self._set_current = QPushButton(_t("Set Current"))
         self._edit = QPushButton(_t("Edit"))
         self._move_to = QPushButton(_t("Move To"))
+        self._clear.setStyleSheet(GHOST_BTN_STYLE)
         self._set_current.setStyleSheet(ACTION_BTN_STYLE)
         self._move_to.setStyleSheet(ACTION_BTN_STYLE)
         self._edit.setStyleSheet(GHOST_BTN_STYLE)
+        self._clear.setCursor(Qt.CursorShape.PointingHandCursor)
         self._set_current.setCursor(Qt.CursorShape.PointingHandCursor)
         self._edit.setCursor(Qt.CursorShape.PointingHandCursor)
         self._move_to.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._clear.clicked.connect(self._on_clear)
         self._edit.clicked.connect(self._on_edit)
         self._move_to.clicked.connect(self._on_move_to)
         self._set_current.clicked.connect(self._on_set_current)
         self._table.itemSelectionChanged.connect(self._update_actions)
+        actions.addWidget(self._clear)
         actions.addWidget(self._edit)
         actions.addWidget(self._move_to)
         actions.addWidget(self._set_current)
@@ -984,6 +989,9 @@ class _PlateCornerTable(QWidget):
         row = self._table.currentRow()
         if 0 <= row < len(self._ROWS):
             self._emit({"action": "set_current", "corner_key": self._ROWS[row][0]})
+
+    def _on_clear(self) -> None:
+        self._emit({"action": "clear"})
 
     def _update_actions(self) -> None:
         row = self._table.currentRow()
@@ -1040,6 +1048,7 @@ class PaintProcessSettingsView(IApplicationView):
     set_plate_route_pose_current_requested = pyqtSignal(str)
     add_fixed_magazine_current_requested = pyqtSignal()
     capture_plate_corner_requested = pyqtSignal(str)
+    clear_plate_corners_requested = pyqtSignal()
     move_to_plate_corner_requested = pyqtSignal(dict)
     move_to_safe_travel_waypoint_requested = pyqtSignal(dict)
 
@@ -1098,6 +1107,14 @@ class PaintProcessSettingsView(IApplicationView):
         values["dropoff_plate_robot_tool"] = int(tool)
         values["dropoff_plate_robot_user"] = int(user)
         values["dropoff_plate_robot_frame"] = f"Tool {int(tool)}, User {int(user)}"
+        self.set_values(values)
+
+    def clear_plate_corners(self) -> None:
+        values = self.values()
+        values["dropoff_plate_corners"] = {}
+        values["dropoff_plate_robot_tool"] = -1
+        values["dropoff_plate_robot_user"] = -1
+        values["dropoff_plate_robot_frame"] = self.tr("Not captured")
         self.set_values(values)
 
     def values(self) -> dict:
@@ -1283,6 +1300,9 @@ class PaintProcessSettingsView(IApplicationView):
             self.add_fixed_magazine_current_requested.emit()
             return
         if key == "dropoff_plate_corners" and isinstance(value, dict):
+            if value.get("action") == "clear":
+                self.clear_plate_corners_requested.emit()
+                return
             if value.get("action") == "set_current":
                 self.capture_plate_corner_requested.emit(str(value.get("corner_key") or ""))
                 return

@@ -75,6 +75,7 @@ def handle_magazine_move_to_magazine(ctx: PaintExecutionContext) -> PaintExecuti
         ctx.magazine_group,
         **verification_kwargs,
     ) is True:
+        load_service._mark_magazine_capture_area_active()
         _logger.info("[MAGAZINE_LOAD] Reusing verified prepositioned group '%s'", ctx.magazine_group)
         if pickup_mode == MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN:
             return PaintExecutionState.MAGAZINE_PREPARE_PICKUP_RELEASE
@@ -135,6 +136,7 @@ def handle_magazine_move_to_magazine(ctx: PaintExecutionContext) -> PaintExecuti
             PaintExecutionState.MAGAZINE_MOVE_TO_MAGAZINE,
             f"Move to magazine group '{ctx.magazine_group}' failed",
         )
+    load_service._mark_magazine_capture_area_active()
     _logger.info("[MAGAZINE_LOAD] Moved to magazine group '%s'", ctx.magazine_group)
     if pickup_mode == MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN:
         return PaintExecutionState.MAGAZINE_PREPARE_PICKUP_RELEASE

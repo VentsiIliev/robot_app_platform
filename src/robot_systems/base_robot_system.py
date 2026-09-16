@@ -262,11 +262,17 @@ class BaseRobotSystem(ABC):
         if transformer is None:
             return None, None
         tcp_x, tcp_y = self._get_camera_to_tcp_offsets()
+        robot_config = getattr(self, "_robot_config", None)
         resolver = VisionTargetResolver(
             base_transformer=transformer,
             registry=point_registry,
             camera_to_tcp_x_offset=tcp_x,
             camera_to_tcp_y_offset=tcp_y,
+            camera_to_tcp_rotation_residuals=(
+                getattr(robot_config, "camera_to_tcp_rotation_residuals", [])
+                if getattr(robot_config, "use_automatic_camera_to_tcp_offset", True)
+                else []
+            ),
             frames=frames,
             **self._build_coordinate_calibration_routing(transformer),
         )
@@ -294,6 +300,7 @@ class BaseRobotSystem(ABC):
         frames: Dict[str, TargetFrame],
     ) -> tuple:
         tcp_x, tcp_y = self._get_camera_to_tcp_offsets()
+        robot_config = getattr(self, "_robot_config", None)
         vision_service = getattr(self, "_vision", None)
         matrix_path = str(getattr(vision_service, "camera_to_robot_matrix_path", "") or "")
         residual_path = ""
@@ -305,6 +312,14 @@ class BaseRobotSystem(ABC):
         calibration_routing = self._coordinate_calibration_signature(matrix_path)
         return (
             ("tcp", float(tcp_x), float(tcp_y)),
+            (
+                "tcp_rotation_residuals",
+                repr(
+                    getattr(robot_config, "camera_to_tcp_rotation_residuals", [])
+                    if getattr(robot_config, "use_automatic_camera_to_tcp_offset", True)
+                    else []
+                ),
+            ),
             ("matrix", self._file_signature(matrix_path)),
             ("residual", self._file_signature(residual_path)),
             ("points", self._point_registry_signature(point_registry)),
@@ -416,11 +431,12 @@ class BaseRobotSystem(ABC):
         if robot_config is None:
             transformer = HomographyResidualTransformer(vision_service.camera_to_robot_matrix_path)
         else:
+            tcp_x, tcp_y = self._get_camera_to_tcp_offsets()
             transformer = HomographyResidualTransformer(
-            vision_service.camera_to_robot_matrix_path,
-            camera_to_tcp_x_offset=float(getattr(robot_config, "camera_to_tcp_x_offset", 0.0)),
-            camera_to_tcp_y_offset=float(getattr(robot_config, "camera_to_tcp_y_offset", 0.0)),
-        )
+                vision_service.camera_to_robot_matrix_path,
+                camera_to_tcp_x_offset=tcp_x,
+                camera_to_tcp_y_offset=tcp_y,
+            )
         _logger.info(
             "[CALIB] Built base transformer: class=%s matrix_path=%s residual_path=%s available=%s",
             transformer.__class__.__name__,
@@ -481,8 +497,11 @@ class BaseRobotSystem(ABC):
             for profile_id, profile in configured_profiles.items()
             if str(profile_id).strip()
         }
-        if "global" in normalized_profiles:
-            raise ValueError("Calibration profile id 'global' is reserved for the existing calibration")
+        if normalized_profiles.pop("global", None) is not None:
+            _logger.warning(
+                "Ignoring legacy calibration profile definition 'global'; "
+                "the built-in global calibration artifact is used for that id"
+            )
         missing_profiles = sorted(
             set(assignments.values()) - {"global"} - set(normalized_profiles)
         )
@@ -538,8 +557,37 @@ class BaseRobotSystem(ABC):
 
     def _get_camera_to_tcp_offsets(self) -> tuple[float, float]:
         robot_config = getattr(self, "_robot_config", None)
+        settings_service = getattr(self, "_settings_service", None)
+        if settings_service is not None:
+            try:
+                robot_config = settings_service.get(CommonSettingsID.ROBOT_CONFIG)
+                self._robot_config = robot_config
+            except Exception:
+                _logger.debug(
+                    "Could not refresh robot config while resolving camera-to-TCP offset",
+                    exc_info=True,
+                )
         if robot_config is None:
             return 0.0, 0.0
+        if not bool(getattr(robot_config, "use_automatic_camera_to_tcp_offset", True)):
+            provider = self.get_targeting_provider()
+            if provider is not None:
+                try:
+                    tool_point = provider.build_point_registry().by_name("tool")
+                    offsets = float(tool_point.offset_x), float(tool_point.offset_y)
+                    _logger.info(
+                        "[TARGETING] Using manual camera-to-TCP offset from "
+                        "Targeting tool-camera points: (%.3f, %.3f)",
+                        *offsets,
+                    )
+                    return offsets
+                except (KeyError, TypeError, ValueError, AttributeError):
+                    _logger.warning(
+                        "[TARGETING] Manual camera-to-TCP offset requested but "
+                        "Targeting has no valid 'camera'/'tool' points; using the "
+                        "stored automatic offset",
+                        exc_info=True,
+                    )
         return (
             float(getattr(robot_config, "camera_to_tcp_x_offset", 0.0)),
             float(getattr(robot_config, "camera_to_tcp_y_offset", 0.0)),

@@ -222,6 +222,8 @@ def construct_align_robot_log_message(
     z_target: float,
     result: Optional[int] = None,
     retry_attempted: bool = False,
+    actual_target_pose=None,
+    settle_s: float = 1.0,
 ) -> str:
     """
     Construct a detailed log message summarizing the ALIGN_ROBOT stage.
@@ -262,7 +264,7 @@ def construct_align_robot_log_message(
     # Movement summary
     lines.append(f"⚙️  Calibration → Current offset (mm): {calib_to_current}")
     lines.append(f"📐 Correction to marker (mm): {current_to_marker}")
-    lines.append(f"🚀 Target pose for marker {marker_id}: {new_position}")
+    lines.append(f"🚀 Target pose for marker {marker_id}: {actual_target_pose or new_position}")
 
     # Execution result
     if result is not None:
@@ -273,7 +275,7 @@ def construct_align_robot_log_message(
             if retry_attempted:
                 lines.append("   ↩️  Retried movement after returning to calibration position.")
 
-    lines.append("⏳ Waiting 1s for robot stabilization...")
+    lines.append(f"⏳ Waiting {float(settle_s):.2f}s for robot stabilization...")
     return "\n".join(lines)
 
 
