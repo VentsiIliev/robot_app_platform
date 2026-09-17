@@ -13,6 +13,45 @@ from src.robot_systems.paint.timing import timing_session
 _logger = logging.getLogger(__name__)
 
 
+def unwind_joint6_at_cycle_start(ctx: PaintExecutionContext) -> bool:
+    """Recover J6 once per cycle before any production navigation starts."""
+    if ctx.cycle_start_unwind_completed:
+        return True
+    executor = getattr(ctx.production_service, "_path_executor", None)
+    robot_service = getattr(executor, "_robot_service", None)
+    unwind = getattr(robot_service, "unwind_joint6", None)
+    if not callable(unwind):
+        _logger.error("[CYCLE_START] Joint 6 unwind service is unavailable")
+        return False
+
+    config = ctx.process_config
+    if config is None:
+        get_config = getattr(executor, "_paint_process_config", None)
+        if not callable(get_config):
+            _logger.error("[CYCLE_START] Paint process configuration is unavailable")
+            return False
+        config = get_config()
+    navigation = config.navigation_return
+    _logger.info(
+        "[CYCLE_START] Unwinding Joint 6 before production navigation "
+        "vel=%.1f acc=%.1f queue_if_busy=%s",
+        float(navigation.unwind_vel_percent),
+        float(navigation.unwind_acc_percent),
+        bool(navigation.unwind_queue_if_busy),
+    )
+    ok = bool(
+        unwind(
+            blocking=True,
+            queue_if_busy=bool(navigation.unwind_queue_if_busy),
+            vel=float(navigation.unwind_vel_percent),
+            acc=float(navigation.unwind_acc_percent),
+        )
+    )
+    if ok:
+        ctx.cycle_start_unwind_completed = True
+    return ok
+
+
 def start_paint_motion_if_needed(ctx: PaintExecutionContext) -> None:
     if ctx.paint_motion_active:
         return

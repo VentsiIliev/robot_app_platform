@@ -1,0 +1,17 @@
+{
+  "pwm_open_vrytka": 600,
+  "pwm_close_vrytka": 180,
+  "pwm_open_izbutvatel": 600,
+  "pwm_close_izbutvatel": 180,
+  "time_delay_move_servo_up": 80,
+  "time_delay_move_servo_down": 50,
+  "time_delay_move_servo_in": 100,
+  "time_delay_move_servo_out": 100,
+  "time_delay_move_plate_in": 500,
+  "time_delay_move_plate_out": 350,
+  "time_delay_start_servo_move": 50,
+  "rev_minute": 50,
+  "acceleration": 0.1,
+  "target_position_backword": 500,
+  "target_position_forword": 500
+}

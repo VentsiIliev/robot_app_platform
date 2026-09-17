@@ -1,0 +1,119 @@
+{
+  "adaptive_movement_config": {
+    "min_step_mm": 0.2,
+    "max_step_mm": 25.0,
+    "target_error_mm": 0.3,
+    "max_error_ref": 50.0,
+    "k": 2.0,
+    "derivative_scaling": 0.5,
+    "iterative_gain": 0.7,
+    "near_target_gain": 0.35,
+    "axis_deadband_mm": 0.2,
+    "axis_flip_scale_min": 0.2,
+    "fast_iteration_wait": 1.5,
+    "initial_align_y_scale": 1.0,
+    "initial_align_approach_z": 150.0,
+    "post_align_settle_s": 0.3
+  },
+  "axis_mapping_config": {
+    "marker_id": 48,
+    "move_mm": 50.0,
+    "max_attempts": 100,
+    "delay_after_move_s": 2.0
+  },
+  "camera_tcp_offset_config": {
+    "run_during_robot_calibration": false,
+    "max_markers_for_tcp_capture": 4,
+    "marker_id": 44,
+    "rotation_step_deg": 5.0,
+    "iterations": 18,
+    "approach_z": 150.0,
+    "approach_rx": -179.99,
+    "approach_ry": 0.0,
+    "approach_rz": 0.0,
+    "velocity": 20,
+    "acceleration": 10,
+    "settle_time_s": 1.0,
+    "detection_attempts": 20,
+    "retry_delay_s": 0.1,
+    "recenter_max_iterations": 50,
+    "recenter_max_step_mm": 15.0,
+    "recenter_correction_gain": 0.6,
+    "recenter_stability_wait_s": 1.0,
+    "recenter_alignment_threshold_mm": 0.15,
+    "min_samples": 2,
+    "max_acceptance_std_mm": 1.0,
+    "verification_enabled": true,
+    "verification_samples": 3,
+    "verification_max_error_mm": 5.0,
+    "verification_confirmation_tolerance_mm": 0.75
+  },
+  "run_height_measurement": false,
+  "z_target": 150,
+  "required_ids": [],
+  "candidate_ids": [],
+  "min_target_separation_px": 100.0,
+  "homography_target_count": 25,
+  "residual_target_count": 70,
+  "validation_target_count": 5,
+  "test_target_count": 20,
+  "auto_skip_known_unreachable_markers": true,
+  "unreachable_marker_failure_threshold": 1,
+  "known_unreachable_marker_ids": [],
+  "unreachable_marker_failure_counts": {},
+  "velocity": 50,
+  "acceleration": 20,
+  "travel_velocity": 50,
+  "travel_acceleration": 20,
+  "iterative_velocity": 20,
+  "iterative_acceleration": 10,
+  "initial_ppm": 3.543890380859375,
+  "workobject_calibrations": {
+    "1": {
+      "saved_at_utc": "2026-09-15T13:19:20.631922+00:00",
+      "user_id": 1,
+      "name": "WOBJ_1",
+      "calibration_tool_id": 1,
+      "transform": [
+        -107.09077265070505,
+        198.3054503031614,
+        -0.21786294953253516,
+        -0.06168694337641428,
+        0.05654539430870671,
+        88.01070732436585
+      ],
+      "points": {
+        "center": [
+          -107.09077265070505,
+          198.3054503031614,
+          -0.21786294953253516,
+          179.6849661358645,
+          0.4852178556561284,
+          71.14194782351436
+        ],
+        "x": [
+          -105.55269397019204,
+          242.58752336738868,
+          -0.26159144187609673,
+          179.65670246697397,
+          0.4753456392502061,
+          71.15788099947595
+        ],
+        "y": [
+          -165.04509613299746,
+          201.78625275328758,
+          -0.28179918686917216,
+          179.63477221111552,
+          0.4692259081437634,
+          71.14716444302533
+        ]
+      },
+      "surface_normal": [
+        -0.0010417331179007965,
+        0.0010236809179625674,
+        0.9999989334341759
+      ],
+      "xy_angle_deg": 88.55211140346637
+    }
+  }
+}

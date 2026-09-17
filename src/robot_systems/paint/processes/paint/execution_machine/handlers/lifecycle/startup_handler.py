@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from src.robot_systems.paint.processes.paint.execution_machine.context import PaintExecutionContext
+from src.robot_systems.paint.processes.paint.execution_machine.handlers.common.motion_handlers import (
+    unwind_joint6_at_cycle_start,
+)
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_load_handler import (
     supports_fine_magazine_states,
 )
@@ -16,6 +19,9 @@ def handle_starting(ctx: PaintExecutionContext) -> PaintExecutionState:
         resume_state = ctx.resume_state
         ctx.is_resuming = False
         return resume_state
+    if not unwind_joint6_at_cycle_start(ctx):
+        ctx.set_result(False, "Cycle-start Joint 6 unwind failed before production navigation")
+        return PaintExecutionState.ERROR
     service = ctx.production_service
     if ctx.magazine_config is not None and bool(getattr(ctx.magazine_config, "enabled", False)):
         if supports_fine_magazine_states(getattr(service, "_magazine_load_service", None)):

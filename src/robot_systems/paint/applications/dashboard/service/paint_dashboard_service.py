@@ -38,9 +38,7 @@ class PaintDashboardService(IPaintDashboardService):
         fan_control=None,
         tray_fan_control=None,
         allow_running_paint_settings_updates: bool = False,
-        dryer_service=None,
-        persist_dryer_enabled=None,
-        development_mode: bool = False,
+        production_start_guard=None,
         paint_process_config_service=None,
         plate_layout_service=None,
         target_point_name: str = "camera",
@@ -54,9 +52,7 @@ class PaintDashboardService(IPaintDashboardService):
         self._vision_service = vision_service
         self._paint_process_config_service = paint_process_config_service
         self._plate_layout_service = plate_layout_service
-        self._dryer_service = dryer_service
-        self._persist_dryer_enabled = persist_dryer_enabled
-        self._development_mode = bool(development_mode)
+        self._production_start_guard = production_start_guard
         self._auxiliary_devices = {
             "pump": vacuum_pump,
             "fan": fan_control,
@@ -397,60 +393,20 @@ class PaintDashboardService(IPaintDashboardService):
             return DashboardCommandResult(False, "Stop the paint process before editing the tray.")
         return None
 
-    def get_dryer_state(self) -> dict[str, object]:
-        dryer = self._dryer_service
-        if dryer is None:
-            return {
-                "available": False,
-                "enabled": False,
-                "healthy": False,
-                "message": "Dryer service is not available.",
-                "development_bypass_allowed": self._development_mode,
-            }
-        try:
-            enabled = bool(dryer.is_enabled())
-            healthy = bool(dryer.is_healthy())
-            message = str(getattr(dryer, "last_error", None) or "")
-        except Exception as exc:
-            self._logger.exception("Could not read dryer state")
-            return {
-                "available": True,
-                "enabled": False,
-                "healthy": False,
-                "message": f"Could not read dryer state: {exc}",
-                "development_bypass_allowed": self._development_mode,
-            }
-        return {
-            "available": True,
-            "enabled": enabled,
-            "healthy": healthy,
-            "message": message,
-            "development_bypass_allowed": self._development_mode,
-        }
+    def get_production_start_guard_state(self, mode: str) -> dict[str, object]:
+        guard = self._production_start_guard
+        if guard is None:
+            return {"required": False, "ready": True}
+        return dict(guard.state(mode))
 
-    def enable_dryer_and_set_auto_mode(self, mode: str = "auto") -> DashboardCommandResult:
-        dryer = self._dryer_service
-        if dryer is None:
-            return DashboardCommandResult(False, "Dryer service is not available.")
-        process_state = str(getattr(getattr(self._process, "state", None), "value", ""))
-        if process_state in {ProcessState.RUNNING.value, ProcessState.PAUSED.value}:
-            return DashboardCommandResult(
-                False, "Stop the paint process before changing drying mode."
-            )
-        try:
-            if not bool(dryer.is_healthy()) and not bool(dryer.enable()):
-                if callable(self._persist_dryer_enabled):
-                    self._persist_dryer_enabled(False)
-                return DashboardCommandResult(
-                    False,
-                    str(getattr(dryer, "last_error", None) or "Dryer initialization failed."),
-                )
-            if callable(self._persist_dryer_enabled):
-                self._persist_dryer_enabled(True)
-        except Exception as exc:
-            self._logger.exception("Could not enable dryer")
-            return DashboardCommandResult(False, f"Could not enable dryer: {exc}")
-        return self.set_drying_mode(mode)
+    def prepare_production_start(self, mode: str) -> DashboardCommandResult:
+        guard = self._production_start_guard
+        if guard is None:
+            return DashboardCommandResult(True, "Production start is ready.")
+        result = guard.prepare(mode)
+        if result.success:
+            return self.set_drying_mode(mode)
+        return result
 
     def _robot_status_card(self) -> DashboardCardState:
         robot = self._robot_service

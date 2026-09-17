@@ -15,6 +15,7 @@ from src.robot_systems.paint.processes.paint.execution_machine import (
 )
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.common.motion_handlers import (
     motion_failure_message,
+    unwind_joint6_at_cycle_start,
 )
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handlers import (
     open_dropoff_passage_for_preparation,
@@ -65,6 +66,37 @@ class TestDropoffPassagePreparation(unittest.TestCase):
 
         self.assertFalse(ok)
         self.assertIn("failed to open passage 'workpiece_drop_opening'", message)
+
+
+class TestCycleStartUnwind(unittest.TestCase):
+    def test_unwinds_once_with_navigation_settings(self):
+        robot_service = MagicMock()
+        robot_service.unwind_joint6.return_value = True
+        executor = SimpleNamespace(
+            _robot_service=robot_service,
+            _paint_process_config=lambda: SimpleNamespace(
+                navigation_return=SimpleNamespace(
+                    unwind_vel_percent=24.0,
+                    unwind_acc_percent=18.0,
+                    unwind_queue_if_busy=True,
+                )
+            ),
+        )
+        ctx = PaintExecutionContext(
+            production_service=SimpleNamespace(_path_executor=executor),
+            stop_requested=lambda: False,
+            control=PaintExecutionControl(),
+        )
+
+        self.assertTrue(unwind_joint6_at_cycle_start(ctx))
+        self.assertTrue(unwind_joint6_at_cycle_start(ctx))
+
+        robot_service.unwind_joint6.assert_called_once_with(
+            blocking=True,
+            queue_if_busy=True,
+            vel=24.0,
+            acc=18.0,
+        )
 
 
 class TestPaintExecutionMachineScaffold(unittest.TestCase):
@@ -283,6 +315,7 @@ class TestPaintExecutionMachineScaffold(unittest.TestCase):
         )
         self.assertEqual(
             [
+                "unwind",
                 "pickup",
                 "paint_contact",
                 "Moving to dropoff pose before unwind",
@@ -381,6 +414,7 @@ class _FakePhasedPathExecutor:
             navigation_return=SimpleNamespace(
                 unwind_vel_percent=10.0,
                 unwind_acc_percent=10.0,
+                unwind_queue_if_busy=True,
             ),
         )
 

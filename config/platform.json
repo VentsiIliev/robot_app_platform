@@ -1,8 +1,10 @@
 {
-  "robot_system": "paint",
+  "robot_system": "paint_tray_dry",
   "supported_robot_systems": [
     "glue",
     "paint",
+    "paint_auto_dry",
+    "paint_tray_dry",
     "welding"
   ],
   "ros_backend": {

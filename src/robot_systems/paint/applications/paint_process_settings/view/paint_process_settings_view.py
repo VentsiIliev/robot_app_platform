@@ -1052,7 +1052,14 @@ class PaintProcessSettingsView(IApplicationView):
     move_to_plate_corner_requested = pyqtSignal(dict)
     move_to_safe_travel_waypoint_requested = pyqtSignal(dict)
 
-    def __init__(self, parent=None):
+    def __init__(
+        self,
+        dropoff_strategies: tuple[str, ...] = ("movement_group", "plate_layout"),
+        parent=None,
+    ):
+        self._dropoff_strategies = tuple(dropoff_strategies)
+        if not self._dropoff_strategies:
+            raise ValueError("At least one dropoff strategy must be available")
         self.settings_view: KeyboardSettingsView | None = None
         self._status_label: QLabel | None = None
         self._layout: QVBoxLayout | None = None
@@ -1144,7 +1151,9 @@ class PaintProcessSettingsView(IApplicationView):
             return
         self.settings_view = KeyboardSettingsView(component_name="PaintProcessSettings")
         self._install_custom_widget_handlers()
-        for title, groups in build_paint_process_settings_tabs():
+        for title, groups in build_paint_process_settings_tabs(
+            self._dropoff_strategies
+        ):
             self.settings_view.add_tab(title, groups)
         self.settings_view.value_changed_signal.connect(self._on_value_changed)
         self.settings_view.save_requested.connect(self._on_save_requested)

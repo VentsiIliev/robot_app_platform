@@ -232,6 +232,17 @@ class TestStartupConfig(unittest.TestCase):
 
         self.assertIsInstance(provider, _TestProvider)
 
+    def test_loads_paint_auto_dry_as_a_robot_system(self):
+        provider = load_bootstrap_provider(
+            StartupConfig(
+                robot_system="paint_auto_dry",
+                supported_robot_systems=("paint_auto_dry", "paint_tray_dry"),
+            )
+        )
+
+        self.assertEqual(provider.system_class.__name__, "AutomaticDryerPaintRobotSystem")
+
+
     def test_reports_missing_robot_system(self):
         with self.assertRaisesRegex(RuntimeError, "is not installed"):
             load_bootstrap_provider(

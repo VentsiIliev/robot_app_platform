@@ -1,0 +1,66 @@
+{
+  "ROBOT_IP": "192.168.58.2",
+  "ROBOT_TOOL": 1,
+  "ROBOT_USER": 1,
+  "USE_AUTOMATIC_CAMERA_TO_TCP_OFFSET": true,
+  "CAMERA_TO_TCP_X_OFFSET": 75.275,
+  "CAMERA_TO_TCP_Y_OFFSET": 24.539,
+  "CAMERA_TO_TCP_ROTATION_RESIDUALS": [
+    {
+      "angle_deg": 0.0,
+      "x_mm": 0.0,
+      "y_mm": 0.0
+    },
+    {
+      "angle_deg": 5.0,
+      "x_mm": -0.0703142348907896,
+      "y_mm": -0.42518168858584443
+    },
+    {
+      "angle_deg": 50.0,
+      "x_mm": -0.5739433767544458,
+      "y_mm": -1.1757710659295784
+    },
+    {
+      "angle_deg": 90.0,
+      "x_mm": 1.3012837154041828,
+      "y_mm": 2.0291000494178792
+    }
+  ],
+  "CAMERA_Z_SHIFT_X_PER_MM_PX": 0.0,
+  "CAMERA_Z_SHIFT_Y_PER_MM_PX": 0.0,
+  "CAMERA_Z_SHIFT_X_PER_MM": -0.018411,
+  "CAMERA_Z_SHIFT_Y_PER_MM": 0.0402,
+  "TCP_X_STEP_DISTANCE": 50.0,
+  "TCP_X_STEP_OFFSET": 0.1,
+  "TCP_Y_STEP_DISTANCE": 50.0,
+  "TCP_Y_STEP_OFFSET": 0.1,
+  "OFFSET_DIRECTION_MAP": {
+    "+X": true,
+    "-X": true,
+    "+Y": true,
+    "-Y": true
+  },
+  "SAFETY_LIMITS": {
+    "x_min": -850,
+    "x_max": 801,
+    "y_min": -800,
+    "y_max": 850,
+    "z_min": 0,
+    "z_max": 450,
+    "rx_min": 170,
+    "rx_max": 180,
+    "ry_min": -10,
+    "ry_max": 10,
+    "rz_min": -180,
+    "rz_max": 180
+  },
+  "GLOBAL_MOTION_SETTINGS": {
+    "global_velocity": 100,
+    "global_acceleration": 100,
+    "emergency_decel": 500,
+    "max_jog_step": 50,
+    "recovery_servo_linear_mm_s": 25.0,
+    "recovery_servo_angular_deg_s": 5.0
+  }
+}

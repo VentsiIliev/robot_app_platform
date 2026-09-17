@@ -181,6 +181,7 @@ class ModbusSettingsView(IApplicationView):
         self._slave_table.itemSelectionChanged.connect(self._on_slave_table_selection)
 
         self._slave_combo = QComboBox()
+        self._slave_combo.currentTextChanged.connect(self._on_slave_changed)
         self._slave_profile_combo = QComboBox()
         self._slave_transport_combo = QComboBox()
         self._slave_combo.setVisible(False)
@@ -456,8 +457,8 @@ class ModbusSettingsView(IApplicationView):
         self._slave_transport_combo.setCurrentIndex(max(0, index))
         self._slave_transport_combo.blockSignals(False)
 
-    def _capture_current_slave(self) -> None:
-        name = self._slave_combo.currentText()
+    def _capture_current_slave(self, name: str | None = None) -> None:
+        name = name or self._slave_combo.currentText()
         if name:
             values = dict(self._device_group.get_values())
             values["profile_name"] = self._slave_profile_combo.currentText()
@@ -469,7 +470,7 @@ class ModbusSettingsView(IApplicationView):
             return
         previous = getattr(self, "_active_slave", None)
         if previous and previous in self._slaves:
-            self._capture_current_slave()
+            self._capture_current_slave(previous)
         self._active_slave = name
         self._load_slave(name)
 
@@ -511,9 +512,15 @@ class ModbusSettingsView(IApplicationView):
             return
         self._slaves.pop(name)
         self._slaves[updated_name] = values
-        self._slave_combo.clear()
-        self._slave_combo.addItems(list(self._slaves))
-        self._slave_combo.setCurrentText(updated_name)
+        self._slave_combo.blockSignals(True)
+        try:
+            self._slave_combo.clear()
+            self._slave_combo.addItems(list(self._slaves))
+            self._slave_combo.setCurrentText(updated_name)
+        finally:
+            self._slave_combo.blockSignals(False)
+        self._active_slave = updated_name
+        self._load_slave(updated_name)
         self._reload_slave_table()
 
     def _on_remove_slave(self) -> None:

@@ -581,19 +581,191 @@ If a `.srv` contract changes, perform a clean package-level rebuild sufficient t
 
 ---
 
-## 15. Open decisions before coding
+## 15. Final outcome: rejected and removed (2026-09-16)
 
-1. Does the current production `execute_path` request contain only paint motion, or combined approach/paint/departure motion?
-2. Should `0%` mean pause, controlled stop, or simply be unavailable in the UI?
-3. Is the mode a commissioning/configuration flag or an operator-selectable setting?
-4. Should a percentage change while running apply only to the next contour, the next pass, or require live speed override support?
-5. Should strict Ruckig status be added to `ApplyIPP.srv`, or should percentage mode use a separate strict service?
-6. What initial production cap should be used during hardware rollout: 25%, 50%, or another validated value?
-7. Are current robot-model limits already production-safe, or do they require explicit derating before defining them as 100%?
+This experiment is closed. The percent-profile mode was not robust enough for
+production and has been removed from both the platform and the ROS 2 runtime.
+Paint execution now has one speed path again: the pre-existing velocity and
+acceleration percentage behavior. There is no `paint_trajectory_speed_mode`,
+`speed_mode`, `paint_speed_percent`, nominal-100 feed setting, special
+percent-profile IK policy, or percent-profile retimer left in the live code.
+
+Unrelated work completed during the investigation—especially the cycle-start
+Joint 6 unwind and navigation changes—was deliberately retained.
+
+### Trial record
+
+| Approach | Observed result | Decision |
+|---|---|---|
+| Ruckig as the 100% seed | Large Joint 6 rotations produced pathological timing, including a 5.476 s local interval, and fell back to TOTG. | Rejected for this contour. |
+| TOTG seed plus percentage scaling | Safe scaling was simple, but it preserved the unwanted feed difference between straight and curved portions. | Insufficient. |
+| Constant-feed retiming after TOTG | MoveIt's resampling changed the number of points, causing `constant feed requires matching IK and Cartesian samples`. | Rejected. |
+| Direct Contour IK plus Cartesian arc-length timing | Produced nearly constant TCP feed while preserving IK positions, but exposed strong acceleration/jerk sensitivity at noisy curve and corner samples. | Promising visually, not robust physically. |
+| Global sampled-jerk enforcement | A worst-sample correction of 4.487x reduced median feed to 12.846 mm/s. | Rejected as far too slow. |
+| J6 derating to effective 0.8 rad/s and 0.8 rad/s² | Avoided the captured fault but took about 29.35 s and achieved only 28.849 mm/s median feed. | Rejected; production target is about 8 s. |
+| Intermediate J6 limits around 1.2 rad/s and 1.2 rad/s² | Roughly 24.20 s at 37.747 mm/s median feed. | Rejected as too slow. |
+| Relaxed bounded post-IK smoothing (0.50 mm / 0.50°) | Reduced curvature and reached 15.49 s / 65.17 mm/s median feed, but J6 peaked at 1.889 rad/s and faulted with `0x2214`, then `0x8400`. | Rejected as unsafe/unreliable. |
+| Cubic controller interpolation (positions and velocities, no commanded accelerations) | Removed noisy quintic acceleration boundary conditions and some contours completed in 12–14 s, but difficult contours still faulted; one 10.50 s run reached J6 2.103 rad/s and jerk ratio 78.882. | Rejected as inconsistent. |
+| Fritsch–Carlson reversal-aware cubic velocities with global acceleration correction | Prevented velocity overshoot at reversals, but one local constraint caused a 14.439x global stretch: 143.77 s and 3.169 mm/s median feed. | Rejected. |
+| Local/neighbor-coupled interval correction | The initial local solver did not converge on the real 854-pose contour. A neighbor-coupled variant was implemented but not sufficiently qualified before the experiment was stopped. | Removed with the mode. |
+| Circular/Bezier reconstruction | Considered as a way to regularize vision-created corners. The existing input already passes through adaptive cubic Bézier interpolation, and reliable arc recognition/reconstruction would be a separate geometry project rather than a timing-mode fix. | Not implemented. |
+
+### Conclusions
+
+- A percentage multiplier cannot create constant surface feed when its seed
+  timing already slows differently on curves and straights.
+- Dense vision-derived samples can turn a visually smooth curve into small
+  direction changes. Retiming those samples alone shifts the problem into
+  acceleration, jerk, vibration, and drive load.
+- Meeting an approximately 8 s cycle while avoiding J6 over-current/tracking
+  faults needs a better continuous geometric/rotation command upstream of IK,
+  validated against explicit contact and orientation error bounds. It should be
+  treated as a new path-quality project, not revived as this speed mode.
+- Software limit compliance did not guarantee acceptable physical behavior:
+  the table vibration and repeated J6 `0x2214`/`0x8400` faults are the decisive
+  reasons the experiment was stopped.
+
+## 16. Historical implementation and experiment notes
+
+### Optimizer amendment
+
+Hardware logs showed that Ruckig is unsuitable for the long Joint 6 rotations in
+the production paint contour: it expanded a local interval to 5.476 seconds and
+fell back to the valid seeded TOTG result. Percent-profile base generation has
+therefore been changed to TOTG at 100%, followed by the same deterministic
+percentage scaling. Earlier strict-Ruckig requirements in this planning document
+are superseded by this amendment. Ruckig remains available for ordinary motion
+outside percent-profile paint paths.
+
+### Constant-feed amendment
+
+Production testing showed that scaling TOTG preserved large TCP-feed differences
+between straight and curved portions. Ordered percent-profile paint paths now use
+the dense source-distance to Direct Contour IK correspondence directly. The
+active ROS profile defines a stable nominal 100% TCP cruise feed. Percent-profile
+paint no longer inherits TOTG interval timing. It parameterizes the unchanged IK
+positions by Cartesian arc length, estimates `q'(s)` and `q''(s)` over a physical
+millimetre window, and applies joint velocity/acceleration constraints through
+forward and backward scalar-feed passes. This naturally creates start/stop ramps
+and local curvature slowdowns without classifying lines, arcs, or corners. The
+smoothed derivatives are used only for timing; every original IK joint position
+is preserved. Final interval-rate and modeled-acceleration validation fails
+closed. The operator percentage is applied only after this safe 100% profile is
+built. Direct Contour IK is mandatory in this mode,
+including for short contours, and failure is fatal because a Cartesian fallback
+would lose the required source-distance correspondence.
+
+The first vertical slice is implemented on both supported paint execution routes:
+
+- Standalone `/execute/path` requests carry the optional mode and percentage;
+  their current implementation retains the TOTG percentage profile.
+- Production ordered motion chains carry the fields only on paint-contact `path`
+  segments; attach, pickup, unwind, and return moves retain their existing timing.
+- Legacy mode omits the new payload fields and follows the pre-existing optimizer
+  behavior.
+- Ordered percent-profile paint generates a nearly constant TCP-feed profile at
+  100% and scales time, velocity, and acceleration once before dispatch.
+- Concatenation preserves the independently timed paint member and does not
+  re-time the combined attach/contact trajectory.
+- First and unmatched second passes use the same mode.
+
+The ROS runtime package was rebuilt and its installed ordered-planning files were
+verified to contain the new path. Hardware qualification remains outstanding.
+
+The current production log failure around 92.7% is a Direct Contour IK failure
+that happens before optimization and percentage scaling. This mode makes no
+claim to fix that separate path-feasibility issue.
+
+### Hardware-smoothing amendment
+
+The first arc-length hardware runs produced nearly constant TCP feed, but the
+robot felt jerky at curves and corners. The retimer now estimates acceleration
+change between consecutive timed IK samples and reports `jerk_ratio` and
+`jerk_enforced`. A hardware trial of global sampled-jerk enforcement produced a
+`4.487x` contour-wide correction and reduced median feed to `12.846 mm/s`, even
+though final velocity and acceleration ratios were only `0.135` and `0.056`.
+Dense vision/IK sampling noise therefore makes the single worst sampled jerk an
+unsuitable global timing constraint. Enforcement is disabled while measurement
+remains available. Velocity and acceleration remain hard constraints, and every
+IK position remains unchanged. A future jerk solution must act locally or smooth
+the geometric source rather than scaling the entire contour from one sample.
+
+Separate hardware faults on Joint 6 showed that satisfying the previous
+software limit was not sufficient for the physical drive. The active
+`paint_contact` profile initially limited Joint 6 velocity to `3.0 rad/s`. A
+later hardware run used 99.6% of the allowed acceleration and produced enough
+vibration to shake the whole table. Joint 6 subsequently faulted at a measured
+`1.507 rad/s`: drive error `0x2214` (motor over-current), followed by `0x8400`
+(velocity error exceeds the limit). The profile now caps Joints 1–5 at
+`2.5 rad/s²`. A safe-baseline run with effective Joint 6 caps of `0.8 rad/s`
+and `0.8 rad/s²` completed the captured portion without a drive fault, but took
+`29.35 s` and reached only `28.849 mm/s` median TCP feed. The next qualification
+step raises Joint 6 to `1.5 rad/s` and `1.5 rad/s²` before margin, giving
+effective caps of `1.2 rad/s` and `1.2 rad/s²`. This remains 20% below the
+observed `1.507 rad/s` fault point. These limits affect paint-contact timing only;
+legacy mode and non-paint motions keep their existing behavior. Hardware
+qualification of these values remains required.
+
+The production target remains approximately eight seconds, so a 24-second
+limit-derived trajectory is not an acceptable final result. The net Joint 6
+rotation is compatible with that target; the limiting factor is high-frequency
+curvature in the dense vision/projection/IK command. Percent-profile Direct
+Contour IK therefore has a separate bounded smoothing policy: eight passes at
+`alpha=0.25`, with every adjusted sample FK-validated within `0.50 mm` and
+`0.50 deg` of its requested pose. A violation rejects the candidate rather than
+silently changing the path. This policy applies only to percent-profile paint;
+legacy retains two passes and its existing `0.05 mm / 0.10 deg` smoothing bound.
+The hardware trial reduced joint curvature from `0.03004` to `0.01693` and cut
+duration to `15.49 s`, but produced `jerk_ratio=38.901`, a `1.889 rad/s` Joint 6
+peak, and another `0x2214` over-current followed by `0x8400`. The relaxed
+smoothing trial is therefore rejected and the percent-profile values are reset
+to the established two-pass `0.05 mm / 0.10 deg` bounds. Reaching the eight-second
+target requires regularizing the pivot projection's rotation sequence before IK,
+with an explicit contact-error bound; post-IK deviation and limit increases are
+not acceptable substitutes.
+
+### Controller interpolation correction
+
+The `1.889 rad/s` Joint 6 peak is not itself abnormal: the same hardware log
+completed non-paint Joint 6 motions at `3.295` and `3.570 rad/s`. The paint
+trajectory differed by supplying modeled acceleration at every one of more than
+1,200 dense points, with a diagnostic jerk ratio of `38.901`. Jazzy's
+`joint_trajectory_controller` uses quintic interpolation when position,
+velocity, and acceleration are present, so those noisy acceleration boundary
+conditions were converted into high-frequency torque demand. Percent-profile
+retiming now still computes and validates acceleration internally, but sends
+positions and smoothed velocities only. This selects cubic Hermite interpolation
+in the controller. Path positions and timestamps are unchanged; legacy behavior
+is unchanged. Hardware qualification is required before interpreting any
+remaining drive fault as a velocity threshold.
+
+The first cubic trial exposed a second boundary-condition issue: controller
+velocities were still taken from a smoothed geometric derivative, which can stay
+nonzero across a real joint direction reversal. Percent-profile output now uses
+nonuniform Fritsch–Carlson knot velocities derived from the final timed joint
+positions. A reversing joint receives exactly zero velocity at the reversal;
+same-direction intervals use a weighted harmonic slope that prevents cubic
+overshoot. Dynamics correction validates the actual start and end acceleration
+of every cubic Hermite interval rather than only the smoothed path model.
+
+The first implementation applied the worst cubic acceleration correction to the
+entire contour. One isolated reversal therefore produced a `14.439x` global
+stretch, `3.169 mm/s` median feed, and a `143.77 s` trajectory. This is rejected.
+Cubic validation now iteratively stretches only violating intervals (and the
+adjacent interval when a shared knot changes). Unaffected contour sections keep
+their requested feed; the final velocity and cubic endpoint acceleration ratios
+remain hard validated.
+
+## 17. Superseded operational questions
+
+1. Should `0%` mean pause, controlled stop, or simply remain unavailable in the UI?
+2. Should a percentage change while running apply only to the next contour, the next pass, or require live speed override support?
+3. What initial production cap should be used during hardware rollout: 25%, 50%, or another validated value?
+4. Are current robot-model limits already production-safe, or do they require explicit derating before defining them as 100%?
 
 ---
 
-## 16. Later phase: source-feed reporting
+## 18. Superseded later phase: source-feed reporting
 
 If exact `F_100(s)` in `mm/s` becomes a requirement, implement it as a separate project. It requires:
 

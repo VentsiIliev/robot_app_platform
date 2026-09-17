@@ -120,8 +120,13 @@ class TestPaintStagingOffsetPose(unittest.TestCase):
 class TestDropoffReleaseVerification(unittest.TestCase):
     def test_failed_previous_eject_cancels_before_dropoff_motion_with_reason(self):
         motion = MagicMock()
+        destination = MagicMock()
+        destination.check_ready_for_release.return_value = (
+            False,
+            "EJECT completion was not confirmed",
+        )
         executor = SimpleNamespace(
-            _dryer_ready_for_release=lambda: (False, "EJECT completion was not confirmed"),
+            _workpiece_destination=destination,
             _motion=motion,
         )
 
@@ -134,22 +139,25 @@ class TestDropoffReleaseVerification(unittest.TestCase):
         )
         motion.move_pickup_phase.assert_not_called()
 
-    def test_release_verified_callback_queues_dryer_sequence(self):
-        callback = MagicMock(return_value=True)
-        executor = SimpleNamespace(_on_workpiece_release_verified=callback)
+    def test_release_verified_callback_notifies_destination(self):
+        destination = MagicMock()
+        destination.on_release_verified.return_value = True
+        executor = SimpleNamespace(_workpiece_destination=destination)
 
         ok, message = _on_workpiece_release_verified(executor)
 
         self.assertTrue(ok, message)
-        callback.assert_called_once_with()
+        destination.on_release_verified.assert_called_once_with()
 
     def test_release_verified_callback_failure_is_reported(self):
-        executor = SimpleNamespace(_on_workpiece_release_verified=lambda: False)
+        destination = MagicMock()
+        destination.on_release_verified.return_value = False
+        executor = SimpleNamespace(_workpiece_destination=destination)
 
         ok, message = _on_workpiece_release_verified(executor)
 
         self.assertFalse(ok)
-        self.assertIn("dryer sequence could not be queued", message)
+        self.assertIn("destination handoff failed", message)
 
     def test_release_verification_succeeds_when_vacuum_clears(self):
         sensor = MagicMock()

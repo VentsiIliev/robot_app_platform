@@ -100,6 +100,7 @@ class PaintControlsDrawer(QWidget):
         combined_acceleration_minimum_percent: float = 0.01,
         combined_acceleration_maximum_percent: float = 100.0,
         show_resolved_speed_values: bool = False,
+        show_drying_mode_control: bool = True,
         parent=None,
     ) -> None:
         super().__init__(parent)
@@ -330,6 +331,7 @@ class PaintControlsDrawer(QWidget):
         self._drying_mode_button.setStyleSheet(GHOST_BTN_STYLE)
         self._drying_mode_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self._drying_mode_button.clicked.connect(self._on_drying_mode)
+        self._drying_mode_button.setVisible(show_drying_mode_control)
         devices_layout.addWidget(self._drying_mode_button)
         self._devices_box.setVisible(show_manual_controls)
         layout.addWidget(self._devices_box)

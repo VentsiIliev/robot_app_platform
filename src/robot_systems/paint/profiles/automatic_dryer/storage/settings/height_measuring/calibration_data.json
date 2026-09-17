@@ -1,0 +1,10 @@
+{
+  "zero_reference_coords": null,
+  "robot_initial_position": null,
+  "calibration_points": [],
+  "polynomial_coefficients": [],
+  "polynomial_intercept": 0.0,
+  "polynomial_degree": 1,
+  "polynomial_mse": 0.0,
+  "zero_height_offset_mm": 0.0
+}

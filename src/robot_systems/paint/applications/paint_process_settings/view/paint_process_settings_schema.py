@@ -127,7 +127,9 @@ def _profile_table(key: str, label: str, rows: list[dict]) -> SettingField:
     return SettingField(key, _t(label), "paint_motion_profile_table", default=rows)
 
 
-def build_process_groups() -> list[SettingGroup]:
+def build_process_groups(
+    dropoff_strategies: tuple[str, ...] = ("movement_group", "plate_layout"),
+) -> list[SettingGroup]:
     return [
         SettingGroup(_t("General"), [
             _toggle("enable_vacuum_pump", "Enable Vacuum Pump"),
@@ -150,7 +152,7 @@ def build_process_groups() -> list[SettingGroup]:
         ]),
         SettingGroup(_t("Dropoff Strategy"), [
             SettingField("dropoff_strategy", _t("Strategy"), "combo",
-                         default="movement_group", choices=["movement_group", "plate_layout"]),
+                         default=dropoff_strategies[0], choices=list(dropoff_strategies)),
             SettingField("dropoff_plate_corners", _t("Tray Corners"), "paint_plate_corner_table", default={}),
             SettingField("dropoff_plate_robot_frame", _t("Captured Robot Frame"), "paint_pose_display", default=_t("Not captured")),
             SettingField(
@@ -446,9 +448,11 @@ def build_diagnostics_groups() -> list[SettingGroup]:
     ]
 
 
-def build_paint_process_settings_tabs() -> list[tuple[str, list[SettingGroup]]]:
+def build_paint_process_settings_tabs(
+    dropoff_strategies: tuple[str, ...] = ("movement_group", "plate_layout"),
+) -> list[tuple[str, list[SettingGroup]]]:
     return [
-        (_t("Process"), build_process_groups()),
+        (_t("Process"), build_process_groups(dropoff_strategies)),
         (_t("Motion Speeds"), build_motion_speed_groups()),
         (_t("Distances & Offsets"), build_distance_offset_groups()),
         (_t("Paint Path"), build_paint_path_groups()),

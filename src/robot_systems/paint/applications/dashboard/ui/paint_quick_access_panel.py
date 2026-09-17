@@ -31,7 +31,13 @@ class PaintQuickAccessPanel(QWidget):
     drying_mode_requested = pyqtSignal(str)
     new_tray_requested = pyqtSignal()
 
-    def __init__(self, toggle_configs: list, parent=None) -> None:
+    def __init__(
+        self,
+        toggle_configs: list,
+        *,
+        show_drying_mode_control: bool = True,
+        parent=None,
+    ) -> None:
         super().__init__(parent)
         self._configs = list(toggle_configs)
         self._states = {item.device_id: False for item in self._configs}
@@ -48,6 +54,7 @@ class PaintQuickAccessPanel(QWidget):
 
         self._drying_mode_button = self._button()
         self._drying_mode_button.clicked.connect(self._on_drying_mode)
+        self._drying_mode_button.setVisible(show_drying_mode_control)
         self._layout.addWidget(self._drying_mode_button)
         for config in self._configs:
             button = self._button()

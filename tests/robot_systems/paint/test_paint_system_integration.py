@@ -167,12 +167,15 @@ class TestPaintApplicationWiring(unittest.TestCase):
         dryer_release = MagicMock()
         dryer_release.on_workpiece_release_verified.return_value = True
         dryer_release.wait_until_ready_for_release.return_value = (True, "")
+        from src.robot_systems.paint.destinations import AutomaticDryerDestination
+
+        destination = AutomaticDryerDestination(dryer_release)
         robot_system = SimpleNamespace(
             _robot_config=robot_config,
             _navigation=navigation,
             _settings_service=settings_service,
             _vacuum_pump="pump",
-            _dryer_release_coordinator=dryer_release,
+            _workpiece_destination=destination,
             _paint_process_config_service=config_service,
             get_optional_service=MagicMock(return_value=robot_service),
         )
@@ -196,8 +199,9 @@ class TestPaintApplicationWiring(unittest.TestCase):
         self.assertEqual("pump", dependencies.vacuum_pump)
         self.assertEqual("live_robot_config", dependencies.robot_config_provider())
         self.assertIsNone(dependencies.post_execute_callback)
-        self.assertEqual((True, ""), dependencies.dryer_ready_for_release())
-        self.assertTrue(dependencies.on_workpiece_release_verified())
+        self.assertIs(dependencies.workpiece_destination, destination)
+        self.assertEqual((True, ""), dependencies.workpiece_destination.check_ready_for_release())
+        self.assertTrue(dependencies.workpiece_destination.on_release_verified())
         dryer_release.wait_until_ready_for_release.assert_called_once_with()
         dryer_release.on_workpiece_release_verified.assert_called_once_with()
         navigation.move_to_calibration_position.assert_not_called()

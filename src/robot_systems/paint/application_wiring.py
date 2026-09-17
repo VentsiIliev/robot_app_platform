@@ -721,7 +721,13 @@ def _build_paint_process_settings_application(robot_system):
     )
     jog_service = build_robot_system_jog_service(robot_system)
     return WidgetApplication(
-        widget_factory=lambda ms: PaintProcessSettingsFactory().build(service, messaging=ms, jog_service=jog_service)
+        widget_factory=lambda ms: PaintProcessSettingsFactory(
+            dropoff_strategies=getattr(
+                robot_system,
+                "allowed_dropoff_strategies",
+                ("movement_group", "plate_layout"),
+            ),
+        ).build(service, messaging=ms, jog_service=jog_service)
     )
 
 

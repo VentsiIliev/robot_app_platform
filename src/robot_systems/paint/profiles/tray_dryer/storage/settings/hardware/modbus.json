@@ -1,0 +1,18 @@
+{
+  "port": "/dev/ttyUSB0",
+  "baudrate": 57600,
+  "bytesize": 8,
+  "stopbits": 1,
+  "parity": "N",
+  "timeout": 0.5,
+  "slave_address": 10,
+  "max_retries": 30,
+  "slaves": {
+    "default": {
+      "slave_address": 10,
+      "profile_name": "default",
+      "transport_type": "modbus_register_fc16",
+      "max_retries": 30
+    }
+  }
+}

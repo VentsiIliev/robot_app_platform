@@ -1,5 +1,6 @@
 import logging
 import os
+from dataclasses import replace
 
 from src.engine.common_service_ids import CommonServiceID
 from src.engine.hardware.dryer.models.dryer_config import DryerConfigSerializer
@@ -167,6 +168,19 @@ def _build_application_specs():
 
 
 class PaintRobotSystem(BaseRobotSystem):
+
+    allowed_dropoff_strategies = ("movement_group", "plate_layout")
+    height_measuring_enabled = True
+
+    def build_production_start_guard(self):
+        """Return the system-specific guard used before production starts."""
+        from src.robot_systems.paint.destinations import AutomaticDryerStartGuard
+
+        return AutomaticDryerStartGuard(
+            self._dryer,
+            self._persist_dryer_enabled,
+            development_mode=self.development_mode,
+        )
 
     ui_config = PaintDashboardUiConfig(
         show_camera_preview=paint_system_config.SHOW_DASHBOARD_CAMERA_PREVIEW,
@@ -373,6 +387,12 @@ class PaintRobotSystem(BaseRobotSystem):
         settings_root=os.path.join("storage", "settings"),
     )
 
+    @classmethod
+    def storage_path(cls, *parts: str) -> str:
+        """Resolve all persisted paint data beneath the selected profile root."""
+        storage_root = os.path.dirname(cls.metadata.settings_root)
+        return os.path.join(cls.package_root(), storage_root, *parts)
+
     settings_specs = [
         SettingsSpec(CommonSettingsID.ROBOT_CONFIG, RobotSettingsSerializer(), "robot/config.json"),
         SettingsSpec(CommonSettingsID.MOVEMENT_GROUPS, MovementGroupSettingsSerializer(), "robot/movement_groups.json"),
@@ -497,7 +517,10 @@ class PaintRobotSystem(BaseRobotSystem):
         _nav_engine = self.get_service(CommonServiceID.NAVIGATION)
         self._work_area_service = self.get_service(CommonServiceID.WORK_AREAS)
         self._vision = self.get_optional_service(CommonServiceID.VISION)
-        self._paint_process_config_service = PaintProcessConfigService(self._settings_service)
+        self._paint_process_config_service = PaintProcessConfigService(
+            self._settings_service,
+            allowed_dropoff_strategies=self.allowed_dropoff_strategies,
+        )
         self._navigation = PaintNavigationService(_nav_engine, vision=self._vision,
                                                  work_area_service=self._work_area_service,
                                                  robot_service=self._robot,
@@ -532,15 +555,24 @@ class PaintRobotSystem(BaseRobotSystem):
         self.register_managed_resource(self._tray_fan)
         self._dryer = self.get_optional_service(ServiceID.DRYER)
         self.register_managed_resource(self._dryer)
+        self._production_start_guard = self.build_production_start_guard()
         self._pickup_condition = self._build_pickup_condition()
 
         if self._vision is not None:
             self._vision.start()
             self.register_managed_resource(self._vision)
 
-        self._height_measuring_provider = PaintRobotSystemHeightMeasuringProvider(self)
-        self._height_measuring_service, self._height_measuring_calibration_service, \
-            self._laser_detection_service = build_robot_system_height_measuring_services(self)
+        self._height_measuring_provider = None
+        self._height_measuring_service = None
+        self._height_measuring_calibration_service = None
+        self._laser_detection_service = None
+        if self.height_measuring_enabled:
+            self._height_measuring_provider = PaintRobotSystemHeightMeasuringProvider(self)
+            (
+                self._height_measuring_service,
+                self._height_measuring_calibration_service,
+                self._laser_detection_service,
+            ) = build_robot_system_height_measuring_services(self)
 
         self._calibration_provider = PaintRobotSystemCalibrationProvider(self)
         self._calibration_service = build_robot_system_calibration_service(self)
@@ -568,6 +600,17 @@ class PaintRobotSystem(BaseRobotSystem):
         self._dryer_release_coordinator = application_wiring._build_dryer_release_coordinator(self)
         if self._dryer_release_coordinator is not None:
             self.register_managed_resource(self._dryer_release_coordinator)
+            from src.robot_systems.paint.destinations import AutomaticDryerDestination
+
+            self._workpiece_destination = AutomaticDryerDestination(
+                self._dryer_release_coordinator
+            )
+        else:
+            from src.robot_systems.paint.processes.paint.destination import (
+                PassThroughWorkpieceDestination,
+            )
+
+            self._workpiece_destination = PassThroughWorkpieceDestination()
         self._paint_path_executor = application_wiring._build_paint_path_executor(self)
         self._paint_matching_service = application_wiring._build_paint_matching_service(
             self,
@@ -611,9 +654,7 @@ class PaintRobotSystem(BaseRobotSystem):
             allow_running_paint_settings_updates=(
                 self.ui_config.allow_running_paint_settings_updates
             ),
-            dryer_service=self._dryer,
-            persist_dryer_enabled=self._persist_dryer_enabled,
-            development_mode=self.development_mode,
+            production_start_guard=self._production_start_guard,
             paint_process_config_service=self._paint_process_config_service,
             plate_layout_service=self._paint_path_executor._plate_layout_service,
             target_point_name="camera",
@@ -660,3 +701,36 @@ class PaintRobotSystem(BaseRobotSystem):
     def on_stop(self) -> None:
         self._robot.stop_motion()
         self._robot.disable_robot()
+
+
+class AutomaticDryerPaintRobotSystem(PaintRobotSystem):
+    """Paint system variant with storage isolated for the automatic dryer."""
+
+    metadata = replace(
+        PaintRobotSystem.metadata,
+        name="PaintSystemAutomaticDryer",
+        settings_root=os.path.join("profiles", "automatic_dryer", "storage", "settings"),
+        translations_root=os.path.join(
+            "profiles", "automatic_dryer", "storage", "translations"
+        ),
+    )
+
+
+class TrayDryerPaintRobotSystem(PaintRobotSystem):
+    """Paint system variant with storage isolated for the tray dryer."""
+
+    ui_config = replace(
+        PaintRobotSystem.ui_config,
+        show_drying_mode_control=False,
+    )
+    allowed_dropoff_strategies = ("plate_layout",)
+    height_measuring_enabled = False
+
+    metadata = replace(
+        PaintRobotSystem.metadata,
+        name="PaintSystemTrayDryer",
+        settings_root=os.path.join("profiles", "tray_dryer", "storage", "settings"),
+        translations_root=os.path.join(
+            "profiles", "tray_dryer", "storage", "translations"
+        ),
+    )

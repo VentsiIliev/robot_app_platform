@@ -15,9 +15,12 @@ from src.robot_systems.robot_system_bootstrap_provider import RobotSystemBootstr
 
 
 class PaintBootstrapProvider(RobotSystemBootstrapProvider):
+    def __init__(self, system_class=PaintRobotSystem):
+        self._system_class = system_class
+
     @property
     def system_class(self):
-        return PaintRobotSystem
+        return self._system_class
 
     def build_robot(self):
         # TODO: Move concrete robot driver selection into persisted startup config.

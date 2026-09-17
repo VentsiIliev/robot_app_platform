@@ -48,6 +48,7 @@ class PaintExecutionContext:
     paint_ordered_result: tuple[bool, str, int] | None = None
     paint_contact_executed_in_ordered_chain: bool = False
     paint_motion_active: bool = False
+    cycle_start_unwind_completed: bool = False
     resume_retry_available: bool = False
     calibration_group: str = ""
     magazine_snapshot: object | None = None
@@ -108,6 +109,7 @@ class PaintExecutionContext:
             "paint_total_waypoints": self.paint_total_waypoints,
             "paint_contact_executed_in_ordered_chain": self.paint_contact_executed_in_ordered_chain,
             "paint_motion_active": self.paint_motion_active,
+            "cycle_start_unwind_completed": self.cycle_start_unwind_completed,
             "resume_retry_available": self.resume_retry_available,
             "magazine_group": self.magazine_group,
             "magazine_index": self.magazine_index,

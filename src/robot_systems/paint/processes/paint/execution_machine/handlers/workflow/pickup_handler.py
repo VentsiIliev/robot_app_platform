@@ -19,6 +19,7 @@ from src.robot_systems.paint.processes.paint.execution_machine.handlers.common.m
     finish_paint_motion,
     motion_failure_message,
     start_paint_motion_if_needed,
+    unwind_joint6_at_cycle_start,
     wait_or_guard,
 )
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handlers import (
@@ -46,6 +47,10 @@ def handle_pickup(ctx: PaintExecutionContext) -> PaintExecutionState:
     if guarded is not None:
         finish_paint_motion(ctx, success=False)
         return guarded
+
+    if not unwind_joint6_at_cycle_start(ctx):
+        fail_paint_motion(ctx, "Cycle-start Joint 6 unwind failed before pickup")
+        return PaintExecutionState.ERROR
 
     build_plan = getattr(executor._pickup, "build_plan", None)
     pickup_plan = build_plan(ctx.execution_plan) if callable(build_plan) else None

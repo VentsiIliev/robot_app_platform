@@ -124,18 +124,11 @@ class StubPaintDashboardService(IPaintDashboardService):
         self._drying_mode = mode
         return DashboardCommandResult(True, f"Drying mode changed to {mode}.")
 
-    def get_dryer_state(self) -> dict[str, object]:
-        return {
-            "available": True,
-            "enabled": True,
-            "healthy": True,
-            "message": "",
-            "development_bypass_allowed": False,
-        }
+    def get_production_start_guard_state(self, mode: str) -> dict[str, object]:
+        return {"required": False, "ready": True}
 
-    def enable_dryer_and_set_auto_mode(self, mode: str = "auto") -> DashboardCommandResult:
-        self._drying_mode = mode
-        return DashboardCommandResult(True, f"Drying mode changed to {mode}.")
+    def prepare_production_start(self, mode: str) -> DashboardCommandResult:
+        return DashboardCommandResult(True, "Production start is ready.")
 
     def get_plate_layout_state(self) -> dict[str, object]:
         return dict(self._plate_layout)

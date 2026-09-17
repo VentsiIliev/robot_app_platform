@@ -36,6 +36,7 @@ class PaintQuickControlsPanel(QWidget):
         combined_acceleration_minimum_percent: float = 0.01,
         combined_acceleration_maximum_percent: float = 100.0,
         show_resolved_speed_values: bool = False,
+        show_drying_mode_control: bool = True,
         parent=None,
     ) -> None:
         super().__init__(parent)
@@ -122,6 +123,7 @@ class PaintQuickControlsPanel(QWidget):
         self._drying_mode_button.setStyleSheet(GHOST_BTN_STYLE)
         self._drying_mode_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self._drying_mode_button.clicked.connect(self._on_drying_mode)
+        self._drying_mode_button.setVisible(show_drying_mode_control)
         action_row.addWidget(self._drying_mode_button, 1)
         box_layout.addLayout(action_row)
         self._cable_relief = QPushButton()

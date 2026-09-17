@@ -53,6 +53,9 @@ def build_default_transport_registry() -> TransportRegistry:
     from src.engine.hardware.communication.modbus.modbus_register_transport import (
         ModbusRegisterTransport,
     )
+    from src.engine.hardware.communication.modbus.modbus_fc16_register_transport import (
+        ModbusFc16RegisterTransport,
+    )
     from src.engine.hardware.communication.modbus.xinje_ma_8x8yr_transport import (
         XinjeMA8X8YRTransport,
     )
@@ -62,6 +65,14 @@ def build_default_transport_registry() -> TransportRegistry:
         key="modbus_register",
         label="Standard Modbus Registers",
         factory=lambda c: ModbusRegisterTransport(
+            port=c.port, slave_address=c.slave_address, baudrate=c.baudrate,
+            bytesize=c.bytesize, stopbits=c.stopbits, parity=c.parity, timeout=c.timeout,
+        ),
+    ))
+    registry.register(TransportDescriptor(
+        key="modbus_register_fc16",
+        label="Standard Modbus Registers (FC16 writes)",
+        factory=lambda c: ModbusFc16RegisterTransport(
             port=c.port, slave_address=c.slave_address, baudrate=c.baudrate,
             bytesize=c.bytesize, stopbits=c.stopbits, parity=c.parity, timeout=c.timeout,
         ),

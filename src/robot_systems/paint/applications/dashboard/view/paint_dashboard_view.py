@@ -355,7 +355,12 @@ class PaintDashboardView(IApplicationView):
                 self._center_expanded_tab_icon(1, "fa5s.th")
                 self._retranslate_expanded_tabs()
                 preview_layout.insertWidget(0, self._expanded_tabs)
-                self._quick_access = PaintQuickAccessPanel(self._auxiliary_toggles)
+                self._quick_access = PaintQuickAccessPanel(
+                    self._auxiliary_toggles,
+                    show_drying_mode_control=(
+                        self._ui_config.show_drying_mode_control
+                    ),
+                )
                 self._quick_access.setMinimumWidth(220)
                 self._quick_access.setMaximumWidth(280)
                 self._quick_access.device_toggle_requested.connect(
@@ -611,6 +616,7 @@ class PaintDashboardView(IApplicationView):
             combined_acceleration_minimum_percent=self._ui_config.combined_paint_acceleration_minimum_percent,
             combined_acceleration_maximum_percent=self._ui_config.combined_paint_acceleration_maximum_percent,
             show_resolved_speed_values=self._ui_config.show_resolved_paint_speed_values,
+            show_drying_mode_control=self._ui_config.show_drying_mode_control,
         )
 
     def _connect_controls_widget(self, widget: PaintControlsDrawer) -> None:
@@ -656,6 +662,9 @@ class PaintDashboardView(IApplicationView):
                 ),
                 show_resolved_speed_values=(
                     self._ui_config.show_resolved_paint_speed_values
+                ),
+                show_drying_mode_control=(
+                    self._ui_config.show_drying_mode_control
                 ),
             )
             top_section = main_layout.itemAt(0).layout()
@@ -1229,10 +1238,7 @@ class PaintDashboardView(IApplicationView):
         if self._quick_access is not None:
             self._quick_access.set_drying_mode_busy(busy)
 
-    def ask_enable_dryer(self, title: str, message: str) -> bool:
-        return ask_yes_no(self, title, message, default_no=True)
-
-    def ask_run_without_dryer(self, title: str, message: str) -> bool:
+    def ask_production_start_confirmation(self, title: str, message: str) -> bool:
         return ask_yes_no(self, title, message, default_no=True)
 
     def set_application_shortcuts(self, shortcuts: list) -> None:

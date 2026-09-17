@@ -1,0 +1,60 @@
+{
+  "vacuum_pump": {
+    "enabled": true,
+    "slave_id": 10,
+    "inputs": {},
+    "outputs": {
+      "pump": "1",
+      "blow_off": "1"
+    },
+    "commands": {
+      "on": 1,
+      "off": 0
+    },
+    "statuses": {}
+  },
+  "vacuum_sensor": {
+    "enabled": true,
+    "slave_id": 10,
+    "inputs": {
+      "sensor": "0"
+    },
+    "outputs": {},
+    "commands": {},
+    "statuses": {
+      "detected": 2
+    }
+  },
+  "tray_fan": {
+    "enabled": true,
+    "slave_id": 10,
+    "inputs": {},
+    "outputs": {
+      "fan": "1"
+    },
+    "commands": {
+      "on": 1,
+      "off": 0
+    },
+    "statuses": {}
+  },
+  "physical_control_buttons": {
+    "enabled": true,
+    "slave_id": 10,
+    "inputs": {
+      "start": "X1",
+      "pause": "X0"
+    },
+    "outputs": {
+      "start": "Y0",
+      "pause": "Y1"
+    },
+    "commands": {
+      "start_on": 1,
+      "start_off": 0,
+      "pause_on": 1,
+      "pause_off": 0
+    },
+    "statuses": {}
+  }
+}

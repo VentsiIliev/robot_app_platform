@@ -14,11 +14,19 @@ from src.robot_systems.paint.applications.paint_process_settings.view.paint_proc
 
 
 class PaintProcessSettingsFactory(ApplicationFactory):
+    def __init__(
+        self,
+        dropoff_strategies: tuple[str, ...] = ("movement_group", "plate_layout"),
+    ):
+        self._dropoff_strategies = tuple(dropoff_strategies)
+
     def _create_model(self, service: IPaintProcessSettingsService) -> PaintProcessSettingsModel:
         return PaintProcessSettingsModel(service)
 
     def _create_view(self) -> PaintProcessSettingsView:
-        return PaintProcessSettingsView()
+        return PaintProcessSettingsView(
+            dropoff_strategies=self._dropoff_strategies
+        )
 
     def _create_controller(
         self,

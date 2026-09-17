@@ -21,6 +21,7 @@ class PaintDashboardUiConfig:
     show_unmatched_paint_controls: bool = True
     show_acceleration_scale_control: bool = True
     show_bottom_quick_controls: bool = True
+    show_drying_mode_control: bool = True
     show_camera_preview: bool = True
     use_collapsible_settings_panel: bool = True
     use_combined_paint_speed_control: bool = False

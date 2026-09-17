@@ -854,6 +854,17 @@ class TestPaintDashboardUi(unittest.TestCase):
         panel._drying_mode_button.click()
         callback.assert_called_once_with("auto")
 
+    def test_drying_mode_controls_can_be_removed_for_tray_dryer(self) -> None:
+        panel = PaintQuickControlsPanel([], show_drying_mode_control=False)
+        drawer = PaintControlsDrawer([], show_drying_mode_control=False)
+        quick_access = PaintQuickAccessPanel(
+            [], show_drying_mode_control=False
+        )
+
+        self.assertTrue(panel._drying_mode_button.isHidden())
+        self.assertTrue(drawer._drying_mode_button.isHidden())
+        self.assertTrue(quick_access._drying_mode_button.isHidden())
+
     def test_system_ui_config_controls_dashboard_drawer_visibility(self) -> None:
         with patch(
             "src.robot_systems.paint.applications.dashboard.view.paint_dashboard_view.DashboardWidget",

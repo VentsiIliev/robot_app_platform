@@ -1,0 +1,78 @@
+{
+  "mock_only": true,
+  "name": "Paint Development Recipe",
+  "steps": [
+    {
+      "action": "move_group",
+      "enabled": true,
+      "group_id": "Magazine",
+      "id": "a382b1e625a54635bbfb6e17f0f86b84",
+      "label": "Move to Magazine",
+      "note": "",
+      "pose": null
+    },
+    {
+      "action": "capture",
+      "enabled": true,
+      "group_id": "Magazine",
+      "id": "4ee5164b5580470485906fd0e596fb4c",
+      "label": "Capture magazine workpiece",
+      "note": "",
+      "pose": null
+    },
+    {
+      "action": "move_group",
+      "enabled": true,
+      "group_id": "CALIBRATION",
+      "id": "80dbdfa5fb43480392f7f4076e8b9280",
+      "label": "Move to Calibration",
+      "note": "",
+      "pose": null
+    },
+    {
+      "action": "capture",
+      "enabled": true,
+      "group_id": "CALIBRATION",
+      "id": "7c1e44fafd0444389e056bbdb0e60fdb",
+      "label": "Capture calibration contour",
+      "note": "",
+      "pose": null
+    },
+    {
+      "action": "unwind",
+      "enabled": true,
+      "group_id": "",
+      "id": "580c68364aaf4655a8f5511ae882fe1e",
+      "label": "Unwind Joint 6",
+      "note": "",
+      "pose": null
+    },
+    {
+      "action": "cleanup",
+      "enabled": false,
+      "group_id": "",
+      "id": "ea11e1645ce2496fb2a1e68393f7cdd5",
+      "label": "Optional cleanup",
+      "note": "",
+      "pose": null
+    },
+    {
+      "action": "move_group",
+      "enabled": true,
+      "group_id": "Dropoff",
+      "id": "4118cd7da354434da3de9cfc6c5f99ae",
+      "label": "Move to Dropoff",
+      "note": "",
+      "pose": null
+    },
+    {
+      "action": "release",
+      "enabled": true,
+      "group_id": "Dropoff",
+      "id": "8dece4f21b4243189008e91b60369471",
+      "label": "Release workpiece",
+      "note": "",
+      "pose": null
+    }
+  ]
+}

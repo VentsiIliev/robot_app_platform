@@ -1,0 +1,92 @@
+{
+  "MOVEMENT_GROUPS": {
+    "HOME": {
+      "velocity": 30,
+      "acceleration": 40,
+      "motion_type": "ptp",
+      "iterations": 1,
+      "has_iterations": false,
+      "has_trajectory_execution": true,
+      "position": "[-7.120, 366.715, 99.870, -179.99, 0.0, 0.0]"
+    },
+    "CALIBRATION": {
+      "velocity": 100,
+      "acceleration": 100,
+      "motion_type": "ptp",
+      "iterations": 1,
+      "has_iterations": false,
+      "has_trajectory_execution": true,
+      "position": "[17.438, 12.280, 149.951, 179.972, 0.001, -0.007]"
+    },
+    "JOG": {
+      "velocity": 20,
+      "acceleration": 10,
+      "motion_type": "ptp",
+      "iterations": 1,
+      "has_iterations": false,
+      "has_trajectory_execution": false
+    },
+    "Horizontal Shaft": {
+      "velocity": 10,
+      "acceleration": 10,
+      "motion_type": "ptp",
+      "iterations": 1,
+      "has_iterations": false,
+      "has_trajectory_execution": true,
+      "position": "[-13.236, 397.532, 377.623, -90.010, -0.369, -0.614]"
+    },
+    "Vertical Shaft": {
+      "velocity": 100,
+      "acceleration": 100,
+      "motion_type": "ptp",
+      "iterations": 1,
+      "has_iterations": false,
+      "has_trajectory_execution": true,
+      "position": "[-104.427, 220.366, 219.338, 179.990, 0.000, 0.000]"
+    },
+    "Vertical Shaft Alignment": {
+      "velocity": 0,
+      "acceleration": 0,
+      "motion_type": "ptp",
+      "iterations": 1,
+      "has_iterations": false,
+      "has_trajectory_execution": true
+    },
+    "Clean": {
+      "velocity": 10,
+      "acceleration": 10,
+      "motion_type": "ptp",
+      "iterations": 1,
+      "has_iterations": false,
+      "has_trajectory_execution": true,
+      "position": "[265.622, 606.445, 183.224, -179.99, 0.0, 0.0]"
+    },
+    "Dropoff": {
+      "velocity": 10,
+      "acceleration": 10,
+      "motion_type": "linear",
+      "iterations": 1,
+      "has_iterations": false,
+      "has_trajectory_execution": true,
+      "position": "[-414.163, -19.806, 150.013, 179.996, 0.001, -0.003]"
+    },
+    "Magazine": {
+      "velocity": 100,
+      "acceleration": 100,
+      "motion_type": "ptp",
+      "iterations": 1,
+      "has_iterations": false,
+      "has_trajectory_execution": true,
+      "position": "[2.561, -232.143, 149.971, 179.972, 0.013, 0.004]"
+    },
+    "Magazine Fixed Pickup": {
+      "velocity": 10,
+      "acceleration": 10,
+      "motion_type": "ptp",
+      "iterations": 1,
+      "has_iterations": false,
+      "has_trajectory_execution": true,
+      "position": "[42.514, -174.283, 251.434, -179.991, 0.001, -0.001]"
+    }
+  }
+}

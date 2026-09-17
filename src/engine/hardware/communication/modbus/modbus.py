@@ -178,11 +178,13 @@ class ModbusConfig(ModbusDeviceConfig):
 
     def slave_names(self) -> list[str]:
         if self.slaves:
-            return ['default', *self.slaves.keys()]
+            return ['default', *(name for name in self.slaves if name != 'default')]
         return ['default', *self.devices.keys()]
 
     def get_slave(self, name: str = 'default') -> ModbusSlaveConfig:
         if name == 'default':
+            if name in self.slaves:
+                return deepcopy(self.slaves[name])
             return ModbusSlaveConfig(
                 slave_address=self.slave_address,
                 profile_name='default',
@@ -204,6 +206,7 @@ class ModbusConfig(ModbusDeviceConfig):
         if name == 'default':
             self.slave_address = slave.slave_address
             self.max_retries = slave.max_retries
+            self.slaves[name] = deepcopy(slave)
         else:
             self.slaves[name] = deepcopy(slave)
 

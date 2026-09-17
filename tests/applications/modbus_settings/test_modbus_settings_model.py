@@ -147,6 +147,37 @@ class TestModbusSettingsModelPersistence(unittest.TestCase):
         self.assertEqual(saved.get_profile("xinje_even").parity, "N")
         self.assertEqual(saved.get_slave("xinje_ma").profile_name, "xinje_even")
 
+    def test_save_all_persists_default_slave_transport_and_profile(self):
+        model, settings, _ = _loaded(ModbusConfig())
+        model.save_all(
+            {
+                "default": ModbusSettingsMapper.device_to_flat_dict(ModbusConfig()),
+                "xinje_even": ModbusSettingsMapper.device_to_flat_dict(
+                    ModbusDeviceConfig(parity="E")
+                ),
+            },
+            {
+                "default": {
+                    "slave_address": 1,
+                    "profile_name": "xinje_even",
+                    "transport_type": "xinje_ma_8x8yr",
+                    "max_retries": 12,
+                },
+            },
+        )
+
+        saved = settings.save_config.call_args.args[0]
+        default_slave = saved.get_slave("default")
+        self.assertEqual(default_slave.slave_address, 1)
+        self.assertEqual(default_slave.profile_name, "xinje_even")
+        self.assertEqual(default_slave.transport_type, "xinje_ma_8x8yr")
+
+        reloaded = ModbusConfig.from_dict(saved.to_dict())
+        self.assertEqual(
+            reloaded.get_slave("default").transport_type,
+            "xinje_ma_8x8yr",
+        )
+
     def test_save_all_rejects_unknown_slave_profile(self):
         model, settings, _ = _loaded(ModbusConfig())
         with self.assertRaises(ValueError):

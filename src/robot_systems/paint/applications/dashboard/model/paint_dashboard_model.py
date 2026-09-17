@@ -79,11 +79,11 @@ class PaintDashboardModel(IApplicationModel):
     def set_drying_mode(self, mode: str):
         return self._service.set_drying_mode(mode)
 
-    def get_dryer_state(self) -> dict[str, object]:
-        return self._service.get_dryer_state()
+    def get_production_start_guard_state(self, mode: str) -> dict[str, object]:
+        return self._service.get_production_start_guard_state(mode)
 
-    def enable_dryer_and_set_auto_mode(self, mode: str = "auto"):
-        return self._service.enable_dryer_and_set_auto_mode(mode)
+    def prepare_production_start(self, mode: str):
+        return self._service.prepare_production_start(mode)
 
     def get_plate_layout_state(self) -> dict[str, object]:
         return self._service.get_plate_layout_state()

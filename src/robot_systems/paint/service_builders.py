@@ -166,7 +166,10 @@ def build_vacuum_sensor_service(ctx):
         transport = DEFAULT_TRANSPORT_REGISTRY.build_for_slave(modbus_config, slave_name)
         return VacuumSensorService(
             transport=transport,
-            config=VacuumSensorConfig(sensor_register=sensor_register, detected_value=0),
+            config=VacuumSensorConfig(
+                sensor_register=sensor_register,
+                detected_value=int(binding.statuses.get("detected", 0)),
+            ),
         )
     except Exception:
         _logger.exception("Vacuum sensor service could not be built; continuing without it")

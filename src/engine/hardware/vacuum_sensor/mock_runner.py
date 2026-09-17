@@ -19,9 +19,11 @@ from src.engine.hardware.vacuum_sensor.vacuum_sensor_service import VacuumSensor
 from src.engine.hardware.xinje import XinjeMA8X8YR
 
 ROOT = Path(__file__).resolve().parents[4]
-MODBUS_CONFIG_PATH = ROOT / "src" / "robot_systems" / "paint" / "storage" / "settings" / "hardware" / "modbus.json"
-PERIPHERALS_CONFIG_PATH = ROOT / "src" / "robot_systems" / "paint" / "storage" / "settings" / "hardware" / "peripherals.json"
-DETECTED_VALUE = 0
+TRAY_DRY_STORAGE = (
+    ROOT / "src" / "robot_systems" / "paint" / "profiles" / "tray_dryer" / "storage"
+)
+MODBUS_CONFIG_PATH = TRAY_DRY_STORAGE / "settings" / "hardware" / "modbus.json"
+PERIPHERALS_CONFIG_PATH = TRAY_DRY_STORAGE / "settings" / "hardware" / "peripherals.json"
 READ_RETRIES = 3
 READ_COUNT = 100000
 READ_DELAY_S = 0.5
@@ -59,7 +61,7 @@ def _build_sensor() -> tuple[VacuumSensorService, object, str, int, object]:
         transport=transport,
         config=VacuumSensorConfig(
             sensor_register=sensor_point,
-            detected_value=DETECTED_VALUE,
+            detected_value=int(sensor.statuses.get("detected", 0)),
             read_retries=READ_RETRIES,
         ),
     )

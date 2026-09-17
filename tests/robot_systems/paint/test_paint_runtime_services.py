@@ -127,14 +127,15 @@ class TestPaintDashboardService(unittest.TestCase):
         config_service.get_snapshot.return_value = PaintProcessConfig(
             dropoff=PaintDropoffConfig(strategy="plate_layout")
         )
+        from src.robot_systems.paint.destinations import AutomaticDryerStartGuard
+
         service = PaintDashboardService(
             process,
-            dryer_service=dryer,
-            persist_dryer_enabled=persist_enabled,
+            production_start_guard=AutomaticDryerStartGuard(dryer, persist_enabled),
             paint_process_config_service=config_service,
         )
 
-        result = service.enable_dryer_and_set_auto_mode()
+        result = service.prepare_production_start("auto")
 
         self.assertTrue(result.success)
         dryer.enable.assert_called_once_with()
@@ -150,14 +151,15 @@ class TestPaintDashboardService(unittest.TestCase):
         dryer.last_error = "Dryer did not initialize"
         persist_enabled = MagicMock()
         config_service = MagicMock()
+        from src.robot_systems.paint.destinations import AutomaticDryerStartGuard
+
         service = PaintDashboardService(
             process,
-            dryer_service=dryer,
-            persist_dryer_enabled=persist_enabled,
+            production_start_guard=AutomaticDryerStartGuard(dryer, persist_enabled),
             paint_process_config_service=config_service,
         )
 
-        result = service.enable_dryer_and_set_auto_mode()
+        result = service.prepare_production_start("auto")
 
         self.assertFalse(result.success)
         self.assertEqual("Dryer did not initialize", result.message)
@@ -840,6 +842,21 @@ class TestModbusFanControl(unittest.TestCase):
 
 
 class TestVacuumSensorService(unittest.TestCase):
+    def test_standard_register_sensor_uses_configured_detected_value(self) -> None:
+        transport = MagicMock()
+        transport.read_register.side_effect = [2, 3]
+        service = VacuumSensorService(
+            transport,
+            VacuumSensorConfig(sensor_register="0", detected_value=2),
+        )
+
+        self.assertTrue(service.is_vacuum_detected())
+        self.assertFalse(service.is_vacuum_detected())
+        self.assertEqual(
+            transport.read_register.call_args_list,
+            [call(0), call(0)],
+        )
+
     def test_repeated_sensor_state_logs_are_throttled_but_transitions_log_immediately(self) -> None:
         transport = MagicMock()
         transport.read_register.side_effect = [1, 1, 0]
