@@ -893,12 +893,27 @@ class TestServoUntilConditionProcedure(unittest.TestCase):
                 self.pose = [1.0, 2.0, 80.0, 4.0, 5.0, 6.0]
                 self.status_reads = 0
                 self.retract_started_after_status_reads = None
+                self.retract_status_reads = 0
 
             def get_current_position(self):
                 return list(self.pose)
 
             def get_execution_status(self):
                 self.status_reads += 1
+                if self.retract_started_after_status_reads is not None:
+                    self.retract_status_reads += 1
+                    if self.retract_status_reads == 1:
+                        return {
+                            "is_executing": True,
+                            "current_task_id": 18,
+                            "state": "running",
+                        }
+                    return {
+                        "is_executing": False,
+                        "current_task_id": None,
+                        "last_completed_task_id": 18,
+                        "state": "idle",
+                    }
                 if self.status_reads < 3:
                     return {
                         "is_executing": False,
@@ -951,6 +966,52 @@ class TestServoUntilConditionProcedure(unittest.TestCase):
 
         self.assertTrue(result.success, result.message)
         self.assertGreaterEqual(robot.retract_started_after_status_reads, 6)
+        self.assertGreaterEqual(robot.retract_status_reads, 2)
+
+    def test_sensor_controlled_fast_lin_accepts_stop_race_after_task_completed(self):
+        class CompletedAtDetectionRobot(FakeRobot):
+            def __init__(self):
+                super().__init__()
+                self.pose = [1.0, 2.0, 80.0, 4.0, 5.0, 6.0]
+
+            def get_current_position(self):
+                return list(self.pose)
+
+            def move_fast_linear(self, **kwargs):
+                self.pose = list(kwargs["position"])
+                return {
+                    "result": 0,
+                    "success": True,
+                    "accepted": True,
+                    "final": False,
+                    "queued": False,
+                    "task_id": 21,
+                }
+
+            def controlled_stop(self, expected_task_id, **_kwargs):
+                return {
+                    "result": -3,
+                    "success": False,
+                    "stopped": False,
+                    "state": "TASK_MISMATCH",
+                    "current_task_id": None,
+                    "expected_task_id": expected_task_id,
+                }
+
+        result = ServoUntilConditionProcedure(
+            CompletedAtDetectionRobot(),
+            _ConditionSequence(False, False, True),
+        ).run(config=ServoUntilConditionConfig(
+            execution_mode="sensor_controlled_fast_lin",
+            minimum_z_mm=50.0,
+            poll_interval_s=0.001,
+            timeout_s=0.2,
+        ))
+
+        self.assertTrue(result.success, result.message)
+        self.assertTrue(result.detected)
+        self.assertFalse(result.stop_failed)
+        self.assertEqual("sensor_controlled_fast_lin_detected", result.message)
 
     def test_fast_lin_retract_verification_isolated_from_driver_pose_mutation(self):
         class MutatingRobot(FakeRobot):

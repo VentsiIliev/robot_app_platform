@@ -1,4 +1,4 @@
-from PyQt6.QtCore import pyqtSignal, Qt
+from PyQt6.QtCore import QEvent, pyqtSignal, Qt
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QWidget, QPushButton, QLabel,
@@ -99,6 +99,7 @@ class ModbusSettingsView(IApplicationView):
     save_requested            = pyqtSignal(dict)
     detect_ports_requested    = pyqtSignal()
     grant_permission_requested = pyqtSignal()
+    set_low_latency_requested  = pyqtSignal()
     test_connection_requested = pyqtSignal()
 
     def __init__(self, parent=None):
@@ -297,6 +298,10 @@ class ModbusSettingsView(IApplicationView):
         self._btn_permission.setStyleSheet(GHOST_BTN_STYLE)
         self._btn_permission.setCursor(Qt.CursorShape.PointingHandCursor)
 
+        self._btn_low_latency = QPushButton(self.tr("Set Low Latency"))
+        self._btn_low_latency.setStyleSheet(GHOST_BTN_STYLE)
+        self._btn_low_latency.setCursor(Qt.CursorShape.PointingHandCursor)
+
         self._btn_test = QPushButton("Test Connection")
         self._btn_test.setStyleSheet(ACTION_BTN_STYLE)
         self._btn_test.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -307,12 +312,14 @@ class ModbusSettingsView(IApplicationView):
 
         row.addWidget(self._btn_detect)
         row.addWidget(self._btn_permission)
+        row.addWidget(self._btn_low_latency)
         row.addWidget(self._btn_test)
         row.addStretch()
         row.addWidget(self._status_label)
 
         self._btn_detect.clicked.connect(self._on_inner_detect)
         self._btn_permission.clicked.connect(self._on_inner_permission)
+        self._btn_low_latency.clicked.connect(self._on_inner_low_latency)
         self._btn_test.clicked.connect(self._on_inner_test)
         return bar
 
@@ -326,6 +333,9 @@ class ModbusSettingsView(IApplicationView):
 
     def _on_inner_permission(self) -> None:
         self.grant_permission_requested.emit()
+
+    def _on_inner_low_latency(self) -> None:
+        self.set_low_latency_requested.emit()
 
     def _on_inner_test(self) -> None:
         self.test_connection_requested.emit()
@@ -626,6 +636,7 @@ class ModbusSettingsView(IApplicationView):
         self._port_combo.blockSignals(False)
         self._btn_detect.setEnabled(True)
         self._btn_permission.setEnabled(True)
+        self._btn_low_latency.setEnabled(True)
         self._btn_test.setEnabled(True)
 
     def set_connection_result(self, success: bool, port: str = "") -> None:
@@ -637,6 +648,7 @@ class ModbusSettingsView(IApplicationView):
             self._status_label.setText(f"✗ Connection failed — {port}")
         self._btn_detect.setEnabled(True)
         self._btn_permission.setEnabled(True)
+        self._btn_low_latency.setEnabled(True)
         self._btn_test.setEnabled(True)
 
     def set_save_result(self, success: bool, message: str) -> None:
@@ -652,11 +664,29 @@ class ModbusSettingsView(IApplicationView):
             self._status_label.setText("Permission update failed")
         self._btn_detect.setEnabled(True)
         self._btn_permission.setEnabled(True)
+        self._btn_low_latency.setEnabled(True)
         self._btn_test.setEnabled(True)
+
+    def set_low_latency_result(
+        self,
+        success: bool,
+        ports: list,
+        error: str = "",
+    ) -> None:
+        if success:
+            self._status_label.setStyleSheet(_STATUS_OK)
+            self._status_label.setText(
+                self.tr("Low latency enabled — {count} port(s)").format(count=len(ports))
+            )
+        else:
+            self._status_label.setStyleSheet(_STATUS_FAIL)
+            self._status_label.setText(error or self.tr("Low latency update failed"))
+        self.set_busy(False)
 
     def set_busy(self, busy: bool) -> None:
         self._btn_detect.setEnabled(not busy)
         self._btn_permission.setEnabled(not busy)
+        self._btn_low_latency.setEnabled(not busy)
         self._btn_test.setEnabled(not busy)
         if busy:
             self._status_label.setStyleSheet(_STATUS_IDLE)
@@ -666,6 +696,14 @@ class ModbusSettingsView(IApplicationView):
 
     def clean_up(self) -> None:
         pass
+
+    def retranslateUi(self) -> None:
+        self._btn_low_latency.setText(self.tr("Set Low Latency"))
+
+    def changeEvent(self, event) -> None:
+        if event.type() == QEvent.Type.LanguageChange:
+            self.retranslateUi()
+        super().changeEvent(event)
 
 
 class _ModbusProfileDialog(AppDialog):

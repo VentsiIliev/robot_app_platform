@@ -55,6 +55,7 @@ class VisionSystem:
         self._brightness_service = BrightnessService(
             self.camera_settings,
             area_points_provider=self._get_active_brightness_area_points,
+            area_key_provider=self._get_active_area_id,
         )
         self._aruco_service      = ArucoDetectionService(self.camera_settings)
         self._qr_service = QrDetectionService()
@@ -160,8 +161,29 @@ class VisionSystem:
         # self.camera = RemoteCamera(url = "http://192.168.222.110:5000/video_feed", width=self.camera_settings.get_camera_width(), height=self.camera_settings.get_camera_height())
         # self.camera = RemoteCamera(url = "http://192.168.222.44:5005/video_feed", width=self.camera_settings.get_camera_width(), height=self.camera_settings.get_camera_height())
         # self.camera = RemoteCamera(url = "http://localhost:5005/video_feed", width=self.camera_settings.get_camera_width(), height=self.camera_settings.get_camera_height())
-        # self.camera.set_auto_exposure(True)
+        self._configure_hardware_auto_exposure()
         self.camera_settings.set_camera_index(camera_index)
+
+    def _configure_hardware_auto_exposure(self) -> None:
+        """Apply the persisted UVC automatic-exposure mode at camera startup."""
+        camera = self.camera
+        setter = getattr(camera, "set_auto_exposure", None)
+        if not callable(setter):
+            _logger.warning(
+                "Camera backend does not support hardware auto-exposure control"
+            )
+            return
+        try:
+            enabled = bool(self.camera_settings.get_hardware_auto_exposure())
+            reported_value = setter(enabled)
+        except Exception:
+            _logger.exception("Failed to configure camera hardware auto-exposure")
+            return
+        _logger.info(
+            "Camera hardware auto-exposure configured enabled=%s; driver reported value=%s",
+            enabled,
+            reported_value,
+        )
 
     def _init_camera_in_background(self) -> None:
         try:

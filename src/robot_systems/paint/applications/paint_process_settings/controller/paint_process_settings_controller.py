@@ -268,13 +268,23 @@ class PaintProcessSettingsController(IApplicationController, BackgroundWorker):
             _, error = validate_plate_passage_gate(gate)
             if error:
                 return False
-            if bool(flat.get("dropoff_plate_next_cycle_midpoint_enabled", False)):
-                midpoint = PaintProcessSettingsMapper._single_pose_from_value(
-                    flat.get("dropoff_plate_next_cycle_midpoint", ""), []
-                )
-                _, error = validate_plate_passage_gate(midpoint)
+            exit_gate = PaintProcessSettingsMapper._single_pose_from_value(
+                flat.get("dropoff_plate_exit_gate", ""), []
+            )
+            if exit_gate:
+                _, error = validate_plate_passage_gate(exit_gate)
                 if error:
                     return False
+            if bool(flat.get("dropoff_plate_next_cycle_midpoint_enabled", False)):
+                waypoints = PaintProcessSettingsMapper._waypoint_list_from_value(
+                    flat.get("dropoff_plate_next_cycle_midpoint"), [], 60.0, 40.0
+                )
+                if not waypoints:
+                    return False
+                for waypoint in waypoints:
+                    _, error = validate_plate_passage_gate(waypoint["position"])
+                    if error:
+                        return False
             return True
         return True
 

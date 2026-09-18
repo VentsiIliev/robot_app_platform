@@ -26,7 +26,7 @@ MODBUS_CONFIG_PATH = TRAY_DRY_STORAGE / "settings" / "hardware" / "modbus.json"
 PERIPHERALS_CONFIG_PATH = TRAY_DRY_STORAGE / "settings" / "hardware" / "peripherals.json"
 READ_RETRIES = 3
 READ_COUNT = 100000
-READ_DELAY_S = 0.5
+READ_DELAY_S = 0.1
 
 
 def _build_sensor() -> tuple[VacuumSensorService, object, str, int, object]:

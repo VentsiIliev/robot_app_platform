@@ -16,3 +16,8 @@ class VacuumPickupCondition:
         if not self._vacuum_sensor.is_healthy():
             raise RuntimeError("Vacuum sensor read failed")
         return detected
+
+    def get_read_diagnostics(self) -> dict[str, object] | None:
+        """Expose cached transport timing when the concrete sensor supports it."""
+        getter = getattr(self._vacuum_sensor, "get_read_diagnostics", None)
+        return getter() if callable(getter) else None

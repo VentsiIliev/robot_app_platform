@@ -72,6 +72,25 @@ class TestRosToolRegistryClient(unittest.TestCase):
         self.assertEqual(message, "invalid transform")
 
     @patch("src.engine.robot.calibration.ros_tool_registry_client.requests.post")
+    def test_update_tool_includes_collision_profile_when_supplied(self, post):
+        post.return_value = _Response({"success": True})
+        client = RosToolRegistryClient("http://robot:5000")
+
+        ok, _ = client.update_tool(
+            2,
+            "TOOL_2",
+            [0, 0, 25, 0, 0, 0],
+            persist=True,
+            collision_profile="vacuum_gripper",
+        )
+
+        self.assertTrue(ok)
+        self.assertEqual(
+            post.call_args.kwargs["json"]["collision_profile"],
+            "vacuum_gripper",
+        )
+
+    @patch("src.engine.robot.calibration.ros_tool_registry_client.requests.post")
     def test_update_tool_returns_network_error(self, post):
         post.side_effect = RuntimeError("offline")
         client = RosToolRegistryClient()

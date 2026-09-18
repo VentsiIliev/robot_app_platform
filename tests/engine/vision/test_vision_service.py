@@ -181,6 +181,17 @@ class TestVisionServiceFramesAndContours(unittest.TestCase):
 
 class TestVisionSystemRun(unittest.TestCase):
 
+    def test_configure_hardware_auto_exposure_uses_persisted_setting(self):
+        system = VisionSystem.__new__(VisionSystem)
+        system.camera = MagicMock()
+        system.camera.set_auto_exposure.return_value = 1.0
+        system.camera_settings = MagicMock()
+        system.camera_settings.get_hardware_auto_exposure.return_value = True
+
+        system._configure_hardware_auto_exposure()
+
+        system.camera.set_auto_exposure.assert_called_once_with(True)
+
     def test_run_publishes_corrected_frame_when_contour_detection_is_off(self):
         system = VisionSystem.__new__(VisionSystem)
         raw = np.zeros((2, 2, 3), dtype=np.uint8)
@@ -230,7 +241,7 @@ class TestVisionServiceDelegation(unittest.TestCase):
         self.assertEqual(payload["corners"].dtype, np.float32)
         self.assertEqual(payload["corners"].tolist(), [[1.0, 2.0], [3.0, 4.0]])
 
-    def test_set_auto_exposure_updates_camera_and_brightness(self):
+    def test_set_auto_exposure_updates_only_camera_hardware(self):
         system = _make_vision_system()
         system.camera = MagicMock()
         service = VisionService(system)
@@ -238,16 +249,16 @@ class TestVisionServiceDelegation(unittest.TestCase):
         service.set_auto_exposure(True)
 
         system.camera.set_auto_exposure.assert_called_once_with(True)
-        system.camera_settings.set_brightness_auto.assert_called_once_with(True)
+        system.camera_settings.set_brightness_auto.assert_not_called()
 
-    def test_set_auto_exposure_without_camera_support_still_updates_brightness(self):
+    def test_set_auto_exposure_without_camera_support_does_not_change_brightness(self):
         system = _make_vision_system()
         system.camera = object()
         service = VisionService(system)
 
         service.set_auto_exposure(False)
 
-        system.camera_settings.set_brightness_auto.assert_called_once_with(False)
+        system.camera_settings.set_brightness_auto.assert_not_called()
 
     def test_set_active_work_area_publishes_region_even_on_invalid_area(self):
         system = _make_vision_system()

@@ -8,19 +8,36 @@ from typing import Any
 class ToolDefinition:
     id: int
     name: str
+    reference_tool_id: int | None = None
+    relative_transform: tuple[float, float, float, float, float, float] = (0, 0, 0, 0, 0, 0)
+    collision_profile: str = ""
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "ToolDefinition":
+        raw_transform = data.get("relative_transform", [0, 0, 0, 0, 0, 0])
+        if len(raw_transform) != 6:
+            raise ValueError("relative_transform must contain six values")
+        raw_reference = data.get("reference_tool_id")
         return cls(
             id=int(data.get("id", 0)),
             name=str(data.get("name", "")).strip(),
+            reference_tool_id=int(raw_reference) if raw_reference is not None else None,
+            relative_transform=tuple(float(value) for value in raw_transform),
+            collision_profile=str(data.get("collision_profile", "")).strip(),
         )
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        result = {
             "id": int(self.id),
             "name": str(self.name).strip(),
         }
+        if self.reference_tool_id is not None:
+            result["reference_tool_id"] = int(self.reference_tool_id)
+        if any(float(value) != 0.0 for value in self.relative_transform):
+            result["relative_transform"] = [float(value) for value in self.relative_transform]
+        if self.collision_profile:
+            result["collision_profile"] = str(self.collision_profile).strip()
+        return result
 
 
 @dataclass(frozen=True)

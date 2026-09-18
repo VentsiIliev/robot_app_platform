@@ -40,12 +40,15 @@ class RosToolRegistryClient:
         transform: Sequence[float],
         *,
         persist: bool,
+        collision_profile: str | None = None,
     ) -> tuple[bool, str]:
         payload = {
             "name": name,
             "transform": [float(value) for value in transform],
             "persist": bool(persist),
         }
+        if collision_profile is not None:
+            payload["collision_profile"] = str(collision_profile).strip()
         try:
             response = requests.post(
                 f"{self._server_url}/tool/registry/{int(tool_id)}",

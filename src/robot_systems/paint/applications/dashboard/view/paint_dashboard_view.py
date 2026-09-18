@@ -337,7 +337,6 @@ class PaintDashboardView(IApplicationView):
                 self._preview_stack.addWidget(self._plate_layout)
                 preview_layout.insertWidget(0, self._preview_stack)
             else:
-                camera.hide()
                 self._expanded_tabs = QTabWidget()
                 self._expanded_tabs.setStyleSheet(_EXPANDED_ICON_TAB_STYLE)
                 self._expanded_tabs.setIconSize(QSize(36, 36))
@@ -353,6 +352,15 @@ class PaintDashboardView(IApplicationView):
                 )
                 self._center_expanded_tab_icon(0, "fa5s.sliders-h")
                 self._center_expanded_tab_icon(1, "fa5s.th")
+                if self._ui_config.show_tray_camera_tab:
+                    self._expanded_tabs.addTab(
+                        camera,
+                        load_icon("fa5s.camera", color=PRIMARY),
+                        "",
+                    )
+                    self._center_expanded_tab_icon(2, "fa5s.camera")
+                else:
+                    camera.hide()
                 self._retranslate_expanded_tabs()
                 preview_layout.insertWidget(0, self._expanded_tabs)
                 self._quick_access = PaintQuickAccessPanel(
@@ -569,25 +577,26 @@ class PaintDashboardView(IApplicationView):
             self._expanded_tabs.removeTab(0)
             placeholder.deleteLater()
             if self._ui_config.use_collapsible_settings_panel:
-                tray = self._expanded_tabs.widget(0)
-                self._expanded_tabs.removeTab(0)
-                tab_parent = self._expanded_tabs.parentWidget()
-                tab_parent_layout = tab_parent.layout()
-                tray_panel = QFrame(tab_parent)
-                tray_panel.setObjectName("paintTrayPanel")
-                tray_panel.setStyleSheet(_TRAY_PANEL_STYLE)
-                tray_panel_layout = QVBoxLayout(tray_panel)
-                tray_panel_layout.setContentsMargins(10, 10, 10, 10)
-                tray_panel_layout.setSpacing(0)
-                tray.setParent(tray_panel)
-                tray_panel_layout.addWidget(tray)
-                tab_parent_layout.replaceWidget(self._expanded_tabs, tray_panel)
-                tray.show()
-                tray_panel.show()
-                self._tray_panel = tray_panel
-                self._expanded_tabs.setParent(None)
-                self._expanded_tabs.deleteLater()
-                self._expanded_tabs = None
+                if not self._ui_config.show_tray_camera_tab:
+                    tray = self._expanded_tabs.widget(0)
+                    self._expanded_tabs.removeTab(0)
+                    tab_parent = self._expanded_tabs.parentWidget()
+                    tab_parent_layout = tab_parent.layout()
+                    tray_panel = QFrame(tab_parent)
+                    tray_panel.setObjectName("paintTrayPanel")
+                    tray_panel.setStyleSheet(_TRAY_PANEL_STYLE)
+                    tray_panel_layout = QVBoxLayout(tray_panel)
+                    tray_panel_layout.setContentsMargins(10, 10, 10, 10)
+                    tray_panel_layout.setSpacing(0)
+                    tray.setParent(tray_panel)
+                    tray_panel_layout.addWidget(tray)
+                    tab_parent_layout.replaceWidget(self._expanded_tabs, tray_panel)
+                    tray.show()
+                    tray_panel.show()
+                    self._tray_panel = tray_panel
+                    self._expanded_tabs.setParent(None)
+                    self._expanded_tabs.deleteLater()
+                    self._expanded_tabs = None
             else:
                 self._expanded_tabs.insertTab(
                     0,
@@ -1494,12 +1503,16 @@ class PaintDashboardView(IApplicationView):
         if self._expanded_tabs is None:
             return
         if self._ui_config.use_collapsible_settings_panel:
-            labels = (self._translate_text("Tray"),)
+            labels = [self._translate_text("Tray")]
+            if self._ui_config.show_tray_camera_tab:
+                labels.append(self._translate_text("Camera"))
         else:
-            labels = (
+            labels = [
                 self._translate_text("Paint Settings"),
                 self._translate_text("Tray"),
-            )
+            ]
+            if self._ui_config.show_tray_camera_tab:
+                labels.append(self._translate_text("Camera"))
         for index, label in enumerate(labels):
             self._expanded_tabs.setTabText(index, "")
             self._expanded_tabs.setTabToolTip(index, label)

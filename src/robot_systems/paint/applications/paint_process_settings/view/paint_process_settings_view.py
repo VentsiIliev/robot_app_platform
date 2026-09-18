@@ -36,6 +36,7 @@ from src.robot_systems.paint.applications.paint_process_settings.view.paint_proc
     build_paint_process_settings_tabs,
 )
 from src.robot_systems.paint.processes.paint.config import (
+    MAGAZINE_PROCESSING_STRATEGY_BATCH_NESTING,
     MAGAZINE_PICKUP_MODE_AUTO_DISCOVERY_SENSOR_CONTROLLED_FAST_LIN,
     MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN,
     MAGAZINE_PICKUP_MODE_VISION_SENSOR_CONTROLLED_FAST_LIN,
@@ -44,6 +45,9 @@ from src.robot_systems.paint.processes.paint.config import (
 
 
 _MAGAZINE_PICKUP_MODE_KEY = "magazine_pickup_mode"
+_MAGAZINE_PROCESSING_STRATEGY_KEY = "magazine_processing_strategy"
+_MAGAZINE_RECAPTURE_AFTER_PILE_KEY = "magazine_recapture_after_pile_done"
+_MAGAZINE_RECAPTURE_EVERY_CYCLE_KEY = "magazine_recapture_every_cycle"
 _PICKUP_CONTACT_MODE_KEY = "pickup_contact_mode"
 _DROPOFF_STRATEGY_KEY = "dropoff_strategy"
 _SENSOR_CONTROLLED_FAST_LIN_KEYS = {
@@ -68,12 +72,18 @@ _FIXED_MAGAZINE_ONLY_KEYS = {
 _VISION_MAGAZINE_ONLY_KEYS = {
     "magazine_camera_settle_s",
 }
+_BATCH_NESTING_ONLY_KEYS = {
+    "magazine_nesting_margin_mm",
+    "magazine_nesting_padding_mm",
+}
 _PLATE_DROPOFF_ONLY_KEYS = {
     "dropoff_plate_corners",
     "dropoff_plate_robot_frame", "dropoff_plate_motion_profiles",
-    "dropoff_plate_passage_gate", "dropoff_plate_next_cycle_midpoint_enabled",
+    "dropoff_plate_passage_gate", "dropoff_plate_exit_gate",
+    "dropoff_plate_next_cycle_midpoint_enabled",
     "dropoff_plate_next_cycle_midpoint",
     "dropoff_plate_use_center_waypoint",
+    "dropoff_plate_auto_center_near_corner",
     "dropoff_plate_distribute_unwind",
     "dropoff_plate_release_z_offset_mm", "dropoff_plate_approach_clearance_mm",
     "dropoff_plate_margin_left_mm", "dropoff_plate_margin_right_mm",
@@ -1090,6 +1100,9 @@ class PaintProcessSettingsView(IApplicationView):
             self._update_magazine_mode_field_visibility(
                 values.get(_MAGAZINE_PICKUP_MODE_KEY, "vision_planned")
             )
+            self._update_magazine_processing_strategy_visibility(
+                values.get(_MAGAZINE_PROCESSING_STRATEGY_KEY, "direct")
+            )
             self._update_sensor_controlled_fast_lin_visibility(values)
             self._update_dropoff_strategy_visibility(values.get(_DROPOFF_STRATEGY_KEY, "movement_group"))
 
@@ -1288,10 +1301,26 @@ class PaintProcessSettingsView(IApplicationView):
         self.save_requested.emit(values)
 
     def _on_value_changed(self, key: str, value: object, _component_name: str) -> None:
+        if key in {
+            _MAGAZINE_RECAPTURE_AFTER_PILE_KEY,
+            _MAGAZINE_RECAPTURE_EVERY_CYCLE_KEY,
+        } and bool(value):
+            other_key = (
+                _MAGAZINE_RECAPTURE_EVERY_CYCLE_KEY
+                if key == _MAGAZINE_RECAPTURE_AFTER_PILE_KEY
+                else _MAGAZINE_RECAPTURE_AFTER_PILE_KEY
+            )
+            pending_values = self.values()
+            pending_values[key] = True
+            pending_values[other_key] = False
+            if self.settings_view is not None:
+                self.settings_view.set_values(pending_values)
         if key == _DROPOFF_STRATEGY_KEY:
             self._update_dropoff_strategy_visibility(value)
         if key == _MAGAZINE_PICKUP_MODE_KEY:
             self._update_magazine_mode_field_visibility(value)
+        if key == _MAGAZINE_PROCESSING_STRATEGY_KEY:
+            self._update_magazine_processing_strategy_visibility(value)
         if key in {_MAGAZINE_PICKUP_MODE_KEY, _PICKUP_CONTACT_MODE_KEY}:
             pending_values = self.values()
             pending_values[key] = value
@@ -1302,7 +1331,11 @@ class PaintProcessSettingsView(IApplicationView):
         if key == "dropoff_safe_travel_positions" and value == "dropoff_safe_travel_positions_add_current":
             self.set_dropoff_safe_travel_current_requested.emit()
             return
-        if key in {"dropoff_plate_passage_gate", "dropoff_plate_next_cycle_midpoint"} and value == f"{key}_add_current":
+        if key in {
+            "dropoff_plate_passage_gate",
+            "dropoff_plate_exit_gate",
+            "dropoff_plate_next_cycle_midpoint",
+        } and value == f"{key}_add_current":
             self.set_plate_route_pose_current_requested.emit(key)
             return
         if key == "magazine_fixed_pickup_sources" and value == "add_current":
@@ -1324,6 +1357,7 @@ class PaintProcessSettingsView(IApplicationView):
             "safe_travel_positions",
             "dropoff_safe_travel_positions",
             "dropoff_plate_passage_gate",
+            "dropoff_plate_exit_gate",
             "dropoff_plate_next_cycle_midpoint",
         } and isinstance(value, dict):
             if value.get("action") == "move_to":
@@ -1341,6 +1375,13 @@ class PaintProcessSettingsView(IApplicationView):
         )
         self._set_setting_fields_visible(_FIXED_MAGAZINE_ONLY_KEYS, fixed_group)
         self._set_setting_fields_visible(_VISION_MAGAZINE_ONLY_KEYS, not fixed_group)
+
+    def _update_magazine_processing_strategy_visibility(self, strategy: object) -> None:
+        batch_nesting = (
+            str(strategy or "direct").strip().lower()
+            == MAGAZINE_PROCESSING_STRATEGY_BATCH_NESTING
+        )
+        self._set_setting_fields_visible(_BATCH_NESTING_ONLY_KEYS, batch_nesting)
 
     def _update_sensor_controlled_fast_lin_visibility(self, values: dict) -> None:
         pickup_mode = str(values.get(_PICKUP_CONTACT_MODE_KEY, "")).strip().lower()
@@ -1384,7 +1425,10 @@ class PaintProcessSettingsView(IApplicationView):
         waypoints = _WaypointTable._normalize_waypoints(values.get(key, []), default_vel, default_acc)
         waypoint = _WaypointTable._normalize_waypoint(position, default_vel, default_acc)
         if waypoint is not None:
-            if key in {"dropoff_plate_passage_gate", "dropoff_plate_next_cycle_midpoint"}:
+            if key in {
+                "dropoff_plate_passage_gate",
+                "dropoff_plate_exit_gate",
+            }:
                 waypoints = [waypoint]
             else:
                 waypoints.append(waypoint)
@@ -1397,7 +1441,7 @@ class PaintProcessSettingsView(IApplicationView):
     def _waypoint_defaults_for_key(key: str) -> tuple[float, float]:
         if key == "dropoff_safe_travel_positions":
             return 60.0, 40.0
-        if key == "dropoff_plate_passage_gate":
+        if key in {"dropoff_plate_passage_gate", "dropoff_plate_exit_gate"}:
             return 70.0, 50.0
         if key == "dropoff_plate_next_cycle_midpoint":
             return 60.0, 40.0

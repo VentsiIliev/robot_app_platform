@@ -23,6 +23,9 @@ def handle_starting(ctx: PaintExecutionContext) -> PaintExecutionState:
         ctx.set_result(False, "Cycle-start Joint 6 unwind failed before production navigation")
         return PaintExecutionState.ERROR
     service = ctx.production_service
+    if ctx.cached_workpiece_contour is not None and ctx.snapshot is not None:
+        service._restore_capture_view("processing cached staged workpiece")
+        return PaintExecutionState.PREPARE_WORKPIECE
     if ctx.magazine_config is not None and bool(getattr(ctx.magazine_config, "enabled", False)):
         if supports_fine_magazine_states(getattr(service, "_magazine_load_service", None)):
             service._set_dashboard_live_view_paused(

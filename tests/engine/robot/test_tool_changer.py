@@ -1,7 +1,7 @@
 import unittest
 
 from src.engine.robot.interfaces.tool_definition import ToolDefinition
-from src.engine.robot.tool_changer import SlotConfig, ToolChanger
+from src.engine.robot.tool_changer import SlotConfig, ToolChangeStep, ToolChanger
 
 tools = [ToolDefinition(id=1,name="Tool1"),ToolDefinition(id=2,name="Tool2"),ToolDefinition(id=3,name="Tool3"),]
 
@@ -63,3 +63,12 @@ class TestToolChanger(unittest.TestCase):
         tc.set_slot_not_available(10)
         self.assertFalse(tc.is_slot_occupied(11))
         self.assertFalse(tc.is_slot_occupied(12))
+
+    def test_slot_exposes_taught_sequences(self):
+        slot = SlotConfig(
+            id=20,
+            tool_id=3,
+            pickup_sequence=[ToolChangeStep(kind="attach", label="Attach")],
+        )
+        changer = ToolChanger(slots=[slot], tools=tools)
+        self.assertEqual(changer.get_slot(20).pickup_sequence[0].kind, "attach")

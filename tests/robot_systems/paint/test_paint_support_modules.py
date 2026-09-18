@@ -6,6 +6,8 @@ from unittest.mock import MagicMock, call, patch
 
 from src.engine.common_settings_ids import CommonSettingsID
 from src.engine.common_service_ids import CommonServiceID
+from src.engine.hardware.communication.modbus.modbus import ModbusConfig, ModbusSlaveConfig
+from src.engine.hardware.peripherals import PeripheralBinding, PeripheralConfig
 from src.engine.robot.targeting import (
     RemoteTcpDefinition,
     RemoteTcpSettings,
@@ -188,6 +190,34 @@ class TestPaintServiceBuildersAndProviders(unittest.TestCase):
         self.assertEqual(kwargs["vacuum_config"].pump_register, "Y2")
         self.assertEqual(kwargs["vacuum_config"].blow_off_register, "Y3")
         self.assertEqual(kwargs["vacuum_config"].blow_off_pulse_seconds, 0.2)
+
+    def test_build_vacuum_pump_service_uses_configured_blow_off_on_value(self) -> None:
+        modbus_config = ModbusConfig(
+            slaves={"vacuum": ModbusSlaveConfig(slave_address=10)},
+        )
+        peripheral_config = PeripheralConfig(
+            peripherals={
+                "vacuum_pump": PeripheralBinding(
+                    slave_id=10,
+                    outputs={"pump": "1", "blow_off": "1"},
+                    commands={"on": 1, "off": 0, "blow_off_on": 4},
+                ),
+            },
+        )
+        ctx = SimpleNamespace(
+            settings=SimpleNamespace(
+                get=MagicMock(side_effect=[modbus_config, peripheral_config]),
+            ),
+        )
+
+        with patch(
+            "src.engine.hardware.vacuum_pump.modbus.modbus_vacuum_pump_factory.build_modbus_vacuum_pump_controller",
+            return_value="vacuum",
+        ) as factory:
+            result = build_vacuum_pump_service(ctx)
+
+        self.assertEqual(result, "vacuum")
+        self.assertEqual(factory.call_args.kwargs["vacuum_config"].blow_off_on_value, 4)
 
     def test_build_vacuum_pump_service_returns_none_on_build_failure(self) -> None:
         ctx = SimpleNamespace(settings=SimpleNamespace(get=MagicMock(side_effect=RuntimeError("bad"))))

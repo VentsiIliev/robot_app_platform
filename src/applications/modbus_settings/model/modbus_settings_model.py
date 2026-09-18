@@ -116,6 +116,9 @@ class ModbusSettingsModel(IApplicationModel):
     def grant_serial_port_permissions(self) -> List[str]:
         return self._actions.grant_serial_port_permissions()
 
+    def set_serial_port_low_latency(self) -> List[str]:
+        return self._actions.set_serial_port_low_latency()
+
     def config_from_flat(self, flat: dict) -> ModbusConfig:
         base = self._config if self._config is not None else ModbusConfig()
         return ModbusSettingsMapper.from_flat_dict(flat, base)

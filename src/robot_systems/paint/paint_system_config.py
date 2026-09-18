@@ -22,6 +22,10 @@ PAINT_DASHBOARD_APP = True
 # process buttons expand to the available width.
 SHOW_DASHBOARD_CAMERA_PREVIEW = False
 
+# Camera-disabled tray layout only. Adds the existing live camera widget as an
+# optional second tab beside the tray visualization.
+SHOW_TRAY_DASHBOARD_CAMERA_TAB = True
+
 # Camera-disabled layout only. True places paint settings in the collapsible
 # panel above Messages; False keeps them in the original Paint Settings tab.
 USE_COLLAPSIBLE_DASHBOARD_SETTINGS_PANEL = True
@@ -60,6 +64,9 @@ WORKPIECE_EDITOR_APP = True
 
 # Configures the robot, movement groups, calibration, tools, and target frames.
 ROBOT_SETTINGS_APP = True
+
+# Configures reusable tool TCPs, magazine slots, and pickup/drop-off sequences.
+TOOL_SETTINGS_APP = True
 
 # Displays EtherCAT master, slave, and communication diagnostic information.
 ETHERCAT_DIAGNOSTICS_APP = False

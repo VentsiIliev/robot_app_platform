@@ -1242,6 +1242,25 @@ def _build_robot_settings_application(robot_app):
     )
 
 
+def _build_tool_settings_application(robot_app):
+    from src.applications.base.robot_jog_service_builder import build_robot_system_jog_service
+    from src.applications.base.widget_application import WidgetApplication
+    from src.applications.tool_settings import ToolSettingsApplicationService, ToolSettingsFactory
+    from src.engine.robot.calibration.ros_tool_registry_client import RosToolRegistryClient
+
+    service = ToolSettingsApplicationService(
+        robot_app._settings_service,
+        robot_service=robot_app.get_optional_service(CommonServiceID.ROBOT),
+        tool_registry_client=RosToolRegistryClient(),
+    )
+    jog_service = build_robot_system_jog_service(robot_app)
+    return WidgetApplication(
+        widget_factory=lambda ms: ToolSettingsFactory().build(
+            service, messaging=ms, jog_service=jog_service
+        )
+    )
+
+
 def _build_modbus_settings_application(robot_app):
     from src.applications.base.robot_jog_service_builder import build_robot_system_jog_service
     from src.applications.base.widget_application import WidgetApplication

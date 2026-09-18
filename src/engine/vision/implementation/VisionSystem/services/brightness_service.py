@@ -16,14 +16,18 @@ class BrightnessService:
         self,
         camera_settings: CameraSettings,
         area_points_provider: Optional[Callable[[], np.ndarray | None]] = None,
+        area_key_provider: Optional[Callable[[], str]] = None,
     ):
         self._settings = camera_settings
         self._area_points_provider = area_points_provider
+        self._area_key_provider = area_key_provider
         self._locked_area_points: np.ndarray | None = None
         self._resolved_area_cache_key: tuple | None = None
         self._resolved_area_cache_points: np.ndarray | None = None
         self._adjustment_locked = False
         self._adjustment = 0.0
+        self._active_adjustment_key: str | None = None
+        self._adjustments_by_area: dict[str, float] = {}
         self.brightness_controller = BrightnessController(
             Kp       = camera_settings.get_brightness_kp(),
             Ki       = camera_settings.get_brightness_ki(),
@@ -44,6 +48,7 @@ class BrightnessService:
     # ── Main operation ────────────────────────────────────────────────
 
     def adjust(self, image: np.ndarray) -> np.ndarray:
+        self._activate_area_adjustment()
         area = self._get_area_points()
 
         adjusted = self.brightness_controller.adjustBrightness(image, self._adjustment)
@@ -61,6 +66,8 @@ class BrightnessService:
             correction = error
 
         self._adjustment = float(np.clip(self._adjustment + correction, -255, 255))
+        if self._active_adjustment_key is not None:
+            self._adjustments_by_area[self._active_adjustment_key] = self._adjustment
 
         return self.brightness_controller.adjustBrightness(image, self._adjustment)
 
@@ -81,6 +88,29 @@ class BrightnessService:
 
     def unlock_adjustment(self) -> None:
         self._adjustment_locked = False
+
+    def _activate_area_adjustment(self) -> None:
+        if self._area_key_provider is None:
+            return
+        try:
+            area_key = str(self._area_key_provider() or "").strip()
+        except Exception as exc:
+            _logger.error("Error reading brightness area key: %s", exc)
+            return
+        if not area_key or area_key == self._active_adjustment_key:
+            return
+        if self._active_adjustment_key is not None:
+            self._adjustments_by_area[self._active_adjustment_key] = self._adjustment
+        previous_adjustment = self._adjustment
+        self._adjustment = self._adjustments_by_area.get(area_key, previous_adjustment)
+        restored = area_key in self._adjustments_by_area
+        self._active_adjustment_key = area_key
+        _logger.info(
+            "Brightness correction area switched to '%s': adjustment=%.3f restored=%s",
+            area_key,
+            self._adjustment,
+            restored,
+        )
 
     # ── Private ───────────────────────────────────────────────────────
 

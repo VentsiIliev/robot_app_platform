@@ -88,6 +88,28 @@ class TestRobotJogWidgetLocalization(unittest.TestCase):
         self.assertEqual("250 mm", widget._linear_label.text())
         self.assertEqual(("JOG_ROBOT", "X", "Plus", 250), requests[-1])
 
+    def test_j6_full_turn_buttons_emit_single_360_degree_requests(self) -> None:
+        widget = RobotJogWidget()
+        requests = []
+        widget.joint_jog_requested.connect(
+            lambda command, joint, direction, value: requests.append(
+                (command, joint, direction, value)
+            )
+        )
+
+        widget._j6_full_turn_minus_btn.click()
+        widget._j6_full_turn_plus_btn.click()
+
+        self.assertEqual(
+            [
+                ("JOG_JOINT", "J6", "Minus", 360.0),
+                ("JOG_JOINT", "J6", "Plus", 360.0),
+            ],
+            requests,
+        )
+        self.assertFalse(widget._joint_timers["j6_minus"].isActive())
+        self.assertFalse(widget._joint_timers["j6_plus"].isActive())
+
 
 if __name__ == "__main__":
     unittest.main()

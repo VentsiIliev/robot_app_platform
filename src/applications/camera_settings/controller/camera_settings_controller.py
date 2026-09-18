@@ -2,6 +2,7 @@ import logging
 
 from PyQt6.QtCore import pyqtSignal
 
+from src.applications.base.background_worker import BackgroundWorker
 from src.applications.base.broker_subscription_mixin import BrokerSubscriptionMixin, SignalBridge
 from src.applications.base.i_application_controller import IApplicationController
 from src.applications.camera_settings.mapper import CameraSettingsMapper
@@ -19,16 +20,17 @@ class _Bridge(SignalBridge):
 
 _TOGGLE_KEYS = {
     "contour_detection", "draw_contours", "gaussian_blur",
-    "dilate_enabled", "erode_enabled", "brightness_auto",
+    "dilate_enabled", "erode_enabled", "brightness_auto", "hardware_auto_exposure",
     "aruco_enabled", "aruco_flip_image",
 }
 
 
-class CameraSettingsController(IApplicationController, BrokerSubscriptionMixin):
+class CameraSettingsController(IApplicationController, BrokerSubscriptionMixin, BackgroundWorker):
 
     def __init__(self, model: CameraSettingsModel, view: CameraSettingsView,
                  messaging: IMessagingService):
         BrokerSubscriptionMixin.__init__(self)
+        BackgroundWorker.__init__(self)
         self._model  = model
         self._view   = view
         self._broker = messaging
@@ -48,6 +50,7 @@ class CameraSettingsController(IApplicationController, BrokerSubscriptionMixin):
     def stop(self) -> None:
         self._active = False
         self._unsubscribe_all()
+        self._stop_threads()
 
     # ── Bridge ────────────────────────────────────────────────────────
 
@@ -98,9 +101,26 @@ class CameraSettingsController(IApplicationController, BrokerSubscriptionMixin):
         self._view.raw_mode_toggled.connect(self._model.set_raw_mode)
 
     def _on_value_changed(self, key: str, value, component_name: str) -> None:
+        if key == "hardware_auto_exposure":
+            settings = CameraSettingsMapper.from_flat_dict(
+                self._view.settings_view.get_values(),
+                self._model.current_settings,
+            )
+            self._run_in_thread(
+                fn=lambda: self._model.save(settings),
+                on_done=self._on_background_save_done,
+                on_error=self._on_background_save_failed,
+            )
+            return
         if key in _TOGGLE_KEYS:
             self._on_save(self._view.settings_view.get_values())
 
     def _on_save(self, flat: dict) -> None:
         settings = CameraSettingsMapper.from_flat_dict(flat, self._model.current_settings)
         self._model.save(settings)
+
+    def _on_background_save_done(self, _result) -> None:
+        self._logger.info("Camera hardware auto-exposure setting applied")
+
+    def _on_background_save_failed(self, message: str) -> None:
+        self._logger.error("Failed to apply camera hardware auto-exposure: %s", message)

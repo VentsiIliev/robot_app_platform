@@ -3,7 +3,7 @@ from typing import List, Sequence
 
 from src.engine.repositories.interfaces import ISettingsSerializer
 from src.engine.robot.interfaces.tool_definition import ToolDefinition
-from src.engine.robot.tool_changer import SlotConfig
+from src.engine.robot.tool_changer import SlotConfig, ToolChangeStep
 from src.shared_contracts.declarations.tooling import ToolDefinition as ToolDefinitionDeclaration
 from src.shared_contracts.declarations.tooling import ToolSlotDefinition
 
@@ -12,6 +12,7 @@ from src.shared_contracts.declarations.tooling import ToolSlotDefinition
 class ToolChangerSettings:
     tools: List[ToolDefinition] = field(default_factory=list)
     slots: List[SlotConfig] = field(default_factory=list)
+    reference_tool_id: int = 1
 
     def get_tool_names(self) -> List[str]:
         return [t.name for t in self.tools]
@@ -36,7 +37,13 @@ class ToolChangerSettingsSerializer(ISettingsSerializer):
     def get_default(self) -> ToolChangerSettings:
         return ToolChangerSettings(
             tools=[
-                ToolDefinition(id=int(tool.id), name=str(tool.name))
+                ToolDefinition(
+                    id=int(tool.id),
+                    name=str(tool.name),
+                    reference_tool_id=getattr(tool, "reference_tool_id", None),
+                    relative_transform=list(getattr(tool, "relative_transform", [0, 0, 0, 0, 0, 0])),
+                    collision_profile=str(getattr(tool, "collision_profile", "")),
+                )
                 for tool in self._default_tools
             ],
             slots=[
@@ -47,8 +54,27 @@ class ToolChangerSettingsSerializer(ISettingsSerializer):
 
     def to_dict(self, settings: ToolChangerSettings) -> dict:
         return {
-            "tools": [{"id": t.id, "name": t.name} for t in settings.tools],
-            "slots": [{"slot_id": s.id, "tool_id": s.tool_id} for s in settings.slots],
+            "reference_tool_id": int(settings.reference_tool_id),
+            "tools": [
+                {
+                    "id": t.id,
+                    "name": t.name,
+                    "reference_tool_id": t.reference_tool_id,
+                    "relative_transform": list(t.relative_transform),
+                    "collision_profile": t.collision_profile,
+                }
+                for t in settings.tools
+            ],
+            "slots": [
+                {
+                    "slot_id": s.id,
+                    "tool_id": s.tool_id,
+                    "label": s.label,
+                    "pickup_sequence": [step.to_dict() for step in s.pickup_sequence],
+                    "dropoff_sequence": [step.to_dict() for step in s.dropoff_sequence],
+                }
+                for s in settings.slots
+            ],
         }
 
     def from_dict(self, data: dict) -> ToolChangerSettings:
@@ -58,13 +84,25 @@ class ToolChangerSettingsSerializer(ISettingsSerializer):
         raw_tools = data.get("tools")
         raw_slots = data.get("slots")
         tools = [
-            ToolDefinition(id=int(t["id"]), name=str(t["name"]))
+            ToolDefinition(
+                id=int(t["id"]),
+                name=str(t["name"]),
+                reference_tool_id=(
+                    int(t["reference_tool_id"])
+                    if t.get("reference_tool_id") is not None else None
+                ),
+                relative_transform=list(t.get("relative_transform", [0, 0, 0, 0, 0, 0])),
+                collision_profile=str(t.get("collision_profile", "")),
+            )
             for t in (raw_tools if raw_tools is not None else [tool.to_dict() for tool in self._default_tools])
         ]
         slots = [
             SlotConfig(
                 id=int(s["slot_id"]),
                 tool_id=int(s["tool_id"]) if s.get("tool_id") is not None else None,
+                label=str(s.get("label", "")),
+                pickup_sequence=[ToolChangeStep.from_dict(step) for step in s.get("pickup_sequence", [])],
+                dropoff_sequence=[ToolChangeStep.from_dict(step) for step in s.get("dropoff_sequence", [])],
             )
             for s in (
                 raw_slots
@@ -72,4 +110,8 @@ class ToolChangerSettingsSerializer(ISettingsSerializer):
                 else [{"slot_id": slot.id, "tool_id": slot.tool_id} for slot in self._default_slots]
             )
         ]
-        return ToolChangerSettings(tools=tools, slots=slots)
+        return ToolChangerSettings(
+            tools=tools,
+            slots=slots,
+            reference_tool_id=int(data.get("reference_tool_id", 1)),
+        )

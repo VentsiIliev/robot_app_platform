@@ -61,6 +61,7 @@ def build_tool_service(ctx):
         robot_config=robot_config,
         movement_groups=movement_groups,
         slot_definitions=ctx.system_class.tool_slots,
+        tool_activator=ctx.services.get(CommonServiceID.ROBOT),
     )
 
 

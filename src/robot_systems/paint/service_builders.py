@@ -41,6 +41,11 @@ def build_vacuum_pump_service(ctx):
                 on_value=binding.commands.get("on", 1) if binding is not None else 1,
                 off_value=binding.commands.get("off", 0) if binding is not None else 0,
                 blow_off_register=blow_off_register,
+                blow_off_on_value=(
+                    binding.commands.get("blow_off_on", 1)
+                    if binding is not None
+                    else 1
+                ),
                 blow_off_pulse_seconds=0.2,
             ),
         )

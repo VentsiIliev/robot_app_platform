@@ -78,12 +78,10 @@ class ModbusRegisterTransport(IRegisterTransport):
 
     def read_register(self, address: int) -> int:
         with self._session() as inst:
-            self._logger.debug(f"Reading register {address} ...")
             return int(inst.read_register(address, functioncode=3))
 
     def read_registers(self, address: int, count: int) -> List[int]:
         with self._session() as inst:
-            self._logger.debug(f"Reading starting register {address} (count={count})")
             return list(inst.read_registers(address, count, functioncode=3))
 
     def write_register(self, address: int, value: int) -> None:
@@ -93,8 +91,6 @@ class ModbusRegisterTransport(IRegisterTransport):
                 address, value, self._port, self._slave_address,
                 self._baudrate, self._bytesize, self._parity, self._stopbits,
             )
-            if self._logger.isEnabledFor(logging.DEBUG):
-                inst.debug = True
             inst.write_register(address, value, functioncode=6)
             self._logger.debug(
                 "FC6 write acknowledged register=%d value=%d slave=%d",
@@ -103,7 +99,6 @@ class ModbusRegisterTransport(IRegisterTransport):
 
     def write_registers(self, address: int, values: List[int]) -> None:
         with self._session() as inst:
-            self._logger.debug(f"Writing starting register {address} (values={values})")
             inst.write_registers(address, values)
 
     # ── Persistent connection ─────────────────────────────────────────
@@ -137,5 +132,8 @@ class ModbusRegisterTransport(IRegisterTransport):
         inst.serial.parity   = self._parity
         inst.serial.timeout  = self._timeout
         inst.mode            = minimalmodbus.MODE_RTU
-        inst.debug           = self._logger.isEnabledFor(logging.DEBUG)
+        # MinimalModbus writes verbose protocol traces directly to stdout.
+        # Keep it disabled even when application logging is set to DEBUG;
+        # transport failures are reported through the normal logger/exception path.
+        inst.debug           = False
         return inst

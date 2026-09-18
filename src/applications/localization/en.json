@@ -34,6 +34,11 @@
     "Logout": "Logout",
     "Not logged in": "Not logged in"
   },
+  "ModbusSettingsView": {
+    "Set Low Latency": "Set Low Latency",
+    "Low latency enabled — {count} port(s)": "Low latency enabled — {count} port(s)",
+    "Low latency update failed": "Low latency update failed"
+  },
   "RobotJogWidget": {
     "Cartesian": "Cartesian",
     "Joint": "Joint",
@@ -44,6 +49,7 @@
     "Rotation Step": "Rotation Step",
     "Rotation Speed": "Rotation Speed",
     "Joint Step": "Joint Step",
+    "J6 Full Turn": "J6 Full Turn",
     "Linear": "Linear",
     "Rotational": "Rotational",
     "Joints": "Joints",

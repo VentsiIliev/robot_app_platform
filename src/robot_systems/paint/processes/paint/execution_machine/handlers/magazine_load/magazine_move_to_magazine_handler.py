@@ -48,6 +48,21 @@ def handle_magazine_move_to_magazine(ctx: PaintExecutionContext) -> PaintExecuti
             or ctx.magazine_discovery_contours
         )
     )
+    cached_contour = ctx.magazine_discovery_active_contour
+    if cached_contour is None and ctx.magazine_discovery_contours:
+        cached_contour = ctx.magazine_discovery_contours[0]
+    cached_approach_pose = (
+        load_service._resolve_auto_discovery_approach_pose(
+            cached_contour,
+            ctx.magazine_group,
+            config,
+        )
+        if has_cached_auto_discovery
+        else None
+    )
+    if has_cached_auto_discovery and cached_approach_pose is None:
+        ctx.set_result(False, "Could not resolve cached magazine pile approach pose")
+        return PaintExecutionState.ERROR
     if not ctx.magazine_group:
         ctx.set_result(False, "Magazine movement group is not configured")
         return PaintExecutionState.ERROR
@@ -69,7 +84,9 @@ def handle_magazine_move_to_magazine(ctx: PaintExecutionContext) -> PaintExecuti
         "position_tolerance_mm": position_tolerance,
         "orientation_tolerance_deg": orientation_tolerance,
     }
-    if ctx.magazine_fixed_pickup_pose is not None:
+    if cached_approach_pose is not None:
+        verification_kwargs["expected_position"] = cached_approach_pose
+    elif ctx.magazine_fixed_pickup_pose is not None:
         verification_kwargs["expected_position"] = ctx.magazine_fixed_pickup_pose
     if service._consume_verified_prepositioned_start_group(
         ctx.magazine_group,
@@ -82,10 +99,12 @@ def handle_magazine_move_to_magazine(ctx: PaintExecutionContext) -> PaintExecuti
         if has_cached_auto_discovery:
             _logger.info(
                 "[MAGAZINE_LOAD] Auto-discovery piles are cached; "
-                "reusing verified Magazine pose and skipping camera settle"
+                "reusing verified pile approach pose and skipping camera settle"
             )
             return PaintExecutionState.MAGAZINE_CAPTURE
-        service._restore_capture_view("after verifying prepositioned magazine pickup")
+        service._restore_magazine_capture_view(
+            "after verifying prepositioned magazine pickup"
+        )
         return PaintExecutionState.MAGAZINE_WAIT_CAMERA_SETTLE
 
     move_kwargs = dict(
@@ -94,7 +113,15 @@ def handle_magazine_move_to_magazine(ctx: PaintExecutionContext) -> PaintExecuti
         motion_type=config.move_to_magazine_motion_type,
         blendR=float(config.move_to_magazine_blendR),
     )
-    if ctx.magazine_fixed_pickup_pose is not None:
+    if cached_approach_pose is not None:
+        ok = load_service._move_to_pose_with_pause_resume_recovery(
+            ctx,
+            PaintExecutionState.MAGAZINE_MOVE_TO_MAGAZINE,
+            cached_approach_pose,
+            ctx.magazine_group,
+            **move_kwargs,
+        )
+    elif ctx.magazine_fixed_pickup_pose is not None:
         ok = load_service._move_to_pose_with_pause_resume_recovery(
             ctx,
             PaintExecutionState.MAGAZINE_MOVE_TO_MAGAZINE,
@@ -143,8 +170,8 @@ def handle_magazine_move_to_magazine(ctx: PaintExecutionContext) -> PaintExecuti
     if has_cached_auto_discovery:
         _logger.info(
             "[MAGAZINE_LOAD] Auto-discovery piles are cached; "
-            "positioned at Magazine pose and skipping camera settle"
+            "positioned at cached pile approach pose and skipping camera settle"
         )
         return PaintExecutionState.MAGAZINE_CAPTURE
-    service._restore_capture_view("after reaching magazine pickup")
+    service._restore_magazine_capture_view("after reaching magazine pickup")
     return PaintExecutionState.MAGAZINE_WAIT_CAMERA_SETTLE

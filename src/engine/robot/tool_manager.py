@@ -21,6 +21,8 @@ class ToolManager(IToolService):
         robot_config,
         movement_groups,
         slot_definitions: List[ToolSlotDefinition] | None = None,
+        tool_activator=None,
+        operator_confirmation=None,
     ):
         self._motion         = motion_service
         self._tool_changer   = tool_changer
@@ -30,6 +32,8 @@ class ToolManager(IToolService):
             int(slot.id): slot for slot in (slot_definitions or [])
         }
         self._current_gripper: Optional[int] = None
+        self._tool_activator = tool_activator
+        self._operator_confirmation = operator_confirmation
         self._lock           = threading.Lock()
         self._logger         = logging.getLogger(self.__class__.__name__)
         self._tools: dict    = {}
@@ -37,6 +41,16 @@ class ToolManager(IToolService):
     @property
     def current_gripper(self) -> Optional[int]:
         return self._current_gripper
+
+    @property
+    def current_tool(self) -> Optional[int]:
+        return self._current_gripper
+
+    def pickup_tool(self, tool_id: int, max_retries: int = 3) -> Tuple[bool, Optional[str]]:
+        return self.pickup_gripper(tool_id, max_retries=max_retries)
+
+    def drop_off_tool(self, tool_id: int, max_retries: int = 3) -> Tuple[bool, Optional[str]]:
+        return self.drop_off_gripper(tool_id, max_retries=max_retries)
 
     def add_tool(self, name: str, tool) -> None:
         self._tools[name] = tool
@@ -56,14 +70,23 @@ class ToolManager(IToolService):
                 self._logger.warning("Gripper already attached: %d", gripper_id)
                 return False, f"Gripper {gripper_id} is already held"
 
-            positions, config = self._get_positions_and_config(gripper_id, "PICKUP")
+            sequence = self._get_taught_sequence(gripper_id, "PICKUP")
+            if sequence:
+                ok, err = self._execute_taught_sequence(sequence, gripper_id, "pickup")
+                if not ok:
+                    return False, err
+                positions, config = [], None
+            else:
+                positions, config = self._get_positions_and_config(gripper_id, "PICKUP")
             if positions is None or config is None:
-                self._logger.warning("No pickup config for gripper %d", gripper_id)
-                return False, f"No pickup movement group configured for gripper {gripper_id}"
+                if not sequence:
+                    self._logger.warning("No pickup config for gripper %d", gripper_id)
+                    return False, f"No pickup movement group configured for gripper {gripper_id}"
 
-            ok, err = self._execute_positions(positions, config, gripper_id, "pickup", max_retries)
-            if not ok:
-                return False, err
+            if not sequence:
+                ok, err = self._execute_positions(positions, config, gripper_id, "pickup", max_retries)
+                if not ok:
+                    return False, err
 
             slot_id = self._tool_changer.get_slot_id_by_tool_id(gripper_id)
             if slot_id is None:
@@ -84,13 +107,22 @@ class ToolManager(IToolService):
             if self._tool_changer.is_slot_occupied(slot_id):
                 return False, f"Slot {slot_id} is already occupied"
 
-            positions, config = self._get_positions_and_config(gripper_id, "DROPOFF")
+            sequence = self._get_taught_sequence(gripper_id, "DROPOFF")
+            if sequence:
+                ok, err = self._execute_taught_sequence(sequence, gripper_id, "dropoff")
+                if not ok:
+                    return False, err
+                positions, config = [], None
+            else:
+                positions, config = self._get_positions_and_config(gripper_id, "DROPOFF")
             if positions is None or config is None:
-                return False, f"No dropoff movement group configured for gripper {gripper_id}"
+                if not sequence:
+                    return False, f"No dropoff movement group configured for gripper {gripper_id}"
 
-            ok, err = self._execute_positions(positions, config, gripper_id, "dropoff", max_retries)
-            if not ok:
-                return False, err
+            if not sequence:
+                ok, err = self._execute_positions(positions, config, gripper_id, "dropoff", max_retries)
+                if not ok:
+                    return False, err
 
             self._tool_changer.set_slot_not_available(slot_id)
             self._current_gripper = None            # ← was self.current_gripper (property, no setter)
@@ -100,6 +132,46 @@ class ToolManager(IToolService):
         return self._tool_changer.list_tools()
 
     # ── Internal ──────────────────────────────────────────────────────
+
+    def _get_taught_sequence(self, tool_id: int, operation: str):
+        slot_id = self._tool_changer.get_slot_id_by_tool_id(tool_id)
+        if slot_id is None:
+            return []
+        slot = getattr(self._tool_changer, "get_slot", lambda _slot_id: None)(slot_id)
+        if slot is None:
+            return []
+        return list(slot.pickup_sequence if operation == "PICKUP" else slot.dropoff_sequence)
+
+    def _execute_taught_sequence(self, steps, tool_id: int, operation: str):
+        for index, step in enumerate(steps):
+            if step.kind == "motion":
+                mover = self._motion.move_ptp if step.motion_type == "ptp" else self._motion.move_linear
+                kwargs = dict(
+                    position=step.pose,
+                    tool=self._robot_config.robot_tool,
+                    user=self._robot_config.robot_user,
+                    velocity=step.velocity,
+                    acceleration=step.acceleration,
+                    wait_to_reach=True,
+                )
+                if step.motion_type != "ptp":
+                    kwargs["blendR"] = step.blend_radius
+                if not mover(**kwargs):
+                    return False, f"{operation} step {index + 1} failed"
+            elif step.kind == "wait":
+                time.sleep(max(0.0, step.wait_seconds))
+            elif step.kind == "operator_confirm":
+                if not callable(self._operator_confirmation) or not self._operator_confirmation(step.label):
+                    return False, f"Operator confirmation required at {operation} step {index + 1}"
+            elif step.kind == "attach":
+                if self._tool_activator is not None and not self._tool_activator.set_active_tool(tool_id):
+                    return False, f"Failed to activate tool {tool_id}"
+                self._robot_config.robot_tool = int(tool_id)
+            elif step.kind == "detach":
+                if self._tool_activator is not None and not self._tool_activator.set_active_tool(0):
+                    return False, "Failed to activate flange tool 0"
+                self._robot_config.robot_tool = 0
+        return True, None
 
     def _get_positions_and_config(self, gripper_id: int, operation: str):
         """

@@ -17,6 +17,7 @@ from src.engine.robot.configuration import (
     MovementGroupSettingsSerializer,
     RobotCalibrationSettingsSerializer,
     RobotSettingsSerializer,
+    ToolChangerSettingsSerializer,
 )
 from src.engine.robot.height_measuring import (
     HeightMeasuringSettingsSerializer,
@@ -26,6 +27,7 @@ from src.engine.robot.height_measuring import (
 from src.engine.robot.height_measuring.depth_map_data import DepthMapDataSerializer
 from src.engine.robot.features.navigation_service import NavigationService
 from src.engine.robot.interfaces.i_robot_service import IRobotService
+from src.engine.robot.interfaces.i_tool_service import IToolService
 from src.engine.robot.targeting import TargetingSettingsSerializer
 from src.engine.vision.calibration_vision_settings import CalibrationVisionSettingsSerializer
 from src.engine.vision.camera_settings_serializer import CameraSettingsSerializer
@@ -61,6 +63,8 @@ from src.shared_contracts.declarations import (
     ShellSetup,
     SystemMetadata,
     TargetFrameDefinition,
+    ToolDefinition,
+    ToolSlotDefinition,
     WorkAreaDefinition,
     WorkAreaObserverBinding,
 )
@@ -111,6 +115,9 @@ def _build_application_specs():
         (paint_system_config.ROBOT_SETTINGS_APP,
          ApplicationSpec(name="RobotSettings", folder_id=2, icon="mdi.robot-industrial",
                          factory=application_wiring._build_robot_settings_application)),
+        (paint_system_config.TOOL_SETTINGS_APP,
+         ApplicationSpec(name="ToolSettings", folder_id=2, icon="fa5s.tools",
+                         factory=application_wiring._build_tool_settings_application)),
         (paint_system_config.ETHERCAT_DIAGNOSTICS_APP,
          ApplicationSpec(name="EthercatDiagnostics", folder_id=2, icon="fa5s.network-wired",
                          factory=application_wiring._build_ethercat_diagnostics_application)),
@@ -172,6 +179,9 @@ class PaintRobotSystem(BaseRobotSystem):
     allowed_dropoff_strategies = ("movement_group", "plate_layout")
     height_measuring_enabled = True
 
+    tools = [ToolDefinition(id=1, name="Calibration Tool")]
+    tool_slots = []
+
     def build_production_start_guard(self):
         """Return the system-specific guard used before production starts."""
         from src.robot_systems.paint.destinations import AutomaticDryerStartGuard
@@ -184,6 +194,7 @@ class PaintRobotSystem(BaseRobotSystem):
 
     ui_config = PaintDashboardUiConfig(
         show_camera_preview=paint_system_config.SHOW_DASHBOARD_CAMERA_PREVIEW,
+        show_tray_camera_tab=paint_system_config.SHOW_TRAY_DASHBOARD_CAMERA_TAB,
         use_collapsible_settings_panel=(
             paint_system_config.USE_COLLAPSIBLE_DASHBOARD_SETTINGS_PANEL
         ),
@@ -399,6 +410,11 @@ class PaintRobotSystem(BaseRobotSystem):
         SettingsSpec(CommonSettingsID.ROBOT_CALIBRATION, RobotCalibrationSettingsSerializer(),
                      "robot/calibration.json"),
         SettingsSpec(CommonSettingsID.TARGETING, TargetingSettingsSerializer(), "targeting/definitions.json"),
+        SettingsSpec(
+            CommonSettingsID.TOOL_CHANGER_CONFIG,
+            ToolChangerSettingsSerializer(default_tools=tools, default_slots=tool_slots),
+            "tools/tool_changer.json",
+        ),
 
         SettingsSpec(
             CommonSettingsID.CALIBRATION_VISION_SETTINGS,
@@ -427,6 +443,12 @@ class PaintRobotSystem(BaseRobotSystem):
                     description="Shared work-area storage and active-area context"),
         ServiceSpec(CommonServiceID.VISION, IVisionService, required=False, description="Camera-based alignment",
                     ),
+        ServiceSpec(
+            CommonServiceID.TOOLS,
+            IToolService,
+            required=False,
+            description="Tool catalog and optional magazine changer",
+        ),
         ServiceSpec(
             name=ServiceID.VACUUM_PUMP,
             service_type=IVacuumPumpController,
@@ -549,6 +571,9 @@ class PaintRobotSystem(BaseRobotSystem):
         self._targeting_provider = PaintRobotSystemTargetingProvider(self)
         self._vacuum_pump = self.get_optional_service(ServiceID.VACUUM_PUMP)
         self.register_managed_resource(self._vacuum_pump)
+        self._vacuum_sensor = self.get_optional_service(ServiceID.VACUUM_SENSOR)
+        if self._vacuum_sensor is not None:
+            self.register_managed_resource(self._vacuum_sensor)
         self._fan = self.get_optional_service(ServiceID.FAN)
         self.register_managed_resource(self._fan)
         self._tray_fan = self.get_optional_service(ServiceID.TRAY_FAN)

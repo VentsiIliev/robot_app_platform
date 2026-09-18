@@ -17,3 +17,7 @@ class StubModbusActionService(IModbusActionService):
     def grant_serial_port_permissions(self) -> List[str]:
         print("[StubModbusActionService] grant_serial_port_permissions")
         return ["/dev/ttyUSB0"]
+
+    def set_serial_port_low_latency(self) -> List[str]:
+        print("[StubModbusActionService] set_serial_port_low_latency")
+        return ["/dev/ttyUSB0"]

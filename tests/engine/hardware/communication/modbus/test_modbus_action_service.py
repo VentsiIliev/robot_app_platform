@@ -1,6 +1,8 @@
 import unittest
 from unittest.mock import MagicMock, patch, patch as mock_patch
 import sys
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from src.engine.hardware.communication.modbus.modbus import ModbusConfig
 from src.engine.hardware.communication.modbus.modbus_action_service import ModbusActionService
@@ -24,6 +26,9 @@ class TestModbusActionServiceInterface(unittest.TestCase):
 
     def test_has_grant_serial_port_permissions_method(self):
         self.assertTrue(hasattr(ModbusActionService(), "grant_serial_port_permissions"))
+
+    def test_has_set_serial_port_low_latency_method(self):
+        self.assertTrue(hasattr(ModbusActionService(), "set_serial_port_low_latency"))
 
     def test_instantiation_requires_no_settings_dependency(self):
         service = ModbusActionService()
@@ -238,7 +243,46 @@ class TestModbusActionServiceGrantPermissions(unittest.TestCase):
             result = ModbusActionService().grant_serial_port_permissions()
 
         self.assertEqual(result, [])
-        run.assert_not_called()
+
+
+class TestModbusActionServiceLowLatency(unittest.TestCase):
+
+    def test_sets_and_verifies_latency_timer(self):
+        service = ModbusActionService()
+        with TemporaryDirectory() as temp_dir:
+            latency_path = Path(temp_dir) / "latency_timer"
+            latency_path.write_text("16\n", encoding="ascii")
+
+            def apply_latency(*_args, **_kwargs):
+                latency_path.write_text("1\n", encoding="ascii")
+                return MagicMock(returncode=0)
+
+            with (
+                patch.object(
+                    service,
+                    "_serial_latency_targets",
+                    return_value=[("/dev/ttyUSB0", latency_path)],
+                ),
+                patch(
+                    "src.engine.hardware.communication.modbus.modbus_action_service.os.geteuid",
+                    return_value=1000,
+                ),
+                patch(
+                    "src.engine.hardware.communication.modbus.modbus_action_service.subprocess.run",
+                    side_effect=apply_latency,
+                ) as run,
+            ):
+                result = service.set_serial_port_low_latency()
+
+        self.assertEqual(result, ["/dev/ttyUSB0"])
+        self.assertEqual(run.call_args.args[0][0:2], ["pkexec", "tee"])
+        self.assertEqual(run.call_args.kwargs["input"], "1\n")
+
+    def test_raises_when_no_latency_timer_is_available(self):
+        service = ModbusActionService()
+        with patch.object(service, "_serial_latency_targets", return_value=[]):
+            with self.assertRaisesRegex(RuntimeError, "No USB serial ports"):
+                service.set_serial_port_low_latency()
 
     def test_returns_empty_when_permission_command_fails(self):
         mock_serial = MagicMock()

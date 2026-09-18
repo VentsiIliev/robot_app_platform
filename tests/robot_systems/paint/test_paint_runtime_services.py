@@ -842,6 +842,85 @@ class TestModbusFanControl(unittest.TestCase):
 
 
 class TestVacuumSensorService(unittest.TestCase):
+    def test_persistent_connection_failure_is_not_hidden(self) -> None:
+        transport = MagicMock()
+        transport.connect.side_effect = OSError("port unavailable")
+
+        with self.assertRaisesRegex(OSError, "port unavailable"):
+            VacuumSensorService(
+                transport,
+                VacuumSensorConfig(sensor_register="0"),
+            )
+
+    def test_transport_connection_is_reused_and_closed_by_service(self) -> None:
+        transport = MagicMock()
+        transport.read_register.side_effect = [0, 1]
+        service = VacuumSensorService(
+            transport,
+            VacuumSensorConfig(sensor_register="0", detected_value=1),
+        )
+
+        self.assertFalse(service.is_vacuum_detected())
+        self.assertTrue(service.is_vacuum_detected())
+        service.close()
+
+        transport.connect.assert_called_once_with()
+        transport.disconnect.assert_called_once_with()
+        self.assertEqual(transport.read_register.call_count, 2)
+
+    def test_failed_read_reconnects_before_retry(self) -> None:
+        transport = MagicMock()
+        transport.read_input.side_effect = [OSError("disconnected"), 1]
+        service = VacuumSensorService(
+            transport,
+            VacuumSensorConfig(sensor_register="X4", read_retries=2),
+        )
+
+        self.assertTrue(service.is_vacuum_detected())
+
+        self.assertEqual(transport.connect.call_count, 2)
+        transport.disconnect.assert_called_once_with()
+
+    def test_read_diagnostics_include_retry_failures_and_attempt_timing(self) -> None:
+        transport = MagicMock()
+        transport.read_input.side_effect = [OSError("crc failure"), 1]
+        service = VacuumSensorService(
+            transport,
+            VacuumSensorConfig(sensor_register="X4", read_retries=3),
+        )
+
+        self.assertTrue(service.is_vacuum_detected())
+
+        diagnostics = service.get_read_diagnostics()
+        self.assertIsNotNone(diagnostics)
+        self.assertTrue(diagnostics["success"])
+        self.assertEqual(diagnostics["attempts"], 2)
+        self.assertEqual(diagnostics["failed_attempts"], 1)
+        self.assertEqual(diagnostics["total_read_attempts"], 2)
+        self.assertEqual(diagnostics["total_failed_attempts"], 1)
+        self.assertEqual(len(diagnostics["attempt_durations_ms"]), 2)
+        self.assertGreaterEqual(diagnostics["duration_ms"], 0.0)
+        self.assertIn("OSError", diagnostics["last_error"])
+
+    def test_read_diagnostics_report_exhausted_retries(self) -> None:
+        transport = MagicMock()
+        transport.read_input.side_effect = OSError("offline")
+        service = VacuumSensorService(
+            transport,
+            VacuumSensorConfig(sensor_register="X4", read_retries=3),
+        )
+
+        with patch(
+            "src.engine.hardware.vacuum_sensor.vacuum_sensor_service._logger.exception"
+        ):
+            self.assertFalse(service.is_vacuum_detected())
+
+        diagnostics = service.get_read_diagnostics()
+        self.assertFalse(diagnostics["success"])
+        self.assertEqual(diagnostics["attempts"], 3)
+        self.assertEqual(diagnostics["failed_attempts"], 3)
+        self.assertEqual(diagnostics["total_failed_calls"], 1)
+
     def test_standard_register_sensor_uses_configured_detected_value(self) -> None:
         transport = MagicMock()
         transport.read_register.side_effect = [2, 3]

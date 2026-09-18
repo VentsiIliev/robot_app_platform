@@ -140,6 +140,16 @@ class TestPaintProcessSettingsController(unittest.TestCase):
 
         self.assertEqual(-5.0, restored.pickup_motion.servo_contact_min_z_mm)
 
+    def test_stop_after_calibration_pickup_round_trips(self):
+        base = PaintProcessConfig()
+        flat = PaintProcessSettingsMapper.to_flat_dict(base)
+
+        self.assertFalse(flat["stop_after_calibration_pickup"])
+        flat["stop_after_calibration_pickup"] = True
+
+        restored = PaintProcessSettingsMapper.from_flat_dict(flat, base)
+        self.assertTrue(restored.stop_after_calibration_pickup)
+
     def test_legacy_servo_contact_mode_migrates_to_sensor_controlled_fast_lin(self):
         base = PaintProcessConfig()
         flat = PaintProcessSettingsMapper.to_flat_dict(base)
@@ -181,6 +191,39 @@ class TestPaintProcessSettingsController(unittest.TestCase):
         self.assertFalse(restored.magazine_load.full_retract_before_release)
         self.assertEqual(120.0, restored.magazine_load.full_retract_z_mm)
         self.assertEqual(12.5, restored.magazine_load.short_retract_distance_mm)
+
+    def test_magazine_recapture_after_pile_done_round_trips(self):
+        base = PaintProcessConfig()
+        flat = PaintProcessSettingsMapper.to_flat_dict(base)
+        flat["magazine_recapture_after_pile_done"] = True
+
+        restored = PaintProcessSettingsMapper.from_flat_dict(flat, base)
+
+        self.assertTrue(restored.magazine_load.recapture_after_pile_done)
+
+    def test_magazine_recapture_every_cycle_excludes_pile_empty_mode(self):
+        base = PaintProcessConfig()
+        flat = PaintProcessSettingsMapper.to_flat_dict(base)
+        flat["magazine_recapture_after_pile_done"] = True
+        flat["magazine_recapture_every_cycle"] = True
+
+        restored = PaintProcessSettingsMapper.from_flat_dict(flat, base)
+
+        self.assertTrue(restored.magazine_load.recapture_every_cycle)
+        self.assertFalse(restored.magazine_load.recapture_after_pile_done)
+
+    def test_magazine_batch_nesting_settings_round_trip(self):
+        base = PaintProcessConfig()
+        flat = PaintProcessSettingsMapper.to_flat_dict(base)
+        flat["magazine_processing_strategy"] = "batch_nesting"
+        flat["magazine_nesting_margin_mm"] = 12.0
+        flat["magazine_nesting_padding_mm"] = 7.5
+
+        restored = PaintProcessSettingsMapper.from_flat_dict(flat, base)
+
+        self.assertEqual("batch_nesting", restored.magazine_load.processing_strategy)
+        self.assertEqual(12.0, restored.magazine_load.nesting_margin_mm)
+        self.assertEqual(7.5, restored.magazine_load.nesting_padding_mm)
 
     def test_motion_profile_tables_round_trip_type_and_blendr(self):
         base = PaintProcessConfig()

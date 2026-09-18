@@ -53,18 +53,40 @@ def pickup_pose_is_close(
     return position_error <= position_tolerance_mm and orientation_error <= orientation_tolerance_deg
 
 
-def pickup_condition_is_active_after_retract(condition: object) -> bool:
-    """Return whether the picked workpiece remains detected after Fast LIN retract."""
-    try:
-        reader = getattr(condition, "is_active", None)
-        active = reader() if callable(reader) else condition()
-    except Exception:
-        _logger.exception("[PICKUP] Pickup condition read failed after Fast LIN retract")
-        return False
-    if not bool(active):
-        _logger.error("[PICKUP] Workpiece is no longer detected after Fast LIN retract")
-        return False
-    _logger.info("[PICKUP] Workpiece detection verified after Fast LIN retract")
+def pickup_condition_is_active_after_retract(
+    condition: object,
+    *,
+    required_samples: int = 1,
+    sample_interval_s: float = 0.0,
+) -> bool:
+    """Require the carried-workpiece signal to remain active after retract."""
+    samples = max(1, int(required_samples))
+    interval_s = max(0.0, float(sample_interval_s))
+    for sample_index in range(samples):
+        if sample_index > 0 and interval_s > 0.0:
+            time.sleep(interval_s)
+        try:
+            reader = getattr(condition, "is_active", None)
+            active = reader() if callable(reader) else condition()
+        except Exception:
+            _logger.exception(
+                "[PICKUP] Pickup condition read failed after Fast LIN retract sample=%d/%d",
+                sample_index + 1,
+                samples,
+            )
+            return False
+        if not bool(active):
+            _logger.error(
+                "[PICKUP] Workpiece is no longer detected after Fast LIN retract sample=%d/%d",
+                sample_index + 1,
+                samples,
+            )
+            return False
+    _logger.info(
+        "[PICKUP] Workpiece detection verified after Fast LIN retract samples=%d interval_ms=%.1f",
+        samples,
+        interval_s * 1000.0,
+    )
     return True
 
 
@@ -261,6 +283,7 @@ class PaintPickupExecutor:
         *,
         pickup_plan: PickupPlan | None = None,
         prepared_continuation_segments: list[dict] | None = None,
+        stop_after_retract: bool = False,
     ) -> tuple[bool, str]:
         """Run pickup, align, and staging according to the configured strategy."""
         started = perf_counter()
@@ -289,6 +312,7 @@ class PaintPickupExecutor:
             ok = self._execute_servo_contact_pickup_sequence(
                 pickup_plan,
                 prepared_continuation_segments=prepared_continuation_segments,
+                stop_after_retract=stop_after_retract,
             )
         elif pickup_plan.contact_mode == PICKUP_CONTACT_MODE_HEIGHT_MEASURE:
             _logger.error("[PICKUP] Height-measured pickup Z mode is selected, but height service wiring is not implemented yet")
@@ -297,7 +321,10 @@ class PaintPickupExecutor:
             _logger.error("[PICKUP] Invalid pickup contact mode: %s", pickup_plan.contact_mode)
             return False, f"Invalid pickup contact mode: {pickup_plan.contact_mode}"
         else:
-            ok = self._execute_custom_pickup_sequence(pickup_plan)
+            ok = self._execute_custom_pickup_sequence(
+                pickup_plan,
+                stop_after_retract=stop_after_retract,
+            )
         if ok:
             return True, "Pickup completed and robot is positioned before the first pivot contact pose"
         _logger.info("[TIMING] pickup_to_pivot success=false stage=ordered_pickup total_elapsed_s=%.3f", elapsed_s(started))
@@ -308,10 +335,22 @@ class PaintPickupExecutor:
             return False, f"Ordered pickup sequence failed: {detail}"
         return False, "Ordered pickup sequence failed"
 
-    def _execute_custom_pickup_sequence(self, pickup_plan: PickupPlan) -> bool:
+    def _execute_custom_pickup_sequence(
+        self,
+        pickup_plan: PickupPlan,
+        *,
+        stop_after_retract: bool = False,
+    ) -> bool:
         waypoints = list(pickup_plan.waypoints)
         if len(waypoints) < 2:
             return False
+        if stop_after_retract:
+            contact_index = (
+                1
+                if pickup_plan.contact_waypoint_index is None
+                else int(pickup_plan.contact_waypoint_index)
+            )
+            waypoints = waypoints[: contact_index + 2]
         if pickup_plan.change_plane_combined_with_first_contact:
             with timed_block(_logger, "pickup_phase", label="Changing plane combined with first pivot contact pose"):
                 _logger.info(
@@ -334,6 +373,7 @@ class PaintPickupExecutor:
         pickup_plan: PickupPlan,
         *,
         prepared_continuation_segments: list[dict] | None = None,
+        stop_after_retract: bool = False,
     ) -> bool:
         waypoints = list(pickup_plan.waypoints)
         contact_index = 1 if pickup_plan.contact_waypoint_index is None else int(pickup_plan.contact_waypoint_index)
@@ -414,8 +454,9 @@ class PaintPickupExecutor:
                 10.0,
             )
             combined_waypoints = [lift_waypoint] + continuation_waypoints
-        combined_segments = build_paint_pickup_segments(combined_waypoints)
-        combined_segments.extend(prepared_continuation_segments or [])
+        combined_segments = [] if stop_after_retract else build_paint_pickup_segments(combined_waypoints)
+        if not stop_after_retract:
+            combined_segments.extend(prepared_continuation_segments or [])
         prepared_plan_id: str | None = None
         prepare = getattr(self._owner._robot_service, "prepare_ordered_motion_chain", None)
         has_fast_lin = any(

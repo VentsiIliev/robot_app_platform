@@ -1,0 +1,13 @@
+{
+  "reference_tool_id": 1,
+  "tools": [
+    {
+      "id": 1,
+      "name": "Calibration Tool",
+      "reference_tool_id": null,
+      "relative_transform": [0, 0, 0, 0, 0, 0],
+      "collision_profile": "calibration_tool"
+    }
+  ],
+  "slots": []
+}

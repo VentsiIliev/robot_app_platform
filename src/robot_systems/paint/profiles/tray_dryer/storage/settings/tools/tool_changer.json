@@ -1,0 +1,34 @@
+{
+  "reference_tool_id": 1,
+  "tools": [
+    {
+      "id": 1,
+      "name": "Calibration Tool",
+      "reference_tool_id": null,
+      "relative_transform": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "collision_profile": "calibration_tool"
+    },
+    {
+      "id": 2,
+      "name": "Single Gripper",
+      "reference_tool_id": 1,
+      "relative_transform": [
+        0.0,
+        0.0,
+        12.075,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "collision_profile": ""
+    }
+  ],
+  "slots": []
+}

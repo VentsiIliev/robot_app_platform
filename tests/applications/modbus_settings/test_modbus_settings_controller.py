@@ -16,6 +16,7 @@ def _make_view():
     view.save_requested.connect            = MagicMock()
     view.detect_ports_requested.connect    = MagicMock()
     view.grant_permission_requested.connect = MagicMock()
+    view.set_low_latency_requested.connect = MagicMock()
     view.test_connection_requested.connect = MagicMock()
     view.destroyed.connect                 = MagicMock()
     return view
@@ -26,6 +27,7 @@ def _make_model(config=None):
     model.load.return_value             = config or ModbusConfig()
     model.detect_ports.return_value     = []
     model.grant_serial_port_permissions.return_value = []
+    model.set_serial_port_low_latency.return_value = []
     model.test_connection.return_value  = False
     model.config_from_flat.return_value = config or ModbusConfig()
     return model
@@ -61,6 +63,10 @@ class TestModbusSettingsControllerInit(unittest.TestCase):
     def test_wires_grant_permission_requested(self):
         _, _, view = _make_controller()
         view.grant_permission_requested.connect.assert_called_once()
+
+    def test_wires_set_low_latency_requested(self):
+        _, _, view = _make_controller()
+        view.set_low_latency_requested.connect.assert_called_once()
 
     def test_wires_destroyed(self):
         _, _, view = _make_controller()
@@ -147,6 +153,23 @@ class TestModbusSettingsControllerGrantPermission(unittest.TestCase):
         ctrl, _, view = _make_controller()
         ctrl._on_permission_granted([])
         view.set_permission_result.assert_called_once_with(False, [])
+
+
+class TestModbusSettingsControllerLowLatency(unittest.TestCase):
+
+    def test_low_latency_success_pushes_verified_ports(self):
+        ctrl, _, view = _make_controller()
+        ctrl._on_low_latency_set(["/dev/ttyUSB0"])
+        view.set_low_latency_result.assert_called_once_with(
+            True, ["/dev/ttyUSB0"]
+        )
+
+    def test_low_latency_failure_preserves_error_message(self):
+        ctrl, _, view = _make_controller()
+        ctrl._on_low_latency_failed("authorization cancelled")
+        view.set_low_latency_result.assert_called_once_with(
+            False, [], "authorization cancelled"
+        )
 
     def test_on_permission_failed_pushes_failure_to_view(self):
         ctrl, _, view = _make_controller()

@@ -65,13 +65,16 @@ def handle_pickup(ctx: PaintExecutionContext) -> PaintExecutionState:
             ctx.set_result(False, message)
             return PaintExecutionState.COMPLETED if message == "Drop-off plate is full" else PaintExecutionState.ERROR
 
+    stop_after_pickup = bool(
+        getattr(ctx.process_config, "stop_after_calibration_pickup", False)
+    )
     ctx.paint_ordered_result = (
         try_execute_ordered_pickup_and_paint_contact(
             executor,
             ctx.execution_plan,
             pickup_plan=pickup_plan,
         )
-        if pickup_plan is not None
+        if pickup_plan is not None and not stop_after_pickup
         else None
     )
     if ctx.paint_ordered_result is not None:
@@ -91,10 +94,19 @@ def handle_pickup(ctx: PaintExecutionContext) -> PaintExecutionState:
         fail_paint_motion(ctx, "Two-pass painting requires ordered motion-chain support")
         return PaintExecutionState.ERROR
 
-    if pickup_plan is None:
+    if stop_after_pickup:
+        ok, msg = executor._pickup.execute(
+            ctx.execution_plan,
+            pickup_plan=pickup_plan,
+            stop_after_retract=stop_after_pickup,
+        )
+    elif pickup_plan is None:
         ok, msg = executor._pickup.execute(ctx.execution_plan)
     else:
-        ok, msg = executor._pickup.execute(ctx.execution_plan, pickup_plan=pickup_plan)
+        ok, msg = executor._pickup.execute(
+            ctx.execution_plan,
+            pickup_plan=pickup_plan,
+        )
     if not ok:
         _logger.info(
             "[TIMING] paint_process success=false stage=pickup total_elapsed_s=%.3f",
@@ -106,6 +118,10 @@ def handle_pickup(ctx: PaintExecutionContext) -> PaintExecutionState:
             return PaintExecutionState.COMPLETED
         fail_paint_motion(ctx, msg)
         return PaintExecutionState.ERROR
+    if stop_after_pickup:
+        finish_paint_motion(ctx, success=True)
+        ctx.set_result(True, "Calibration pickup test completed")
+        return PaintExecutionState.COMPLETED
     return PaintExecutionState.PAINT_CONTACT
 
 

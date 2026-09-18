@@ -19,8 +19,8 @@
       "position": "[17.438, 12.280, 149.951, 179.972, 0.001, -0.007]"
     },
     "JOG": {
-      "velocity": 20,
-      "acceleration": 10,
+      "velocity": 100,
+      "acceleration": 80,
       "motion_type": "ptp",
       "iterations": 1,
       "has_iterations": false,
@@ -42,7 +42,7 @@
       "iterations": 1,
       "has_iterations": false,
       "has_trajectory_execution": true,
-      "position": "[-104.427, 220.366, 219.338, 179.990, 0.000, 0.000]"
+      "position": "[-141.409, 109.313, 200.061, -179.945, -0.097, 0.039]"
     },
     "Vertical Shaft Alignment": {
       "velocity": 0,
@@ -68,7 +68,7 @@
       "iterations": 1,
       "has_iterations": false,
       "has_trajectory_execution": true,
-      "position": "[-414.163, -19.806, 150.013, 179.996, 0.001, -0.003]"
+      "position": "[-414.158, 80.217, 150.003, -180.000, -0.008, -0.001]"
     },
     "Magazine": {
       "velocity": 100,

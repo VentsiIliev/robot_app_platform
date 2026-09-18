@@ -37,6 +37,7 @@ class CameraSettingKey(Enum):
     CALIBRATION_SKIP_FRAMES = "Calibration skip frames"  # Internal key for calibration skip frames
 
     # Brightness / PID
+    HARDWARE_AUTO_EXPOSURE = "Hardware auto exposure"
     BRIGHTNESS_AUTO = "Enable auto adjust"
     BRIGHTNESS_KP = "Kp"
     BRIGHTNESS_KI = "Ki"

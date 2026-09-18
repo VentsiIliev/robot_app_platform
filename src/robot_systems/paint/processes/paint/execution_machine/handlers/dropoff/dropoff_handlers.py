@@ -924,18 +924,19 @@ def _wait_for_motion_slot_idle(
 def _plate_route_poses_with_distributed_unwind(
     executor: object,
     *,
-    gate_pose: list[float],
+    entry_gate_pose: list[float],
+    exit_gate_pose: list[float],
     center_pose: list[float],
     dropoff_pose: list[float],
     next_start_pose: list[float] | None,
     use_center_waypoint: bool,
 ) -> dict[str, list[float]]:
     poses = {
-        "entry_gate": list(gate_pose),
+        "entry_gate": list(entry_gate_pose),
         "entry_center": list(center_pose),
         "dropoff": list(dropoff_pose),
         "exit_center": list(center_pose),
-        "exit_gate": list(gate_pose),
+        "exit_gate": list(exit_gate_pose),
     }
     if next_start_pose is not None:
         poses["next_start"] = list(next_start_pose)
@@ -1010,6 +1011,9 @@ def _plate_route_uses_center(dropoff: object, reservation: object) -> bool:
     if bool(dropoff.plate_use_center_waypoint):
         _logger.info("[PLATE_LAYOUT] Center waypoint enabled explicitly")
         return True
+    if not bool(getattr(dropoff, "plate_auto_center_near_corner", True)):
+        _logger.info("[PLATE_LAYOUT] Automatic center routing near plate corner disabled")
+        return False
 
     try:
         bottom_left = [float(value) for value in dropoff.plate_corners[0][:2]]
@@ -1059,13 +1063,49 @@ def _execute_plate_layout_ordered_release(
     gate_pose, error = validate_plate_passage_gate(dropoff.plate_passage_gate_pose)
     if error:
         return False, error
-    midpoint_pose = None
-    if bool(dropoff.plate_next_cycle_midpoint_enabled) and next_cycle_start is not None:
-        midpoint_pose, error = validate_plate_passage_gate(
-            dropoff.plate_next_cycle_midpoint_pose
-        )
+    configured_exit_gate = getattr(dropoff, "plate_exit_gate_pose", None)
+    if configured_exit_gate:
+        exit_gate_pose, error = validate_plate_passage_gate(configured_exit_gate)
         if error:
-            return False, f"Plate-layout next-cycle midpoint: {error}"
+            return False, f"Plate-layout exit gate: {error}"
+    else:
+        exit_gate_pose = list(gate_pose)
+        _logger.info("[PLATE_LAYOUT] Exit gate not configured; reusing passage gate")
+    next_waypoints: list[dict] = []
+    if bool(dropoff.plate_next_cycle_midpoint_enabled) and next_cycle_start is not None:
+        configured_waypoints = list(
+            getattr(dropoff, "plate_next_cycle_waypoints", None) or []
+        )
+        if not configured_waypoints and getattr(dropoff, "plate_next_cycle_midpoint_pose", None):
+            configured_waypoints = [{
+                "position": list(dropoff.plate_next_cycle_midpoint_pose),
+                **_plate_motion_profile(dropoff, "gate_to_next_midpoint"),
+            }]
+        if not configured_waypoints:
+            return False, "Plate-layout next-cycle waypoints are enabled but none are configured"
+        fallback_profile = _plate_motion_profile(dropoff, "gate_to_next_midpoint")
+        for index, raw_waypoint in enumerate(configured_waypoints):
+            raw_pose = raw_waypoint.get("position", raw_waypoint.get("pose", [])) \
+                if isinstance(raw_waypoint, dict) else raw_waypoint
+            waypoint_pose, error = validate_plate_passage_gate(raw_pose)
+            if error:
+                return False, f"Plate-layout next-cycle waypoint {index + 1}: {error}"
+            profile = dict(fallback_profile)
+            if isinstance(raw_waypoint, dict):
+                try:
+                    profile.update({
+                        "vel_percent": float(raw_waypoint.get("vel_percent", profile["vel_percent"])),
+                        "acc_percent": float(raw_waypoint.get("acc_percent", profile["acc_percent"])),
+                        "motion_type": str(raw_waypoint.get(
+                            "motion_type", raw_waypoint.get("type", profile["motion_type"])
+                        )),
+                        "blendR": max(0.0, float(raw_waypoint.get(
+                            "blendR", raw_waypoint.get("blend_r", profile["blendR"])
+                        ))),
+                    })
+                except (TypeError, ValueError):
+                    return False, f"Plate-layout next-cycle waypoint {index + 1}: invalid motion settings"
+            next_waypoints.append({"position": waypoint_pose, "profile": profile})
     try:
         use_center_waypoint = _plate_route_uses_center(dropoff, reservation)
     except ValueError as exc:
@@ -1075,7 +1115,7 @@ def _execute_plate_layout_ordered_release(
         "entry_center": list(reservation.transit_pose),
         "dropoff": list(reservation.release_pose),
         "exit_center": list(reservation.transit_pose),
-        "exit_gate": list(gate_pose),
+        "exit_gate": list(exit_gate_pose),
     }
     if next_cycle_start is not None:
         route_poses["next_start"] = list(next_cycle_start["position"])
@@ -1083,7 +1123,8 @@ def _execute_plate_layout_ordered_release(
         try:
             route_poses = _plate_route_poses_with_distributed_unwind(
                 executor,
-                gate_pose=gate_pose,
+                entry_gate_pose=gate_pose,
+                exit_gate_pose=exit_gate_pose,
                 center_pose=reservation.transit_pose,
                 dropoff_pose=reservation.release_pose,
                 next_start_pose=None if next_cycle_start is None else list(next_cycle_start["position"]),
@@ -1092,12 +1133,13 @@ def _execute_plate_layout_ordered_release(
         except (TypeError, ValueError):
             _logger.exception("[PLATE_LAYOUT] Failed to build distributed-unwind route")
             return False, "Plate-layout distributed unwind route could not be built"
-    if midpoint_pose is not None:
-        route_poses["next_midpoint"] = list(midpoint_pose)
-        route_poses["next_midpoint"][5] = unwrap_degrees(
-            float(route_poses["exit_gate"][5]),
-            float(route_poses["next_midpoint"][5]),
+    previous_rotation = float(route_poses["exit_gate"][5])
+    for waypoint in next_waypoints:
+        waypoint["position"][5] = unwrap_degrees(
+            previous_rotation,
+            float(waypoint["position"][5]),
         )
+        previous_rotation = float(waypoint["position"][5])
     entry_segments = [_plate_ordered_segment(
         "Plate entry: paint detach to passage gate",
         route_poses["entry_gate"],
@@ -1154,16 +1196,16 @@ def _execute_plate_layout_ordered_release(
         stop=next_cycle_start is None,
     ))
     if next_cycle_start is not None:
-        if midpoint_pose is not None:
+        for index, waypoint in enumerate(next_waypoints):
             exit_segments.append(_plate_ordered_segment(
-                "Plate exit: passage gate to next-cycle midpoint",
-                route_poses["next_midpoint"],
-                _plate_motion_profile(dropoff, "gate_to_next_midpoint"),
+                f"Plate exit: next-cycle waypoint {index + 1}/{len(next_waypoints)}",
+                waypoint["position"],
+                waypoint["profile"],
             ))
         exit_segments.append(_plate_ordered_segment(
             (
-                f"Plate exit: next-cycle midpoint to next-cycle start '{next_cycle_start['group_id']}'"
-                if midpoint_pose is not None
+                f"Plate exit: last waypoint to next-cycle start '{next_cycle_start['group_id']}'"
+                if next_waypoints
                 else f"Plate exit: passage gate to next-cycle start '{next_cycle_start['group_id']}'"
             ),
             route_poses["next_start"],

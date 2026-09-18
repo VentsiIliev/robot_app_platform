@@ -20,3 +20,8 @@ class IModbusActionService(ABC):
     def grant_serial_port_permissions(self) -> List[str]:
         """Grant user read/write access to detected USB serial ports. Return changed port names."""
         ...
+
+    @abstractmethod
+    def set_serial_port_low_latency(self) -> List[str]:
+        """Set supported USB serial ports to 1 ms latency and return verified ports."""
+        ...

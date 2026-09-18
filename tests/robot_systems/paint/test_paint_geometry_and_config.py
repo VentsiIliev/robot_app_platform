@@ -394,6 +394,8 @@ class TestPaintProcessConfig(unittest.TestCase):
             run_while_workpiece_found=False,
             magazine_load=PaintMagazineLoadConfig(
                 enabled=True,
+                recapture_after_pile_done=True,
+                recapture_every_cycle=False,
                 fixed_pickup_group_ids=[
                     "Magazine Fixed Pickup",
                     "Magazine Fixed Pickup 1",
@@ -417,6 +419,8 @@ class TestPaintProcessConfig(unittest.TestCase):
         restored = serializer.from_dict(serializer.to_dict(config))
 
         self.assertTrue(restored.magazine_load.enabled)
+        self.assertTrue(restored.magazine_load.recapture_after_pile_done)
+        self.assertFalse(restored.magazine_load.recapture_every_cycle)
         self.assertEqual(
             ["Magazine Fixed Pickup", "Magazine Fixed Pickup 1"],
             restored.magazine_load.fixed_pickup_group_ids,

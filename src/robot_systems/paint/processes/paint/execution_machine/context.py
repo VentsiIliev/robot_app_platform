@@ -60,6 +60,9 @@ class PaintExecutionContext:
     magazine_release_pose: list[float] | None = None
     magazine_target: dict | None = None
     magazine_fixed_pickup_pose: list[float] | None = None
+    magazine_stage_only: bool = False
+    magazine_nesting_has_more: bool = True
+    cached_workpiece_contour: object | None = None
 
     def __post_init__(self) -> None:
         self.run_allowed.set()

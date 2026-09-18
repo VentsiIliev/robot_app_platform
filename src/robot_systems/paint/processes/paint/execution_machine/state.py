@@ -71,7 +71,11 @@ class PaintExecutionTransitions:
             },
             S.MAGAZINE_WAIT_CAMERA_SETTLE: {S.MAGAZINE_CAPTURE, *active},
             S.MAGAZINE_CAPTURE: {S.MAGAZINE_PREPARE_PICKUP_RELEASE, S.COMPLETED, *active},
-            S.MAGAZINE_PREPARE_PICKUP_RELEASE: {S.MAGAZINE_EXECUTE_PICKUP_RELEASE, *active},
+            S.MAGAZINE_PREPARE_PICKUP_RELEASE: {
+                S.MAGAZINE_EXECUTE_PICKUP_RELEASE,
+                S.COMPLETED,
+                *active,
+            },
             S.MAGAZINE_EXECUTE_PICKUP_RELEASE: {
                 S.MAGAZINE_MOVE_TO_MAGAZINE,
                 S.MAGAZINE_MOVE_TO_CALIBRATION,

@@ -22,6 +22,7 @@ from src.robot_systems.paint.processes.paint.magazine_load_result import (
     NO_WORKPIECE_AT_MAGAZINE,
 )
 from src.robot_systems.paint.processes.paint.config import (
+    MAGAZINE_PROCESSING_STRATEGY_BATCH_NESTING,
     MAGAZINE_PICKUP_MODE_AUTO_DISCOVERY_SENSOR_CONTROLLED_FAST_LIN,
     scale_paint_process_accelerations,
 )
@@ -118,6 +119,21 @@ class PaintProductionService:
             fixed_groups = self._fixed_magazine_groups(magazine_config)
             fixed_sources = self._fixed_magazine_sources(magazine_config)
             pickup_mode = str(getattr(magazine_config, "pickup_mode", "") or "").strip().lower()
+            if (
+                str(getattr(magazine_config, "processing_strategy", "direct") or "direct")
+                .strip().lower() == MAGAZINE_PROCESSING_STRATEGY_BATCH_NESTING
+            ):
+                if pickup_mode != MAGAZINE_PICKUP_MODE_AUTO_DISCOVERY_SENSOR_CONTROLLED_FAST_LIN:
+                    return False, (
+                        "Batch nesting currently requires the auto-discovery "
+                        "sensor-controlled magazine pickup mode"
+                    )
+                return self._run_magazine_batch_loop(
+                    magazine_config,
+                    process_config,
+                    should_stop,
+                    fixed_sources=fixed_sources,
+                )
             if pickup_mode == "fixed_group_sensor_controlled_fast_lin" and not fixed_sources:
                 return False, "No fixed magazines are enabled"
             if (
@@ -200,6 +216,8 @@ class PaintProductionService:
                 )
                 return False, msg
             completed_cycles += 1
+            if bool(getattr(process_config, "stop_after_calibration_pickup", False)):
+                return True, msg
             if msg == "Drop-off plate has no space for another workpiece of the same footprint":
                 return True, msg
         self._log_phase_timing(
@@ -270,6 +288,24 @@ class PaintProductionService:
                         )
                         return True, MAGAZINE_EMPTY
                     discovery_active_contour = None
+                    active_magazine_config = (
+                        getattr(context, "magazine_config", magazine_config)
+                        if context is not None
+                        else magazine_config
+                    )
+                    if bool(
+                        getattr(
+                            active_magazine_config,
+                            "recapture_after_pile_done",
+                            False,
+                        )
+                    ):
+                        discovery_contours = []
+                        discovery_snapshot = None
+                        _logger.info(
+                            "[MAGAZINE_LOAD] Active pile is empty; clearing cached "
+                            "discovery so the magazine is recaptured"
+                        )
                     self._clear_prepositioned_start_group()
                     continue
                 consecutive_empty_groups += 1
@@ -306,6 +342,23 @@ class PaintProductionService:
                 )
                 return False, msg
             completed_cycles += 1
+            active_magazine_config = (
+                getattr(context, "magazine_config", magazine_config)
+                if context is not None
+                else magazine_config
+            )
+            if auto_discovery and bool(
+                getattr(active_magazine_config, "recapture_every_cycle", False)
+            ):
+                discovery_contours = []
+                discovery_active_contour = None
+                discovery_snapshot = None
+                _logger.info(
+                    "[MAGAZINE_LOAD] Cycle completed; clearing cached discovery "
+                    "so the magazine is recaptured before the next pickup"
+                )
+            if bool(getattr(process_config, "stop_after_calibration_pickup", False)):
+                return True, msg
             consecutive_empty_groups = 0
             if msg == "Drop-off plate has no space for another workpiece of the same footprint":
                 return True, msg
@@ -316,6 +369,131 @@ class PaintProductionService:
             stopped=True,
             completed_cycles=completed_cycles,
         )
+        return False, "Paint process stopped"
+
+    def _run_magazine_batch_loop(
+        self,
+        magazine_config,
+        process_config,
+        should_stop: Callable[[], bool],
+        *,
+        fixed_sources: tuple[dict, ...] | None = None,
+    ) -> tuple[bool, str]:
+        """Fill the paint work area, then process one cached capture as a batch."""
+        completed = 0
+        discovery_contours: list = []
+        discovery_active = None
+        discovery_snapshot = None
+        sources = fixed_sources if fixed_sources is not None else self._fixed_magazine_sources(magazine_config)
+        group_index = 0
+        while not should_stop():
+            self._magazine_load_service.clear_work_area_nesting()
+            staged = 0
+            while not should_stop():
+                source = sources[group_index] if sources else None
+                mode = str(getattr(magazine_config, "pickup_mode", "") or "").strip().lower()
+                group = (
+                    str(magazine_config.magazine_group_id or "Magazine").strip()
+                    if mode == MAGAZINE_PICKUP_MODE_AUTO_DISCOVERY_SENSOR_CONTROLLED_FAST_LIN
+                    else self._magazine_source_group(source, magazine_config)
+                )
+                self._last_execution_context = None
+                ok, message = self._run_single_cycle(
+                    should_stop,
+                    process_config=process_config,
+                    magazine_config=magazine_config,
+                    magazine_group=group,
+                    magazine_source=source,
+                    magazine_index=group_index,
+                    cycle_index=completed + staged + 1,
+                    magazine_discovery_contours=discovery_contours,
+                    magazine_discovery_active_contour=discovery_active,
+                    magazine_discovery_snapshot=discovery_snapshot,
+                    magazine_stage_only=True,
+                )
+                context = self._last_execution_context
+                if context is not None:
+                    discovery_contours = list(context.magazine_discovery_contours)
+                    discovery_active = context.magazine_discovery_active_contour
+                    discovery_snapshot = context.magazine_snapshot
+                if not ok:
+                    if message == NO_WORKPIECE_AT_MAGAZINE:
+                        discovery_active = None
+                        active_magazine_config = (
+                            getattr(context, "magazine_config", magazine_config)
+                            if context is not None
+                            else magazine_config
+                        )
+                        if bool(
+                            getattr(
+                                active_magazine_config,
+                                "recapture_after_pile_done",
+                                False,
+                            )
+                        ):
+                            discovery_contours = []
+                            discovery_snapshot = None
+                            _logger.info(
+                                "[MAGAZINE_LOAD] Active pile is empty during batch "
+                                "staging; clearing cached discovery so the magazine "
+                                "is recaptured"
+                            )
+                        break
+                    if "no space for another staged workpiece" in message.lower():
+                        break
+                    return False, message
+                staged += 1
+                active_magazine_config = (
+                    getattr(context, "magazine_config", magazine_config)
+                    if context is not None
+                    else magazine_config
+                )
+                if bool(
+                    getattr(active_magazine_config, "recapture_every_cycle", False)
+                ):
+                    discovery_contours = []
+                    discovery_active = None
+                    discovery_snapshot = None
+                    _logger.info(
+                        "[MAGAZINE_LOAD] Batch staging pickup completed; clearing "
+                        "cached discovery so the magazine is recaptured"
+                    )
+                if context is not None and not context.magazine_nesting_has_more:
+                    break
+
+            if should_stop():
+                return False, "Paint process stopped"
+            if staged == 0:
+                if context is not None and context.magazine_discovery_empty_capture:
+                    return True, MAGAZINE_EMPTY
+                continue
+
+            ok, message = self._move_to_calibration_before_manual_cycle(
+                magazine_config, should_stop
+            )
+            if not ok:
+                return False, message
+            snapshot = self._capture_snapshot_service.capture_snapshot(source="paint_batch_staging")
+            contours = list(getattr(snapshot, "contours", None) or ())
+            if not contours:
+                return False, "Batch nesting staged workpieces but calibration capture found none"
+            _logger.info("[BATCH_NESTING] captured staged batch workpieces=%d", len(contours))
+            for index, contour in enumerate(contours):
+                remaining = index + 1 < len(contours)
+                ok, message = self._run_single_cycle(
+                    should_stop,
+                    process_config=process_config,
+                    magazine_config=None,
+                    cycle_index=completed + 1,
+                    repeats_after_success=remaining,
+                    cached_snapshot=snapshot,
+                    cached_workpiece_contour=contour,
+                    suppress_magazine_load=True,
+                )
+                if not ok:
+                    return False, message
+                completed += 1
+            self._magazine_load_service.clear_work_area_nesting()
         return False, "Paint process stopped"
 
     @staticmethod
@@ -359,6 +537,10 @@ class PaintProductionService:
         magazine_discovery_contours: list | None = None,
         magazine_discovery_active_contour=None,
         magazine_discovery_snapshot=None,
+        magazine_stage_only: bool = False,
+        cached_snapshot=None,
+        cached_workpiece_contour=None,
+        suppress_magazine_load: bool = False,
     ) -> tuple[bool, str]:
         raw_process_config = process_config
         if self._paint_process_config_service is not None:
@@ -369,7 +551,7 @@ class PaintProductionService:
                 _logger.exception("Failed to capture settings for paint cycle %d", cycle_index)
                 return False, "Failed to read paint process settings"
         latest_magazine_config = getattr(process_config, "magazine_load", None)
-        if latest_magazine_config is not None:
+        if latest_magazine_config is not None and not suppress_magazine_load:
             magazine_config = latest_magazine_config
             pickup_mode = str(
                 getattr(magazine_config, "pickup_mode", "") or ""
@@ -408,6 +590,9 @@ class PaintProductionService:
             magazine_discovery_contours=list(magazine_discovery_contours or ()),
             magazine_discovery_active_contour=magazine_discovery_active_contour,
             magazine_snapshot=magazine_discovery_snapshot,
+            magazine_stage_only=bool(magazine_stage_only),
+            snapshot=cached_snapshot,
+            cached_workpiece_contour=cached_workpiece_contour,
         )
         if isinstance(magazine_source, dict) and "position" in magazine_source:
             context.magazine_fixed_pickup_pose = [
@@ -591,6 +776,17 @@ class PaintProductionService:
         self._set_dashboard_live_view_paused(False, reason=reason)
         self._restore_brightness_for_capture(reason)
 
+    def _restore_magazine_capture_view(self, reason: str) -> None:
+        """Resume magazine vision while preserving a locked known-good correction."""
+        self._set_dashboard_live_view_paused(False, reason=reason)
+        if self._brightness_locked:
+            _logger.info(
+                "Keeping auto brightness adjustment locked while restoring the "
+                "saved magazine correction"
+            )
+            return
+        self._restore_brightness_for_capture(reason)
+
     def _get_process_config(self) -> tuple[bool, str, object | None]:
         config_service = self._paint_process_config_service
         if config_service is None:
@@ -652,6 +848,38 @@ class PaintProductionService:
                 return False
             sleep(min(0.05, max(0.0, deadline - monotonic())))
         return not should_stop() and not self._paint_control.should_stop()
+
+    def _wait_for_fresh_capture_frame(
+        self,
+        timeout_s: float,
+        should_stop: Callable[[], bool],
+    ) -> tuple[bool, str]:
+        """Wait until resumed vision has published a genuinely fresh frame."""
+        health_details = getattr(self._vision_service, "get_health_details", None)
+        if not callable(health_details):
+            return False, "Vision service does not expose fresh-frame readiness"
+
+        started = perf_counter()
+        deadline = monotonic() + max(0.0, float(timeout_s))
+        last_message = "No fresh camera frame available"
+        while True:
+            if should_stop() or self._paint_control.should_stop():
+                return False, "Paint process stopped while waiting for a fresh camera frame"
+            try:
+                details = health_details()
+            except Exception as exc:
+                return False, f"Failed to query camera frame readiness: {exc}"
+            if bool(details.get("frame_fresh", False)):
+                _logger.info(
+                    "[CAPTURE_TIMING] fresh_frame_ready elapsed_s=%.3f",
+                    perf_counter() - started,
+                )
+                return True, ""
+            last_message = str(details.get("message") or last_message)
+            remaining_s = deadline - monotonic()
+            if remaining_s <= 0.0:
+                return False, f"Fresh camera frame unavailable after {timeout_s:.3f}s: {last_message}"
+            sleep(min(0.02, remaining_s))
 
     def _path_debug_plots_enabled(self) -> bool:
         config_service = self._paint_process_config_service

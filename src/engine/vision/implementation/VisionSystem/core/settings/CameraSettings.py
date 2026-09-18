@@ -46,6 +46,7 @@ class CameraSettings(Settings):
         self.set_value(CameraSettingKey.CALIBRATION_SKIP_FRAMES.value, 30)
 
         # Brightness/PID defaults
+        self.set_value(CameraSettingKey.HARDWARE_AUTO_EXPOSURE.value, False)
         self.set_value(CameraSettingKey.BRIGHTNESS_AUTO.value, False)
         self.set_value(CameraSettingKey.BRIGHTNESS_KP.value, 0.7)
         self.set_value(CameraSettingKey.BRIGHTNESS_KI.value, 0.2)
@@ -113,6 +114,8 @@ class CameraSettings(Settings):
                 self.set_draw_contours(settings[CameraSettingKey.DRAW_CONTOURS.value])
             
             # Handle flat brightness control keys
+            if CameraSettingKey.HARDWARE_AUTO_EXPOSURE.value in settings:
+                self.set_hardware_auto_exposure(settings[CameraSettingKey.HARDWARE_AUTO_EXPOSURE.value])
             if CameraSettingKey.BRIGHTNESS_AUTO.value in settings:
                 self.set_brightness_auto(settings[CameraSettingKey.BRIGHTNESS_AUTO.value])
             if CameraSettingKey.BRIGHTNESS_KP.value in settings:
@@ -182,6 +185,8 @@ class CameraSettings(Settings):
             # Handle nested Brightness Control section
             if "Brightness Control" in settings:
                 brightness = settings["Brightness Control"]
+                if CameraSettingKey.HARDWARE_AUTO_EXPOSURE.value in brightness:
+                    self.set_hardware_auto_exposure(brightness[CameraSettingKey.HARDWARE_AUTO_EXPOSURE.value])
                 if CameraSettingKey.BRIGHTNESS_AUTO.value in brightness:
                     self.set_brightness_auto(brightness[CameraSettingKey.BRIGHTNESS_AUTO.value])
                 if CameraSettingKey.BRIGHTNESS_KP.value in brightness:
@@ -606,6 +611,14 @@ class CameraSettings(Settings):
         )
 
     # ======= BRIGHTNESS/PID METHODS =======
+    def get_hardware_auto_exposure(self):
+        """Get camera-driver automatic exposure status."""
+        return self.get_value(CameraSettingKey.HARDWARE_AUTO_EXPOSURE.value)
+
+    def set_hardware_auto_exposure(self, enabled):
+        """Set camera-driver automatic exposure status."""
+        self.set_value(CameraSettingKey.HARDWARE_AUTO_EXPOSURE.value, bool(enabled))
+
     def get_brightness_auto(self):
         """Get auto brightness adjustment status."""
         return self.get_value(CameraSettingKey.BRIGHTNESS_AUTO.value)

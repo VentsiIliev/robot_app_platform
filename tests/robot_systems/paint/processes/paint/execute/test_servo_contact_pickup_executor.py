@@ -611,6 +611,34 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
             [segment["label"] for segment in motion.sequences[0][1]],
         )
 
+    def test_planned_pickup_test_mode_stops_after_lift(self):
+        motion = _FakeMotion()
+        owner = SimpleNamespace(_motion=motion)
+        plan = PickupPlan(
+            strategy_name="planned-test",
+            motion_plan=object(),
+            waypoints=(
+                PickupWaypoint("approach", [0, 0, 100, 0, 0, 0], 10, 10),
+                PickupWaypoint("descend", [0, 0, 0, 0, 0, 0], 10, 10),
+                PickupWaypoint("lift", [0, 0, 50, 0, 0, 0], 10, 10),
+                PickupWaypoint("paint approach", [10, 0, 50, 0, 0, 0], 10, 10),
+            ),
+            vacuum_on_before_moves=False,
+            contact_mode=PICKUP_CONTACT_MODE_PLANNED,
+            contact_waypoint_index=1,
+        )
+
+        self.assertTrue(
+            PaintPickupExecutor(owner)._execute_custom_pickup_sequence(
+                plan,
+                stop_after_retract=True,
+            )
+        )
+        self.assertEqual(
+            ["approach", "descend", "lift"],
+            [segment["label"] for segment in motion.sequences[0][1]],
+        )
+
     def test_servo_contact_pickup_splits_approach_and_remaining_segments(self):
         robot = _FakeRobot()
         motion = _FakeMotion()

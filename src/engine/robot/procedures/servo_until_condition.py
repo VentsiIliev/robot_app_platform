@@ -79,6 +79,94 @@ class ServoUntilConditionResult:
     contact_pose: tuple[float, ...] | None = None
 
 
+class _SensorPollMetrics:
+    """In-memory measurements for one sensor-controlled motion."""
+
+    def __init__(self, configured_sleep_s: float) -> None:
+        self.configured_sleep_s = configured_sleep_s
+        self.poll_starts_ns: list[int] = []
+        self.condition_read_ms: list[float] = []
+        self.modbus_read_ms: list[float] = []
+        self.modbus_attempt_ms: list[float] = []
+        self.modbus_attempts = 0
+        self.modbus_retry_attempts = 0
+        self.modbus_failed_attempts = 0
+        self.modbus_failed_calls = 0
+        self.diagnostics_missing = 0
+
+    def record(
+        self,
+        started_ns: int,
+        finished_ns: int,
+        diagnostics: dict[str, object] | None,
+    ) -> None:
+        self.poll_starts_ns.append(started_ns)
+        self.condition_read_ms.append((finished_ns - started_ns) / 1_000_000.0)
+        if not diagnostics:
+            self.diagnostics_missing += 1
+            return
+        self.modbus_read_ms.append(float(diagnostics.get("duration_ms", 0.0)))
+        attempts = int(diagnostics.get("attempts", 0))
+        failed_attempts = int(diagnostics.get("failed_attempts", 0))
+        self.modbus_attempts += attempts
+        self.modbus_retry_attempts += max(0, attempts - 1)
+        self.modbus_failed_attempts += failed_attempts
+        self.modbus_failed_calls += int(not bool(diagnostics.get("success", False)))
+        self.modbus_attempt_ms.extend(
+            float(value) for value in diagnostics.get("attempt_durations_ms", [])
+        )
+
+    @staticmethod
+    def _summary(values: list[float]) -> tuple[float, float, float, float]:
+        if not values:
+            return 0.0, 0.0, 0.0, 0.0
+        ordered = sorted(values)
+
+        def percentile(fraction: float) -> float:
+            index = min(len(ordered) - 1, math.ceil(fraction * len(ordered)) - 1)
+            return ordered[max(0, index)]
+
+        return (
+            sum(values) / len(values),
+            percentile(0.50),
+            percentile(0.95),
+            max(values),
+        )
+
+    def log(self, *, reason: str, task_id: object) -> None:
+        intervals_ms = [
+            (current - previous) / 1_000_000.0
+            for previous, current in zip(self.poll_starts_ns, self.poll_starts_ns[1:])
+        ]
+        cycle_avg, cycle_p50, cycle_p95, cycle_max = self._summary(intervals_ms)
+        read_avg, read_p50, read_p95, read_max = self._summary(self.condition_read_ms)
+        modbus_avg, _, modbus_p95, modbus_max = self._summary(self.modbus_read_ms)
+        attempt_avg, _, attempt_p95, attempt_max = self._summary(self.modbus_attempt_ms)
+        elapsed_s = (
+            (self.poll_starts_ns[-1] - self.poll_starts_ns[0]) / 1_000_000_000.0
+            if len(self.poll_starts_ns) > 1 else 0.0
+        )
+        achieved_hz = len(intervals_ms) / elapsed_s if elapsed_s > 0.0 else 0.0
+        _logger.warning(
+            "[SENSOR_CONTROLLED_FAST_LIN_SENSOR_METRICS] reason=%s task_id=%s polls=%d "
+            "configured_sleep_ms=%.3f achieved_hz=%.2f "
+            "cycle_ms(avg/p50/p95/max)=%.3f/%.3f/%.3f/%.3f "
+            "condition_ms(avg/p50/p95/max)=%.3f/%.3f/%.3f/%.3f "
+            "modbus_call_ms(avg/p95/max)=%.3f/%.3f/%.3f "
+            "modbus_attempt_ms(avg/p95/max)=%.3f/%.3f/%.3f "
+            "attempts=%d retry_attempts=%d failed_attempts=%d failed_calls=%d "
+            "diagnostics_missing=%d",
+            reason, task_id, len(self.poll_starts_ns), self.configured_sleep_s * 1000.0,
+            achieved_hz, cycle_avg, cycle_p50, cycle_p95, cycle_max,
+            read_avg, read_p50, read_p95, read_max,
+            modbus_avg, modbus_p95, modbus_max,
+            attempt_avg, attempt_p95, attempt_max,
+            self.modbus_attempts, self.modbus_retry_attempts,
+            self.modbus_failed_attempts,
+            self.modbus_failed_calls, self.diagnostics_missing,
+        )
+
+
 class ServoUntilConditionProcedure:
     """
     Generic servo-until-condition primitive.
@@ -833,9 +921,11 @@ class ServoUntilConditionProcedure:
         read_failures = 0
         detected = False
         contact_pose = None
+        sensor_metrics = _SensorPollMetrics(max(0.001, float(cfg.poll_interval_s)))
         while time.monotonic() < deadline:
             if cancel_requested is not None and cancel_requested():
                 self._stop_motion()
+                sensor_metrics.log(reason="cancelled", task_id=outcome.get("task_id"))
                 return self._result(
                     started_at, success=False, detected=False, timed_out=False,
                     start_failed=False, condition_failed=False, guard_triggered=True,
@@ -849,17 +939,29 @@ class ServoUntilConditionProcedure:
                     guarded = True
                 if guarded:
                     self._stop_motion()
+                    sensor_metrics.log(reason="stop_guard", task_id=outcome.get("task_id"))
                     return self._result(
                         started_at, success=False, detected=False, timed_out=False,
                         start_failed=False, condition_failed=False, guard_triggered=True,
                         message="stop_guard_triggered_during_sensor_controlled_fast_lin",
                     )
 
+            poll_started_ns = time.monotonic_ns()
             detected, read_ok = self._read_condition()
+            poll_finished_ns = time.monotonic_ns()
+            sensor_metrics.record(
+                poll_started_ns,
+                poll_finished_ns,
+                self._condition_read_diagnostics(),
+            )
             if not read_ok:
                 read_failures += 1
                 if read_failures >= int(cfg.condition_read_failure_limit):
                     self._stop_motion()
+                    sensor_metrics.log(
+                        reason="condition_unreadable",
+                        task_id=outcome.get("task_id"),
+                    )
                     return self._result(
                         started_at, success=False, detected=False, timed_out=False,
                         start_failed=False, condition_failed=True, guard_triggered=False,
@@ -868,17 +970,20 @@ class ServoUntilConditionProcedure:
             else:
                 read_failures = 0
                 if detected:
-                    trigger_ns = time.monotonic_ns()
-                    _logger.warning(
-                        "[SENSOR_CONTROLLED_FAST_LIN_TIMING] event=sensor_trigger task_id=%s elapsed_s=%.3f",
-                        outcome.get("task_id"),
-                        time.monotonic() - started_at,
-                    )
+                    trigger_ns = poll_finished_ns
                     stop_ok = self._controlled_stop_checked(
                         outcome.get("task_id"),
                         stop_duration_s=cfg.controlled_stop_duration_s,
                     )
                     stop_done_ns = time.monotonic_ns()
+                    sensor_metrics.log(reason="sensor_trigger", task_id=outcome.get("task_id"))
+                    _logger.warning(
+                        "[SENSOR_CONTROLLED_FAST_LIN_TIMING] event=sensor_trigger task_id=%s "
+                        "elapsed_s=%.3f sensor_read_to_stop_response_ms=%.3f",
+                        outcome.get("task_id"),
+                        time.monotonic() - started_at,
+                        (stop_done_ns - trigger_ns) / 1_000_000.0,
+                    )
                     if not stop_ok:
                         return self._result(
                             started_at, success=False, detected=True, timed_out=False,
@@ -920,10 +1025,15 @@ class ServoUntilConditionProcedure:
             live_pose = self._read_current_pose()
             if live_pose is not None and live_pose[2] <= float(cfg.minimum_z_mm) + 0.5:
                 contact_pose = live_pose
+                sensor_metrics.log(
+                    reason="minimum_z_reached",
+                    task_id=outcome.get("task_id"),
+                )
                 break
             time.sleep(max(0.001, float(cfg.poll_interval_s)))
         else:
             self._stop_motion()
+            sensor_metrics.log(reason="timeout", task_id=outcome.get("task_id"))
             return self._result(
                 started_at, success=False, detected=False, timed_out=True,
                 start_failed=False, condition_failed=False, guard_triggered=False,
@@ -1345,6 +1455,7 @@ class ServoUntilConditionProcedure:
 
         deadline = time.monotonic() + max(0.0, float(retract.timeout_s))
         final_pose = None
+        position_error = math.inf
         while True:
             if cancel_requested is not None and cancel_requested():
                 self._stop_motion()
@@ -1372,6 +1483,39 @@ class ServoUntilConditionProcedure:
                 )
                 return False, "fast_lin_retract_final_mismatch"
             time.sleep(max(0.005, float(retract.poll_interval_s)))
+
+        # Entering the target tolerance does not mean that the asynchronous
+        # Fast LIN has finished.  Starting the next prepared motion while this
+        # task is still active makes the controller reject it as busy.  Wait
+        # for this specific task to become inactive, then verify the settled
+        # pose once more.
+        if not self._wait_for_execution_inactive(
+            task_id=outcome.get("task_id"),
+            timeout_s=max(0.1, deadline - time.monotonic()),
+            poll_interval_s=max(0.005, float(retract.poll_interval_s)),
+            required_inactive_samples=1,
+        ):
+            return False, "fast_lin_retract_execution_still_active"
+        settled_pose = self._read_current_pose()
+        if settled_pose is None:
+            return False, "retract_position_unreadable"
+        settled_error = math.sqrt(
+            sum(
+                (float(settled_pose[index]) - verification_target[index]) ** 2
+                for index in range(3)
+            )
+        )
+        if settled_error > tolerance:
+            _logger.error(
+                "[SERVO_UNTIL_CONDITION] Fast LIN settled pose mismatch "
+                "target=%s actual=%s position_error_mm=%.3f tolerance_mm=%.3f",
+                [round(value, 3) for value in verification_target],
+                [round(float(value), 3) for value in settled_pose[:6]],
+                settled_error,
+                tolerance,
+            )
+            return False, "fast_lin_retract_final_mismatch"
+        final_pose = settled_pose
         _logger.info(
             "[SERVO_UNTIL_CONDITION] Fast LIN retract completed target_z=%.3f final_z=%.3f",
             target_z,
@@ -1507,12 +1651,36 @@ class ServoUntilConditionProcedure:
         except Exception:
             _logger.exception("[SENSOR_CONTROLLED_FAST_LIN] controlled stop failed")
             return False
-        return bool(
+        stopped = bool(
             isinstance(result, dict)
             and result.get("success") is True
             and result.get("stopped") is True
             and result.get("future_work_preserved") is True
         )
+        if stopped:
+            return True
+        # The sensor and runtime completion notifications can cross when
+        # contact occurs at the very end of the commanded descent. In that
+        # case there is no motion left to stop: the runtime reports a task
+        # mismatch with no active task. Treat that as an already-stopped
+        # boundary; the caller still confirms inactivity and a stable pose
+        # before retracting.
+        already_inactive = bool(
+            isinstance(result, dict)
+            and (
+                str(result.get("state", "")).strip().upper() == "TASK_MISMATCH"
+                or result.get("result") == -3
+            )
+            and result.get("current_task_id") is None
+        )
+        if already_inactive:
+            _logger.warning(
+                "[SENSOR_CONTROLLED_FAST_LIN] Controlled stop raced with completed "
+                "task_id=%s; continuing with inactive/stable-pose confirmation",
+                task_id,
+            )
+            return True
+        return False
 
     def _wait_for_stable_pose(
         self,
@@ -1681,6 +1849,19 @@ class ServoUntilConditionProcedure:
         except Exception:
             _logger.exception("[SERVO_UNTIL_CONDITION] condition read failed")
             return False, False
+
+    def _condition_read_diagnostics(self) -> dict[str, object] | None:
+        getter = getattr(self._condition, "get_read_diagnostics", None)
+        if not callable(getter):
+            return None
+        try:
+            diagnostics = getter()
+        except Exception:
+            _logger.exception(
+                "[SERVO_UNTIL_CONDITION] condition diagnostics read failed"
+            )
+            return None
+        return diagnostics if isinstance(diagnostics, dict) else None
 
     def _notify_condition_servo_started(self) -> None:
         callback = getattr(self._condition, "on_servo_start", None)

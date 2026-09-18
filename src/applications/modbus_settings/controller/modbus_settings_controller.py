@@ -17,6 +17,7 @@ class ModbusSettingsController(IApplicationController, BackgroundWorker):
         self._view.save_requested.connect(self._on_save)
         self._view.detect_ports_requested.connect(self._on_detect_ports)
         self._view.grant_permission_requested.connect(self._on_grant_permission)
+        self._view.set_low_latency_requested.connect(self._on_set_low_latency)
         self._view.test_connection_requested.connect(self._on_test_connection)
         self._view.destroyed.connect(self.stop)
 
@@ -82,6 +83,24 @@ class ModbusSettingsController(IApplicationController, BackgroundWorker):
     def _on_permission_failed(self, msg: str) -> None:
         self._logger.error("Permission update failed: %s", msg)
         self._view.set_permission_result(False, [])
+
+    # ── USB serial low latency ───────────────────────────────────────────
+
+    def _on_set_low_latency(self) -> None:
+        self._view.set_busy(True)
+        self._run_in_thread(
+            fn=self._model.set_serial_port_low_latency,
+            on_done=self._on_low_latency_set,
+            on_error=self._on_low_latency_failed,
+        )
+
+    def _on_low_latency_set(self, ports: list) -> None:
+        self._logger.info("Low latency enabled for ports: %s", ports)
+        self._view.set_low_latency_result(bool(ports), ports)
+
+    def _on_low_latency_failed(self, msg: str) -> None:
+        self._logger.error("Low latency update failed: %s", msg)
+        self._view.set_low_latency_result(False, [], msg)
 
     # ── Test connection ───────────────────────────────────────────────────
 

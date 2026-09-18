@@ -25,6 +25,7 @@
     "Erode iterations": 3
   },
   "Brightness Control": {
+    "Hardware auto exposure": false,
     "Enable auto adjust": true,
     "Kp": 0.7,
     "Ki": 0.2,

@@ -36,6 +36,7 @@ class CameraSettingsData:
     erode_iterations:         int   = 4
 
     # Brightness
+    hardware_auto_exposure:   bool  = False
     brightness_auto:          bool  = True
     brightness_kp:            float = 0.0
     brightness_ki:            float = 0.2

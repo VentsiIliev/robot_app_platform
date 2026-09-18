@@ -107,12 +107,41 @@ class TestCameraSettingsApplicationServiceLoad(unittest.TestCase):
         result = svc.load_settings()
         self.assertEqual(result.index, 2)
 
+    def test_load_parses_hardware_auto_exposure(self):
+        svc, _, _, _ = _make_app_service(
+            data={"Brightness Control": {"Hardware auto exposure": True}}
+        )
+
+        result = svc.load_settings()
+
+        self.assertTrue(result.hardware_auto_exposure)
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # CameraSettingsApplicationService — save
 # ══════════════════════════════════════════════════════════════════════════════
 
 class TestCameraSettingsApplicationServiceSave(unittest.TestCase):
+
+    def test_save_applies_changed_hardware_auto_exposure(self):
+        svc, _, vs, _ = _make_app_service(
+            data={"Brightness Control": {"Hardware auto exposure": False}}
+        )
+        svc.load_settings()
+
+        svc.save_settings(CameraSettingsData(hardware_auto_exposure=True))
+
+        vs.set_auto_exposure.assert_called_once_with(True)
+
+    def test_save_does_not_reapply_unchanged_hardware_auto_exposure(self):
+        svc, _, vs, _ = _make_app_service(
+            data={"Brightness Control": {"Hardware auto exposure": False}}
+        )
+        svc.load_settings()
+
+        svc.save_settings(CameraSettingsData(hardware_auto_exposure=False))
+
+        vs.set_auto_exposure.assert_not_called()
 
     def test_save_calls_settings_service_save(self):
         svc, ss, _, _ = _make_app_service()

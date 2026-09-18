@@ -18,6 +18,9 @@ def _make_service():
 
 
 class TestToolSettingsFactory(unittest.TestCase):
+    def test_view_enables_shared_jog_widget(self):
+        self.assertTrue(ToolSettingsView.SHOW_JOG_WIDGET)
+
 
     @classmethod
     def setUpClass(cls):

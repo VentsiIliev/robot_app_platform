@@ -9,7 +9,8 @@
     },
     "commands": {
       "on": 1,
-      "off": 0
+      "off": 0,
+      "blow_off_on": 4
     },
     "statuses": {}
   },

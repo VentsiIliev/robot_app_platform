@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import math
 import time
+from concurrent.futures import Future, ThreadPoolExecutor
 
 from src.engine.geometry.planar import unwrap_degrees
 from src.engine.robot.enums.axis import Direction, RobotAxis
@@ -278,6 +279,7 @@ def execute_magazine_pickup_release(
 
     ok, msg = executor._motion.turn_vacuum_off()
     if not ok:
+        load_service.cancel_work_area_nesting()
         return False, msg
     return True, f"Workpiece transferred to {release_label}"
 
@@ -323,15 +325,68 @@ def _execute_magazine_servo_contact_pickup_release(
         or short_retract_distance_mm <= 0.0
     ):
         return False, "Magazine short retract distance must be greater than zero"
+
+    release_segments = build_magazine_pickup_release_segments(transfer_waypoints[3:])
+    release_has_fast_lin = any(
+        str(segment.get("type", "")).strip().lower() == "fast_lin"
+        for segment in release_segments
+    )
+    preparation_pool: ThreadPoolExecutor | None = None
+    preparation_future: Future[str | None] | None = None
+    if not release_has_fast_lin and full_retract:
+        preparation_pool = ThreadPoolExecutor(
+            max_workers=1,
+            thread_name_prefix="MagazineReleasePreplan",
+        )
+        preparation_future = preparation_pool.submit(
+            _prepare_magazine_release,
+            executor,
+            release_segments,
+            start_pose=safe_clearance_pose,
+        )
+
+    def resolve_prepared_plan() -> str | None:
+        nonlocal preparation_pool, preparation_future
+        if preparation_future is None:
+            return None
+        try:
+            return preparation_future.result()
+        finally:
+            preparation_future = None
+            if preparation_pool is not None:
+                preparation_pool.shutdown(wait=True)
+                preparation_pool = None
+
+    def discard_background_plan() -> None:
+        plan_id = resolve_prepared_plan()
+        if plan_id is not None:
+            _discard_prepared_magazine_release(executor, plan_id)
+
     if not executor._motion.move_ordered_pickup_sequence(
         "Magazine pickup approach before servo contact",
         approach_segments,
     ):
+        discard_background_plan()
         return False, "Magazine pickup approach before servo contact failed"
-    if not _wait_for_execution_inactive(executor._robot_service):
+    # The approach request above is blocking. One fresh inactive status is
+    # sufficient here; requiring two added a full polling interval after the
+    # backend had already reported completion.
+    if not _wait_for_execution_inactive(
+        executor._robot_service,
+        required_inactive_samples=1,
+    ):
+        discard_background_plan()
         return False, "Magazine pickup approach did not become inactive"
-    approach_pose = _wait_for_stable_pose(executor._robot_service)
+    # Retain a live pose-stability guard before Fast LIN, but use one stable
+    # delta at 20 ms because blocking completion and inactive status have
+    # already independently confirmed that the approach stopped.
+    approach_pose = _wait_for_stable_pose(
+        executor._robot_service,
+        sample_interval_s=0.02,
+        required_stable_samples=1,
+    )
     if approach_pose is None:
+        discard_background_plan()
         return False, "Magazine pickup approach pose did not become stable"
     _logger.info(
         "[MAGAZINE_LOAD] Pickup approach synchronized before servo contact pose=%s",
@@ -346,22 +401,24 @@ def _execute_magazine_servo_contact_pickup_release(
             orientation_tolerance_deg=orientation_tolerance_deg,
         )
         if not ok:
+            discard_background_plan()
             return False, msg
 
-    release_segments = build_magazine_pickup_release_segments(transfer_waypoints[3:])
-    release_has_fast_lin = any(
-        str(segment.get("type", "")).strip().lower() == "fast_lin"
-        for segment in release_segments
-    )
     prepared_plan_id = (
         None
         if release_has_fast_lin or not full_retract
-        else _prepare_magazine_release(
+        else resolve_prepared_plan()
+    )
+    if prepared_plan_id is None and not release_has_fast_lin and full_retract:
+        _logger.warning(
+            "[MAGAZINE_LOAD] Concurrent release preplanning was unavailable; "
+            "retrying after pickup approach"
+        )
+        prepared_plan_id = _prepare_magazine_release(
             executor,
             release_segments,
             start_pose=safe_clearance_pose,
         )
-    )
     if prepared_plan_id is None and not release_has_fast_lin and full_retract:
         return False, "Magazine release motion could not be prepared before servo pickup"
     if not full_retract:
@@ -502,7 +559,14 @@ def _execute_magazine_servo_contact_pickup_release(
                     return False, "Magazine servo pickup found no workpiece; " + "; ".join(recovery_failures)
                 return False, NO_WORKPIECE_AT_MAGAZINE
             return False, f"Magazine servo contact pickup failed: {result.message}"
-        if not pickup_condition_is_active_after_retract(condition):
+        # A vacuum seal against the pile/tray can remain active briefly after
+        # an empty descent. Require it to survive the retract for 300 ms before
+        # carrying anything toward calibration.
+        if not pickup_condition_is_active_after_retract(
+            condition,
+            required_samples=4,
+            sample_interval_s=0.1,
+        ):
             off_ok, off_msg = executor._motion.turn_vacuum_off()
             recovered, recovery_error = return_to_fixed_pose("after workpiece loss")
             recovery_failures = []
@@ -518,11 +582,21 @@ def _execute_magazine_servo_contact_pickup_release(
                     + "; ".join(recovery_failures)
                 )
             return False, NO_WORKPIECE_AT_MAGAZINE
-        current_pose = _wait_for_stable_pose(executor._robot_service)
+        # ServoUntilConditionProcedure has already waited for the retract to
+        # finish and checked its terminal pose. Keep one fresh stability delta
+        # before handing off to the prepared release instead of repeating the
+        # default three-sample settling delay.
+        current_pose = _wait_for_stable_pose(
+            executor._robot_service,
+            sample_interval_s=0.02,
+            required_stable_samples=1,
+        )
         if current_pose is None:
             return False, "Magazine post-retract pose did not become stable"
-        if full_retract and not _poses_match(current_pose, safe_clearance_pose, 2.0, 2.0):
-            return False, "Magazine Fast LIN retract did not reach the prepared release start pose"
+        if full_retract and abs(
+            float(current_pose[2]) - float(safe_clearance_pose[2])
+        ) > 2.0:
+            return False, "Magazine Fast LIN retract did not reach the configured retract Z"
 
         if prepared_plan_id is not None:
             execution = executor._robot_service.execute_prepared_ordered_motion_chain(prepared_plan_id)
@@ -595,27 +669,6 @@ def _prepared_execution_succeeded(result: object) -> bool:
         isinstance(result, dict)
         and result.get("state") == "completed"
         and result.get("result") == 0
-    )
-
-
-def _poses_match(
-    actual_pose: list[float],
-    expected_pose: list[float],
-    position_tolerance_mm: float,
-    orientation_tolerance_deg: float,
-) -> bool:
-    actual = _finite_pose(actual_pose)
-    expected = _finite_pose(expected_pose)
-    if actual is None or expected is None:
-        return False
-    position_error = math.sqrt(sum((actual[index] - expected[index]) ** 2 for index in range(3)))
-    orientation_error = max(
-        abs((actual[index] - expected[index] + 180.0) % 360.0 - 180.0)
-        for index in range(3, 6)
-    )
-    return (
-        position_error <= float(position_tolerance_mm)
-        and orientation_error <= float(orientation_tolerance_deg)
     )
 
 
@@ -806,6 +859,7 @@ def _wait_for_execution_inactive(
 def handle_magazine_execute_pickup_release(ctx: PaintExecutionContext) -> PaintExecutionState:
     guarded = guard_control(ctx, PaintExecutionState.MAGAZINE_EXECUTE_PICKUP_RELEASE)
     if guarded is not None:
+        ctx.production_service._magazine_load_service.cancel_work_area_nesting()
         return guarded
 
     load_service = ctx.production_service._magazine_load_service
@@ -822,6 +876,11 @@ def handle_magazine_execute_pickup_release(ctx: PaintExecutionContext) -> PaintE
     previous_control = executor._active_execution_control
     executor._active_execution_control = ctx.control
     try:
+        release_target_label = (
+            f"{load_service._release_work_area_id} nested staging position"
+            if ctx.magazine_stage_only
+            else f"{load_service._release_work_area_id} work area center"
+        )
         ok, msg = execute_magazine_pickup_release(
             load_service,
             pickup_xy=ctx.magazine_target["pickup_xy"],
@@ -829,7 +888,7 @@ def handle_magazine_execute_pickup_release(ctx: PaintExecutionContext) -> PaintE
             pickup_base_pose=ctx.magazine_pose,
             release_pose=ctx.magazine_release_pose,
             workpiece_height_mm=0.0,
-            release_label=f"{load_service._release_work_area_id} work area center",
+            release_label=release_target_label,
             resume_from_current_pose=resume_from_current_pose,
             fixed_approach_pose=ctx.magazine_fixed_pickup_pose if is_fixed_group else None,
             fixed_position_tolerance_mm=float(ctx.magazine_config.fixed_pickup_position_tolerance_mm),
@@ -851,4 +910,7 @@ def handle_magazine_execute_pickup_release(ctx: PaintExecutionContext) -> PaintE
             f"Magazine contour: {msg}",
         )
     ctx.set_result(True, f"Magazine contour: {msg}")
+    if ctx.magazine_stage_only:
+        load_service.commit_work_area_nesting()
+        return PaintExecutionState.COMPLETED
     return PaintExecutionState.MAGAZINE_MOVE_TO_CALIBRATION

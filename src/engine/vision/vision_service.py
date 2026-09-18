@@ -204,7 +204,6 @@ class VisionService(IVisionService, IHealthCheckable,IExposureControl):
             camera.set_auto_exposure(enabled)
         else:
             _logger.debug("set_auto_exposure: camera does not support exposure control, skipping")
-        self.set_auto_brightness_enabled(enabled)
 
     def set_detection_area(self, area: str) -> None:
         self.set_active_work_area(area)

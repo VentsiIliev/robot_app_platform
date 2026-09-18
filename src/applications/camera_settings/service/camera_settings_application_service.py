@@ -21,10 +21,13 @@ class CameraSettingsApplicationService(ICameraSettingsService):
         self._work_area_service = work_area_service
         self._settings_id      = CommonSettingsID.VISION_CAMERA_SETTINGS
         self._logger           = logging.getLogger(self.__class__.__name__)
+        self._hardware_auto_exposure: bool | None = None
 
     def load_settings(self) -> CameraSettingsData:
         raw = self._settings_service.get(self._settings_id)
-        return CameraSettingsMapper.from_json(raw.data)
+        settings = CameraSettingsMapper.from_json(raw.data)
+        self._hardware_auto_exposure = settings.hardware_auto_exposure
+        return settings
 
     def save_settings(self, settings: CameraSettingsData) -> None:
         from src.engine.vision.camera_settings_serializer import CameraSettings
@@ -39,6 +42,10 @@ class CameraSettingsApplicationService(ICameraSettingsService):
         raw = CameraSettings(data=data)
         self._settings_service.save(self._settings_id, raw)
         self._vision_service.update_settings(data)
+        requested_auto_exposure = bool(settings.hardware_auto_exposure)
+        if requested_auto_exposure != self._hardware_auto_exposure:
+            self._vision_service.set_auto_exposure(requested_auto_exposure)
+            self._hardware_auto_exposure = requested_auto_exposure
 
     def set_raw_mode(self, enabled: bool) -> None:
         self._vision_service.set_raw_mode(enabled)

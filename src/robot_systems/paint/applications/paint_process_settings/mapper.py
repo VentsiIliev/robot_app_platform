@@ -287,6 +287,7 @@ class PaintProcessSettingsMapper:
         interpolation = settings.interpolation
         return {
             "enable_vacuum_pump": settings.enable_vacuum_pump,
+            "stop_after_calibration_pickup": settings.stop_after_calibration_pickup,
             "apply_camera_to_tcp_for_pickup": settings.apply_camera_to_tcp_for_pickup,
             "enable_z_shift_pixel_compensation": settings.enable_z_shift_pixel_compensation,
             "contour_pixel_to_mm_mode": settings.contour_pixel_to_mm_mode,
@@ -390,11 +391,18 @@ class PaintProcessSettingsMapper:
             "dropoff_plate_passage_gate": PaintProcessSettingsMapper._pose_to_waypoint_rows(
                 dropoff.plate_passage_gate_pose, 70.0, 50.0
             ),
+            "dropoff_plate_exit_gate": PaintProcessSettingsMapper._pose_to_waypoint_rows(
+                dropoff.plate_exit_gate_pose, 70.0, 50.0
+            ),
             "dropoff_plate_next_cycle_midpoint_enabled": dropoff.plate_next_cycle_midpoint_enabled,
-            "dropoff_plate_next_cycle_midpoint": PaintProcessSettingsMapper._pose_to_waypoint_rows(
-                dropoff.plate_next_cycle_midpoint_pose, 60.0, 40.0
+            "dropoff_plate_next_cycle_midpoint": PaintProcessSettingsMapper._configured_waypoints(
+                dropoff.plate_next_cycle_waypoints,
+                dropoff.plate_next_cycle_midpoint_pose,
+                60.0,
+                40.0,
             ),
             "dropoff_plate_use_center_waypoint": dropoff.plate_use_center_waypoint,
+            "dropoff_plate_auto_center_near_corner": dropoff.plate_auto_center_near_corner,
             "dropoff_plate_distribute_unwind": dropoff.plate_distribute_unwind,
             "dropoff_plate_motion_profiles": [dict(profile) for profile in dropoff.plate_motion_profiles],
             "dropoff_plate_robot_frame": (
@@ -423,6 +431,11 @@ class PaintProcessSettingsMapper:
                 ),
             ],
             "magazine_load_enabled": magazine.enabled,
+            "magazine_recapture_after_pile_done": magazine.recapture_after_pile_done,
+            "magazine_recapture_every_cycle": magazine.recapture_every_cycle,
+            "magazine_processing_strategy": magazine.processing_strategy,
+            "magazine_nesting_margin_mm": magazine.nesting_margin_mm,
+            "magazine_nesting_padding_mm": magazine.nesting_padding_mm,
             "magazine_pickup_mode": magazine.pickup_mode,
             "magazine_fixed_pickup_group_id": magazine.fixed_pickup_group_id,
             "magazine_fixed_pickup_group_ids": ", ".join(
@@ -691,6 +704,17 @@ class PaintProcessSettingsMapper:
                 flat.get("cleanup_second_pass_pivot_z_offset_mm", base.edge_cleanup.second_pass_pivot_z_offset_mm)
             ),
         )
+        plate_next_cycle_waypoints = PaintProcessSettingsMapper._waypoint_list_from_value(
+            flat.get("dropoff_plate_next_cycle_midpoint"),
+            PaintProcessSettingsMapper._configured_waypoints(
+                base.dropoff.plate_next_cycle_waypoints,
+                base.dropoff.plate_next_cycle_midpoint_pose,
+                60.0,
+                40.0,
+            ),
+            60.0,
+            40.0,
+        )
         dropoff = replace(
             base.dropoff,
             alternate_drying_demo=bool(
@@ -738,16 +762,25 @@ class PaintProcessSettingsMapper:
             plate_passage_gate_pose=PaintProcessSettingsMapper._single_pose_from_value(
                 flat.get("dropoff_plate_passage_gate", ""), base.dropoff.plate_passage_gate_pose
             ),
+            plate_exit_gate_pose=PaintProcessSettingsMapper._single_pose_from_value(
+                flat.get("dropoff_plate_exit_gate", ""), base.dropoff.plate_exit_gate_pose
+            ),
             plate_next_cycle_midpoint_enabled=bool(flat.get(
                 "dropoff_plate_next_cycle_midpoint_enabled",
                 base.dropoff.plate_next_cycle_midpoint_enabled,
             )),
-            plate_next_cycle_midpoint_pose=PaintProcessSettingsMapper._single_pose_from_value(
-                flat.get("dropoff_plate_next_cycle_midpoint", ""),
-                base.dropoff.plate_next_cycle_midpoint_pose,
+            plate_next_cycle_waypoints=plate_next_cycle_waypoints,
+            plate_next_cycle_midpoint_pose=(
+                list(plate_next_cycle_waypoints[0]["position"])
+                if plate_next_cycle_waypoints
+                else list(base.dropoff.plate_next_cycle_midpoint_pose)
             ),
             plate_use_center_waypoint=bool(flat.get(
                 "dropoff_plate_use_center_waypoint", base.dropoff.plate_use_center_waypoint
+            )),
+            plate_auto_center_near_corner=bool(flat.get(
+                "dropoff_plate_auto_center_near_corner",
+                base.dropoff.plate_auto_center_near_corner,
             )),
             plate_distribute_unwind=bool(flat.get(
                 "dropoff_plate_distribute_unwind", base.dropoff.plate_distribute_unwind
@@ -809,6 +842,37 @@ class PaintProcessSettingsMapper:
         magazine = replace(
             base.magazine_load,
             enabled=bool(flat.get("magazine_load_enabled", base.magazine_load.enabled)),
+            recapture_after_pile_done=bool(
+                flat.get(
+                    "magazine_recapture_after_pile_done",
+                    base.magazine_load.recapture_after_pile_done,
+                )
+            ) and not bool(
+                flat.get(
+                    "magazine_recapture_every_cycle",
+                    base.magazine_load.recapture_every_cycle,
+                )
+            ),
+            recapture_every_cycle=bool(
+                flat.get(
+                    "magazine_recapture_every_cycle",
+                    base.magazine_load.recapture_every_cycle,
+                )
+            ),
+            processing_strategy=str(
+                flat.get(
+                    "magazine_processing_strategy",
+                    base.magazine_load.processing_strategy,
+                )
+            ).strip().lower(),
+            nesting_margin_mm=max(
+                0.0,
+                float(flat.get("magazine_nesting_margin_mm", base.magazine_load.nesting_margin_mm)),
+            ),
+            nesting_padding_mm=max(
+                0.0,
+                float(flat.get("magazine_nesting_padding_mm", base.magazine_load.nesting_padding_mm)),
+            ),
             pickup_mode=normalize_magazine_pickup_mode(
                 flat.get("magazine_pickup_mode", base.magazine_load.pickup_mode)
             ),
@@ -968,6 +1032,12 @@ class PaintProcessSettingsMapper:
                 flat.get("pickup_axis_alignment_sign_value", base.pickup_axis_alignment_sign_value)
             ),
             enable_vacuum_pump=bool(flat.get("enable_vacuum_pump", base.enable_vacuum_pump)),
+            stop_after_calibration_pickup=bool(
+                flat.get(
+                    "stop_after_calibration_pickup",
+                    base.stop_after_calibration_pickup,
+                )
+            ),
             run_while_workpiece_found=bool(
                 flat.get("run_while_workpiece_found", base.run_while_workpiece_found)
             ),

@@ -27,6 +27,13 @@ MAGAZINE_PICKUP_MODES = (
     MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN,
 )
 
+MAGAZINE_PROCESSING_STRATEGY_DIRECT = "direct"
+MAGAZINE_PROCESSING_STRATEGY_BATCH_NESTING = "batch_nesting"
+MAGAZINE_PROCESSING_STRATEGIES = (
+    MAGAZINE_PROCESSING_STRATEGY_DIRECT,
+    MAGAZINE_PROCESSING_STRATEGY_BATCH_NESTING,
+)
+
 _LEGACY_PICKUP_CONTACT_MODE_SERVO_CONTACT = "servo_contact"
 _LEGACY_MAGAZINE_PICKUP_MODE_VISION_SERVO_CONTACT = "vision_servo_contact"
 _LEGACY_MAGAZINE_PICKUP_MODE_FIXED_GROUP_SERVO_CONTACT = "fixed_group_servo_contact"
@@ -213,9 +220,19 @@ class PaintDropoffConfig:
     plate_robot_tool: int = -1  # Captured Robot Settings frame metadata.
     plate_robot_user: int = -1
     plate_passage_gate_pose: list[float] = field(default_factory=list)  # [LIVE SETTINGS]
+    # Optional exit-only gate. An empty pose preserves the legacy behavior by
+    # reusing plate_passage_gate_pose for both entry and exit.
+    plate_exit_gate_pose: list[float] = field(default_factory=list)  # [LIVE SETTINGS]
     plate_next_cycle_midpoint_enabled: bool = False  # [LIVE SETTINGS]
+    # Ordered route points between the exit gate and next-cycle start. Each
+    # item carries position/motion settings. The singular pose below remains
+    # as a compatibility fallback for existing settings files.
+    plate_next_cycle_waypoints: list[dict] = field(default_factory=list)  # [LIVE SETTINGS]
     plate_next_cycle_midpoint_pose: list[float] = field(default_factory=list)  # [LIVE SETTINGS]
     plate_use_center_waypoint: bool = True  # [LIVE SETTINGS]
+    # When the center waypoint is not forced, retain the conservative legacy
+    # behavior of routing placements near plate corner 0 through the center.
+    plate_auto_center_near_corner: bool = True  # [LIVE SETTINGS]
     plate_distribute_unwind: bool = False  # [LIVE SETTINGS]
     plate_motion_profiles: list[dict] = field(default_factory=lambda: [
         {"key": "entry_gate", "vel_percent": 70.0, "acc_percent": 50.0, "motion_type": "ptp", "blendR": 20.0},
@@ -233,6 +250,11 @@ class PaintMagazineLoadConfig:
     """Optional pre-run transfer from magazine capture station to calibration table."""
 
     enabled: bool = False  # [LIVE SETTINGS]
+    recapture_after_pile_done: bool = False  # [LIVE SETTINGS]
+    recapture_every_cycle: bool = False  # [LIVE SETTINGS]
+    processing_strategy: str = MAGAZINE_PROCESSING_STRATEGY_DIRECT  # [LIVE SETTINGS]
+    nesting_margin_mm: float = 10.0  # [LIVE SETTINGS]
+    nesting_padding_mm: float = 10.0  # [LIVE SETTINGS]
     pickup_mode: str = MAGAZINE_PICKUP_MODE_VISION_PLANNED  # [LIVE SETTINGS]
     fixed_pickup_group_id: str = "Magazine Fixed Pickup"  # [LIVE SETTINGS]
     # Ordered fixed pickup positions. An empty list preserves the legacy
@@ -443,6 +465,8 @@ class PaintProcessConfig:
     pickup_axis_alignment_sign_value: float = 1.0
     # Turns the vacuum pump on/off around pickup and release.
     enable_vacuum_pump: bool = True
+    # Test mode: finish the cycle immediately after calibration pickup/retract.
+    stop_after_calibration_pickup: bool = False  # [LIVE SETTINGS]
     # Repeat production cycles until the active source no longer yields a workpiece.
     run_while_workpiece_found: bool = True  # [LIVE SETTINGS]
     # Match the captured contour against the saved workpiece library. When disabled,

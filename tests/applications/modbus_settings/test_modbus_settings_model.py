@@ -26,6 +26,7 @@ def _make_action_service():
     svc.detect_ports.return_value                   = []
     svc.test_connection.return_value                = False
     svc.grant_serial_port_permissions.return_value  = []
+    svc.set_serial_port_low_latency.return_value    = []
     return svc
 
 
@@ -337,6 +338,19 @@ class TestModbusSettingsModelGrantPermissions(unittest.TestCase):
 
         ss.load_config.assert_not_called()
         ss.save_config.assert_not_called()
+
+
+class TestModbusSettingsModelLowLatency(unittest.TestCase):
+
+    def test_low_latency_delegates_to_action_service(self):
+        acts = _make_action_service()
+        acts.set_serial_port_low_latency.return_value = ["/dev/ttyUSB0"]
+        model = ModbusSettingsModel(_make_settings_service(), acts)
+
+        result = model.set_serial_port_low_latency()
+
+        acts.set_serial_port_low_latency.assert_called_once_with()
+        self.assertEqual(result, ["/dev/ttyUSB0"])
 
 
 # ---------------------------------------------------------------------------

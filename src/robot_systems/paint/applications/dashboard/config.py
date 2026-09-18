@@ -23,6 +23,7 @@ class PaintDashboardUiConfig:
     show_bottom_quick_controls: bool = True
     show_drying_mode_control: bool = True
     show_camera_preview: bool = True
+    show_tray_camera_tab: bool = False
     use_collapsible_settings_panel: bool = True
     use_combined_paint_speed_control: bool = False
     combined_paint_speed_minimum_percent: float = 1.0

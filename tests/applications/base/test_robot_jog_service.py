@@ -10,6 +10,35 @@ from src.engine.robot.configuration.robot_settings import MovementGroup
 
 
 class TestRobotJogService(unittest.TestCase):
+    def test_joint_jog_sends_j6_full_turn_as_one_command(self):
+        robot = MagicMock()
+        robot.start_joint_jog.return_value = 0
+        service = RobotJogService(robot_service=robot)
+
+        service.joint_jog("JOG_JOINT", "J6", "Plus", 360.0)
+
+        robot.start_joint_jog.assert_called_once()
+        self.assertEqual(
+            robot.start_joint_jog.call_args.args[:3],
+            ("J6", unittest.mock.ANY, 360.0),
+        )
+
+    def test_joint_jog_rejects_step_over_90_degrees_for_other_joints(self):
+        robot = MagicMock()
+        service = RobotJogService(robot_service=robot)
+
+        service.joint_jog("JOG_JOINT", "J5", "Plus", 360.0)
+
+        robot.start_joint_jog.assert_not_called()
+
+    def test_joint_jog_rejects_step_over_360_degrees_for_j6(self):
+        robot = MagicMock()
+        service = RobotJogService(robot_service=robot)
+
+        service.joint_jog("JOG_JOINT", "J6", "Plus", 361.0)
+
+        robot.start_joint_jog.assert_not_called()
+
     def test_jog_moves_configured_tool_from_current_pose(self):
         robot = MagicMock()
         robot._robot = None

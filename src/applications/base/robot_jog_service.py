@@ -218,6 +218,18 @@ class RobotJogService:
             step_value = float(step)
         except (TypeError, ValueError):
             return
+        joint_name = str(joint).strip().upper()
+        if (
+            step_value <= 0.0
+            or step_value > 360.0
+            or (step_value > 90.0 and joint_name != "J6")
+        ):
+            _logger.warning(
+                "[JOINT_JOG] rejected unsafe step joint=%s step=%s",
+                joint,
+                step_value,
+            )
+            return
         try:
             if not self._lock.acquire(blocking=False):
                 return
@@ -225,7 +237,6 @@ class RobotJogService:
             starter = getattr(self._robot, "start_joint_jog", None)
             if not callable(starter):
                 _logger.warning("[JOINT_JOG] unsupported by robot service")
-                self._lock.release()
                 return
             result = starter(
                 joint,
@@ -242,11 +253,16 @@ class RobotJogService:
                 step_value,
                 result,
             )
-            self._lock.release()
         except Exception:
+            _logger.exception(
+                "[JOINT_JOG] failed joint=%s direction=%s step=%s",
+                joint,
+                direction,
+                step_value,
+            )
+        finally:
             if self._lock.locked():
                 self._lock.release()
-            pass
 
     def _try_start_servo_jog(
         self,

@@ -95,6 +95,11 @@ def handle_magazine_capture(ctx: PaintExecutionContext) -> PaintExecutionState:
         source="paint_magazine_load"
     )
     capture_elapsed = perf_counter() - capture_started
+    ctx.production_service._set_dashboard_live_view_paused(
+        True,
+        image=getattr(ctx.magazine_snapshot, "frame", None),
+        reason="magazine snapshot captured",
+    )
     contour_count = len(getattr(ctx.magazine_snapshot, "contours", None) or [])
     _logger.info("[MAGAZINE_LOAD] Captured magazine snapshot contours=%d", contour_count)
     _logger.info(
@@ -110,8 +115,9 @@ def handle_magazine_capture(ctx: PaintExecutionContext) -> PaintExecutionState:
 
     contour_started = perf_counter()
     if auto_discovery:
-        ctx.magazine_discovery_contours = _ordered_contours(
-            getattr(ctx.magazine_snapshot, "contours", None)
+        ctx.magazine_discovery_contours = _ordered_contours_nearest_to_calibration(
+            ctx,
+            getattr(ctx.magazine_snapshot, "contours", None),
         )
         ctx.magazine_discovery_empty_capture = not ctx.magazine_discovery_contours
         if ctx.magazine_discovery_contours:
@@ -155,3 +161,52 @@ def _ordered_contours(contours) -> list:
         ordered.append((center_y, center_x, contour))
     ordered.sort(key=lambda item: (item[0], item[1]))
     return [item[2] for item in ordered]
+
+
+def _ordered_contours_nearest_to_calibration(
+    ctx: PaintExecutionContext,
+    contours,
+) -> list:
+    """Order piles from the calibration-side exit inward in robot XY space."""
+    ordered = _ordered_contours(contours)
+    if not ordered:
+        return []
+
+    load_service = ctx.production_service._magazine_load_service
+    magazine_pose = load_service._navigation.get_group_position(ctx.magazine_group)
+    calibration_pose = load_service._navigation.get_group_position(ctx.calibration_group)
+    if magazine_pose is None or calibration_pose is None or len(calibration_pose) < 2:
+        raise RuntimeError(
+            "Cannot order magazine piles by calibration distance: movement group pose is unavailable"
+        )
+
+    ranked = []
+    for stable_index, contour in enumerate(ordered):
+        target = load_service._resolve_pickup_target(contour, magazine_pose)
+        if target is None:
+            raise RuntimeError(
+                "Cannot order magazine piles by calibration distance: pickup target resolution failed"
+            )
+        pickup_xy = target.get("pickup_xy")
+        if pickup_xy is None or len(pickup_xy) < 2:
+            raise RuntimeError(
+                "Cannot order magazine piles by calibration distance: pickup XY is unavailable"
+            )
+        distance_sq = (
+            (float(pickup_xy[0]) - float(calibration_pose[0])) ** 2
+            + (float(pickup_xy[1]) - float(calibration_pose[1])) ** 2
+        )
+        ranked.append((distance_sq, stable_index, contour, pickup_xy))
+
+    ranked.sort(key=lambda item: (item[0], item[1]))
+    _logger.info(
+        "[MAGAZINE_LOAD] Auto-discovery pile order nearest calibration first: %s",
+        [
+            {
+                "pickup_xy": [round(float(item[3][0]), 3), round(float(item[3][1]), 3)],
+                "distance_mm": round(float(item[0]) ** 0.5, 3),
+            }
+            for item in ranked
+        ],
+    )
+    return [item[2] for item in ranked]

@@ -18,6 +18,7 @@ from src.robot_systems.paint.processes.paint.magazine_load_result import (
 from src.robot_systems.paint.processes.paint.magazine_load_service import PaintMagazineLoadService
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_capture_handler import (
     _ordered_contours,
+    _ordered_contours_nearest_to_calibration,
     handle_magazine_capture,
 )
 from src.robot_systems.paint.processes.paint.execution_control import PaintExecutionControl
@@ -48,6 +49,23 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
             path_executor=MagicMock(),
         )
 
+    def test_magazine_capture_view_preserves_existing_brightness_lock(self):
+        vision = MagicMock()
+        service = PaintProductionService(
+            workpiece_preparation_service=MagicMock(),
+            capture_snapshot_service=MagicMock(),
+            path_preparation_service=MagicMock(),
+            path_executor=MagicMock(),
+            vision_service=vision,
+        )
+        service._brightness_locked = True
+
+        service._restore_magazine_capture_view("at magazine")
+
+        vision.resume_processing.assert_called_once_with()
+        vision.unlock_auto_brightness_adjustment.assert_not_called()
+        self.assertTrue(service._brightness_locked)
+
     def test_auto_discovery_orders_all_valid_centroids_top_to_bottom_then_left_to_right(self):
         lower = _square(4.0) + np.array([[[20.0, 30.0]]], dtype=np.float32)
         upper_right = _square(4.0) + np.array([[[40.0, 10.0]]], dtype=np.float32)
@@ -58,6 +76,79 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
         self.assertIs(ordered[0], upper_left)
         self.assertIs(ordered[1], upper_right)
         self.assertIs(ordered[2], lower)
+
+    def test_auto_discovery_orders_piles_nearest_calibration_first(self):
+        near = _square(4.0)
+        far = _square(4.0) + np.array([[[20.0, 0.0]]], dtype=np.float32)
+        load_service = MagicMock()
+        load_service._navigation.get_group_position.side_effect = lambda group: {
+            "Magazine": [0.0, 0.0, 120.0, 180.0, 0.0, 0.0],
+            "CALIBRATION": [0.0, 0.0, 120.0, 180.0, 0.0, 0.0],
+        }[group]
+        load_service._resolve_pickup_target.side_effect = lambda contour, _pose: {
+            "pickup_xy": (5.0, 0.0) if contour is near else (25.0, 0.0)
+        }
+        ctx = SimpleNamespace(
+            production_service=SimpleNamespace(_magazine_load_service=load_service),
+            magazine_group="Magazine",
+            calibration_group="CALIBRATION",
+        )
+
+        ordered = _ordered_contours_nearest_to_calibration(ctx, [far, near])
+
+        self.assertEqual(2, len(ordered))
+        self.assertIs(ordered[0], near)
+        self.assertIs(ordered[1], far)
+
+    def test_batch_nesting_captures_once_and_processes_each_cached_contour(self):
+        service = self._make_service()
+        service._magazine_load_service = MagicMock()
+        service._move_to_calibration_before_manual_cycle = MagicMock(
+            return_value=(True, "")
+        )
+        contours = [_square(2.0), _square(3.0)]
+        snapshot = VisionCaptureSnapshot(
+            frame="frame", contours=contours, source="paint_batch_staging"
+        )
+        service._capture_snapshot_service.capture_snapshot.return_value = snapshot
+        calls = []
+
+        def run_cycle(_stop, **kwargs):
+            calls.append(kwargs)
+            if kwargs.get("magazine_stage_only"):
+                context = SimpleNamespace(
+                    magazine_discovery_contours=[],
+                    magazine_discovery_active_contour=object(),
+                    magazine_snapshot=object(),
+                    magazine_discovery_empty_capture=len(calls) > 3,
+                    magazine_nesting_has_more=False,
+                )
+                service._last_execution_context = context
+                if len(calls) > 3:
+                    return False, NO_WORKPIECE_AT_MAGAZINE
+                return True, "staged"
+            service._last_execution_context = None
+            return True, "painted"
+
+        service._run_single_cycle = MagicMock(side_effect=run_cycle)
+        config = PaintMagazineLoadConfig(
+            enabled=True,
+            pickup_mode="auto_discovery_sensor_controlled_fast_lin",
+            processing_strategy="batch_nesting",
+        )
+
+        ok, message = service._run_magazine_batch_loop(
+            config, PaintProcessConfig(magazine_load=config), lambda: False
+        )
+
+        self.assertTrue(ok, message)
+        cached = [call for call in calls if call.get("cached_workpiece_contour") is not None]
+        self.assertEqual(2, len(cached))
+        self.assertTrue(cached[0]["repeats_after_success"])
+        self.assertFalse(cached[1]["repeats_after_success"])
+        service._capture_snapshot_service.capture_snapshot.assert_called_once_with(
+            source="paint_batch_staging"
+        )
 
     def test_auto_discovery_reuses_frozen_contours_without_recapturing(self):
         capture = MagicMock()
@@ -953,6 +1044,130 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
         self.assertIs(calls[3].kwargs["magazine_discovery_active_contour"], pile_two)
         self.assertIsNone(calls[4].kwargs["magazine_discovery_active_contour"])
 
+    def test_auto_discovery_recaptures_after_active_pile_is_empty_when_enabled(self):
+        config = PaintMagazineLoadConfig(
+            enabled=True,
+            pickup_mode="auto_discovery_sensor_controlled_fast_lin",
+            magazine_group_id="Magazine",
+            recapture_after_pile_done=True,
+        )
+        service = self._make_service()
+        active_pile = _square(4.0)
+        stale_cached_pile = _square(4.0) + np.array(
+            [[[20.0, 0.0]]], dtype=np.float32
+        )
+        outcomes = iter(
+            [
+                (True, "painted"),
+                (False, NO_WORKPIECE_AT_MAGAZINE),
+                (False, NO_WORKPIECE_AT_MAGAZINE),
+            ]
+        )
+        contexts = iter(
+            [
+                SimpleNamespace(
+                    magazine_config=config,
+                    magazine_discovery_contours=[stale_cached_pile],
+                    magazine_discovery_active_contour=active_pile,
+                    magazine_discovery_empty_capture=False,
+                    magazine_snapshot="initial capture",
+                ),
+                SimpleNamespace(
+                    magazine_config=config,
+                    magazine_discovery_contours=[stale_cached_pile],
+                    magazine_discovery_active_contour=active_pile,
+                    magazine_discovery_empty_capture=False,
+                    magazine_snapshot="initial capture",
+                ),
+                SimpleNamespace(
+                    magazine_config=config,
+                    magazine_discovery_contours=[],
+                    magazine_discovery_active_contour=None,
+                    magazine_discovery_empty_capture=True,
+                    magazine_snapshot="fresh empty capture",
+                ),
+            ]
+        )
+
+        def run_cycle(*_args, **_kwargs):
+            service._last_execution_context = next(contexts)
+            return next(outcomes)
+
+        service._run_single_cycle = MagicMock(side_effect=run_cycle)
+
+        ok, msg = service._run_magazine_loop(
+            config,
+            PaintProcessConfig(magazine_load=config),
+            lambda: False,
+        )
+
+        self.assertTrue(ok)
+        self.assertEqual("Magazine is empty", msg)
+        recapture_call = service._run_single_cycle.call_args_list[2]
+        self.assertEqual([], recapture_call.kwargs["magazine_discovery_contours"])
+        self.assertIsNone(
+            recapture_call.kwargs["magazine_discovery_active_contour"]
+        )
+        self.assertIsNone(recapture_call.kwargs["magazine_discovery_snapshot"])
+
+    def test_auto_discovery_recaptures_after_every_successful_cycle_when_enabled(self):
+        config = PaintMagazineLoadConfig(
+            enabled=True,
+            pickup_mode="auto_discovery_sensor_controlled_fast_lin",
+            magazine_group_id="Magazine",
+            recapture_every_cycle=True,
+        )
+        service = self._make_service()
+        service._prepositioned_start_group = "Magazine"
+        active_pile = _square(4.0)
+        cached_pile = _square(4.0) + np.array([[[20.0, 0.0]]], dtype=np.float32)
+        outcomes = iter(
+            [
+                (True, "painted"),
+                (False, NO_WORKPIECE_AT_MAGAZINE),
+            ]
+        )
+        contexts = iter(
+            [
+                SimpleNamespace(
+                    magazine_config=config,
+                    magazine_discovery_contours=[cached_pile],
+                    magazine_discovery_active_contour=active_pile,
+                    magazine_discovery_empty_capture=False,
+                    magazine_snapshot="initial capture",
+                ),
+                SimpleNamespace(
+                    magazine_config=config,
+                    magazine_discovery_contours=[],
+                    magazine_discovery_active_contour=None,
+                    magazine_discovery_empty_capture=True,
+                    magazine_snapshot="fresh empty capture",
+                ),
+            ]
+        )
+
+        def run_cycle(*_args, **_kwargs):
+            service._last_execution_context = next(contexts)
+            return next(outcomes)
+
+        service._run_single_cycle = MagicMock(side_effect=run_cycle)
+
+        ok, msg = service._run_magazine_loop(
+            config,
+            PaintProcessConfig(magazine_load=config),
+            lambda: False,
+        )
+
+        self.assertTrue(ok)
+        self.assertEqual("Magazine is empty", msg)
+        recapture_call = service._run_single_cycle.call_args_list[1]
+        self.assertEqual([], recapture_call.kwargs["magazine_discovery_contours"])
+        self.assertIsNone(
+            recapture_call.kwargs["magazine_discovery_active_contour"]
+        )
+        self.assertIsNone(recapture_call.kwargs["magazine_discovery_snapshot"])
+        self.assertEqual("Magazine", service._prepositioned_start_group)
+
     def test_auto_discovery_prepositions_to_magazine_group_between_pickups(self):
         service = self._make_service()
         magazine_pose = [-100.0, -65.0, 200.0, -180.0, 0.0, 0.0]
@@ -981,6 +1196,36 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
 
         self.assertIsNotNone(target)
         self.assertEqual("Magazine", target["group_id"])
+        self.assertEqual(magazine_pose, target["position"])
+
+    def test_auto_discovery_dropoff_preposition_remains_fixed_magazine_pose(self):
+        service = self._make_service()
+        pile = _square(4.0)
+        approach = [25.0, -30.0, 120.0, 180.0, 0.0, 5.0]
+        magazine_pose = [2.0, -232.0, 150.0, 180.0, 0.0, 0.0]
+        service._magazine_load_service = SimpleNamespace(
+            _navigation=SimpleNamespace(get_group_position=lambda _group: list(magazine_pose)),
+            _resolve_auto_discovery_approach_pose=lambda contour, group, config: (
+                list(approach) if contour is pile else None
+            ),
+        )
+        config = PaintMagazineLoadConfig(
+            enabled=True,
+            pickup_mode="auto_discovery_sensor_controlled_fast_lin",
+            magazine_group_id="Magazine",
+        )
+        context = SimpleNamespace(
+            repeats_after_success=True,
+            magazine_config=config,
+            magazine_group="Magazine",
+            magazine_fixed_pickup_pose=None,
+            magazine_discovery_active_contour=pile,
+            magazine_discovery_contours=[],
+            process_config=PaintProcessConfig(magazine_load=config),
+        )
+
+        target = service._next_cycle_start_target(context)
+
         self.assertEqual(magazine_pose, target["position"])
 
     def test_run_once_aborts_when_magazine_load_fails(self):

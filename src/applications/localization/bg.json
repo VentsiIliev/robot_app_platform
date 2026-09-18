@@ -34,6 +34,11 @@
     "Logout": "Изход",
     "Not logged in": "Не сте влезли"
   },
+  "ModbusSettingsView": {
+    "Set Low Latency": "Задай ниска латентност",
+    "Low latency enabled — {count} port(s)": "Ниската латентност е активирана — {count} порт(а)",
+    "Low latency update failed": "Неуспешно задаване на ниска латентност"
+  },
   "RobotJogWidget": {
     "Cartesian": "Декартово",
     "Joint": "Стави",
@@ -44,6 +49,7 @@
     "Rotation Step": "Стъпка на въртене",
     "Rotation Speed": "Скорост на въртене",
     "Joint Step": "Стъпка на става",
+    "J6 Full Turn": "Пълен оборот J6",
     "Linear": "Линейно движение",
     "Rotational": "Въртеливо движение",
     "Joints": "Стави",

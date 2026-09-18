@@ -15,7 +15,11 @@ def handle_prepare_workpiece(ctx: PaintExecutionContext) -> PaintExecutionState:
         ctx.set_result(False, "Paint capture is not available")
         return PaintExecutionState.ERROR
 
-    ctx.contour = pick_largest_contour(ctx.snapshot.contours)
+    ctx.contour = (
+        ctx.cached_workpiece_contour
+        if ctx.cached_workpiece_contour is not None
+        else pick_largest_contour(ctx.snapshot.contours)
+    )
     if ctx.contour is None:
         ctx.set_result(False, "No usable contour detected")
         return PaintExecutionState.ERROR

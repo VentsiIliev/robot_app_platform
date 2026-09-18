@@ -17,6 +17,7 @@ _LINEAR_STEPS:   list[float] = [0.1,0.2, 0.5, 1.0, 5.0, 10.0, 50.0,100,250]
 _LINEAR_SERVO_SPEEDS: list[float] = [0.1, 0.2, 0.5, 1.0, 5.0, 10.0, 50.0, 100, 200]
 _ROTATION_STEPS: list[float] = [0.1,0.2, 0.5, 1.0, 5.0, 10.0, 45.0, 90.0,180,360]
 _JOINT_STEPS:    list[float] = [0.1, 0.5, 1.0, 5.0, 10.0, 45.0, 90.0]
+_J6_FULL_TURN_STEP = 360.0
 _LINEAR_AXES  = {"X", "Y", "Z"}
 _JOG_INTERVAL_MS = 100
 
@@ -570,6 +571,26 @@ class RobotJogWidget(QFrame):
             grid.addWidget(plus_btn,  row, 2)
 
         outer.addLayout(grid)
+
+        full_turn_row = QHBoxLayout()
+        full_turn_row.setSpacing(10)
+        full_turn_row.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._j6_full_turn_label = QLabel()
+        self._j6_full_turn_label.setStyleSheet(
+            f"font-size: 11px; font-weight: 700; color: {TEXT_COLOR};"
+        )
+        self._j6_full_turn_minus_btn = self._make_jog_btn("J6 −360°", primary=True)
+        self._j6_full_turn_plus_btn = self._make_jog_btn("J6 +360°", primary=True)
+        self._j6_full_turn_minus_btn.setFixedSize(100, 44)
+        self._j6_full_turn_plus_btn.setFixedSize(100, 44)
+        self._j6_full_turn_minus_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._j6_full_turn_plus_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._j6_full_turn_minus_btn.clicked.connect(self._on_j6_full_turn_minus)
+        self._j6_full_turn_plus_btn.clicked.connect(self._on_j6_full_turn_plus)
+        full_turn_row.addWidget(self._j6_full_turn_label)
+        full_turn_row.addWidget(self._j6_full_turn_minus_btn)
+        full_turn_row.addWidget(self._j6_full_turn_plus_btn)
+        outer.addLayout(full_turn_row)
         return outer
 
     def _build_bottom_row(self) -> QVBoxLayout:
@@ -830,12 +851,19 @@ class RobotJogWidget(QFrame):
         step = _JOINT_STEPS[self._joint_slider.value()]
         self.joint_jog_requested.emit("JOG_JOINT", joint, direction, step)
 
+    def _on_j6_full_turn_minus(self) -> None:
+        self.joint_jog_requested.emit("JOG_JOINT", "J6", "Minus", _J6_FULL_TURN_STEP)
+
+    def _on_j6_full_turn_plus(self) -> None:
+        self.joint_jog_requested.emit("JOG_JOINT", "J6", "Plus", _J6_FULL_TURN_STEP)
+
     def retranslateUi(self) -> None:
         self._tabs.setTabText(0, self._t("Cartesian"))
         self._tabs.setTabText(1, self._t("Joint"))
         self._position_title_label.setText(self._t("Current Position"))
         self._joint_positions_title_label.setText(self._t("Joint Positions"))
         self._joint_step_title_label.setText(f"{self._t('Joint Step')}:")
+        self._j6_full_turn_label.setText(self._t("J6 Full Turn"))
         self._linear_section_label.setText(self._t("Linear"))
         self._rotational_section_label.setText(self._t("Rotational"))
         self._joints_section_label.setText(self._t("Joints"))

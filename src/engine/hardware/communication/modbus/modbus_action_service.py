@@ -1,6 +1,7 @@
 import logging
 import os
 import subprocess
+from pathlib import Path
 from typing import List
 
 from src.engine.hardware.communication.modbus.i_modbus_action_service import IModbusActionService
@@ -80,6 +81,50 @@ class ModbusActionService(IModbusActionService):
         except Exception as exc:
             self._logger.warning("Failed to grant serial port permissions: %s", exc)
             return []
+
+    def set_serial_port_low_latency(self) -> List[str]:
+        targets = self._serial_latency_targets()
+        if not targets:
+            raise RuntimeError("No USB serial ports with a latency timer were found")
+
+        sysfs_paths = [str(path) for _, path in targets]
+        command = ["tee", *sysfs_paths]
+        if hasattr(os, "geteuid") and os.geteuid() != 0:
+            command.insert(0, "pkexec")
+
+        self._logger.info(
+            "Setting USB serial latency_timer=1 for: %s",
+            [port for port, _ in targets],
+        )
+        try:
+            subprocess.run(
+                command,
+                input="1\n",
+                text=True,
+                stdout=subprocess.DEVNULL,
+                check=True,
+                timeout=60,
+            )
+        except Exception as exc:
+            raise RuntimeError(f"Failed to set USB serial latency: {exc}") from exc
+
+        failed = [
+            port
+            for port, path in targets
+            if path.read_text(encoding="ascii").strip() != "1"
+        ]
+        if failed:
+            raise RuntimeError(f"USB serial latency verification failed for: {failed}")
+        return [port for port, _ in targets]
+
+    def _serial_latency_targets(self) -> List[tuple[str, Path]]:
+        targets: List[tuple[str, Path]] = []
+        for port in self._serial_permission_targets():
+            device_name = Path(port).name
+            latency_path = Path("/sys/class/tty") / device_name / "device/latency_timer"
+            if latency_path.is_file():
+                targets.append((port, latency_path))
+        return targets
 
     def _serial_permission_targets(self) -> List[str]:
         if os.name != "posix":

@@ -46,6 +46,7 @@ class CameraSettingsMapper:
             erode_enabled           = pre.get("Erode enabled",             True),
             erode_kernel_size       = pre.get("Erode kernel size",         3),
             erode_iterations        = pre.get("Erode iterations",          4),
+            hardware_auto_exposure  = bri.get("Hardware auto exposure",   False),
             brightness_auto         = bri.get("Enable auto adjust",        True),
             brightness_kp           = bri.get("Kp",                        0.0),
             brightness_ki           = bri.get("Ki",                        0.2),
@@ -60,6 +61,7 @@ class CameraSettingsMapper:
     @staticmethod
     def to_json(data: CameraSettingsData) -> dict:
         bri: dict = {
+            "Hardware auto exposure": data.hardware_auto_exposure,
             "Enable auto adjust": data.brightness_auto,
             "Kp":                 data.brightness_kp,
             "Ki":                 data.brightness_ki,

@@ -6,16 +6,21 @@ from PyQt6.QtWidgets import (
     QTableWidget, QTableWidgetItem, QHeaderView,
     QGroupBox, QWidget, QSplitter,
 )
+from PyQt6.QtCore import QEvent
 from pl_gui.utils.utils_widgets.table_helpers import make_table
+from pl_gui.settings.settings_view.styles import (
+    ACTION_BTN_STYLE, BG_COLOR, BORDER, GHOST_BTN_STYLE, GROUP_STYLE,
+    PRIMARY, PRIMARY_DARK, SAVE_BUTTON_STYLE, TEXT_COLOR,
+)
 from src.applications.base.i_application_view import IApplicationView
 
 _logger = logging.getLogger(__name__)
-_ACCENT = "#905BA9"
-_HOV    = "#7A4D92"
-_BG     = "#ffffff"
-_TEXT   = "#111111"
-_MUTED  = "#666666"
-_BORDER = "#cccccc"
+_ACCENT = PRIMARY
+_HOV = PRIMARY_DARK
+_BG = BG_COLOR
+_TEXT = TEXT_COLOR
+_MUTED = TEXT_COLOR
+_BORDER = BORDER
 
 _BTN = f"""
     QPushButton {{
@@ -43,6 +48,8 @@ _TABLE = f"""
 
 class ToolSettingsView(IApplicationView):
 
+    SHOW_JOG_WIDGET = True
+
 
 
     add_tool_requested    = pyqtSignal()
@@ -53,6 +60,12 @@ class ToolSettingsView(IApplicationView):
     edit_slot_requested   = pyqtSignal(int, object)  # slot_id, current_tool_id (int or None)
     remove_slot_requested = pyqtSignal(int)         # slot_id
     save_slots_requested  = pyqtSignal(list)        # list of (slot_id, tool_id) tuples
+    edit_geometry_requested = pyqtSignal(int)
+    activate_tool_requested = pyqtSignal(int)
+    capture_reference_requested = pyqtSignal()
+    capture_candidate_requested = pyqtSignal()
+    solve_calibration_requested = pyqtSignal(int)
+    edit_sequences_requested = pyqtSignal(int)
 
 
     def __init__(self, parent=None):
@@ -64,7 +77,7 @@ class ToolSettingsView(IApplicationView):
         root.setContentsMargins(16, 16, 16, 16)
         root.setSpacing(12)
 
-        title = QLabel("Tool Changer Configuration")
+        title = QLabel("Tools & Magazine")
         title.setStyleSheet(f"font-size: 18px; font-weight: bold; color: {_TEXT};")
         root.addWidget(title)
 
@@ -74,9 +87,29 @@ class ToolSettingsView(IApplicationView):
         splitter.setSizes([500, 500])
         root.addWidget(splitter, stretch=1)
 
+        calibration = QGroupBox("Guided TCP Calibration")
+        calibration.setStyleSheet(GROUP_STYLE)
+        calibration_layout = QHBoxLayout(calibration)
+        self._btn_capture_reference = QPushButton("1. Capture Reference Contact")
+        self._btn_capture_candidate = QPushButton("2. Capture Tool Contact")
+        self._btn_solve = QPushButton("3. Solve Selected Tool")
+        self._btn_activate = QPushButton("Activate Selected Tool")
+        for button in (self._btn_capture_reference, self._btn_capture_candidate, self._btn_solve):
+            button.setStyleSheet(GHOST_BTN_STYLE)
+            button.setCursor(Qt.CursorShape.PointingHandCursor)
+            calibration_layout.addWidget(button)
+        self._btn_activate.setStyleSheet(ACTION_BTN_STYLE)
+        self._btn_activate.setCursor(Qt.CursorShape.PointingHandCursor)
+        calibration_layout.addWidget(self._btn_activate)
+        self._btn_capture_reference.clicked.connect(self.capture_reference_requested.emit)
+        self._btn_capture_candidate.clicked.connect(self.capture_candidate_requested.emit)
+        self._btn_solve.clicked.connect(self._on_solve)
+        self._btn_activate.clicked.connect(self._on_activate)
+        root.addWidget(calibration)
+
         # Save button spans full width below both panels
         self._btn_save_slots = QPushButton(qta.icon("fa5s.save", color="white"), "  Save All Changes")
-        self._btn_save_slots.setStyleSheet(_BTN)
+        self._btn_save_slots.setStyleSheet(SAVE_BUTTON_STYLE)
         self._btn_save_slots.setMinimumHeight(44)
         self._btn_save_slots.clicked.connect(self._on_save_slots)
         root.addWidget(self._btn_save_slots)
@@ -90,7 +123,7 @@ class ToolSettingsView(IApplicationView):
         box.setStyleSheet(f"QGroupBox {{ font-weight: bold; color: {_TEXT}; }}")
         layout = QVBoxLayout(box)
 
-        self._tools_table = make_table(["ID", "Name"])
+        self._tools_table = make_table(["ID", "Name", "X", "Y", "Z", "Collision"])
         self._tools_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         layout.addWidget(self._tools_table)
 
@@ -98,17 +131,21 @@ class ToolSettingsView(IApplicationView):
         self._btn_add_tool    = QPushButton(qta.icon("fa5s.plus",   color="white"), "  Add")
         self._btn_edit_tool   = QPushButton(qta.icon("fa5s.pen",    color="white"), "  Edit")
         self._btn_remove_tool = QPushButton(qta.icon("fa5s.trash",  color="white"), "  Remove")
-        for b in (self._btn_add_tool, self._btn_edit_tool, self._btn_remove_tool):
-            b.setStyleSheet(_BTN)
+        self._btn_geometry = QPushButton(qta.icon("fa5s.crosshairs", color="white"), "  Offsets")
+        for b in (self._btn_add_tool, self._btn_edit_tool, self._btn_geometry, self._btn_remove_tool):
+            b.setStyleSheet(ACTION_BTN_STYLE)
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
             btn_row.addWidget(b)
         layout.addLayout(btn_row)
 
         self._btn_add_tool.clicked.connect(self.add_tool_requested.emit)
         self._btn_edit_tool.clicked.connect(self._on_edit_tool)
         self._btn_remove_tool.clicked.connect(self._on_remove_tool)
+        self._btn_geometry.clicked.connect(self._on_edit_geometry)
         self._tools_table.itemSelectionChanged.connect(self._on_tool_selection)
         self._btn_edit_tool.setEnabled(False)
         self._btn_remove_tool.setEnabled(False)
+        self._btn_geometry.setEnabled(False)
 
         return box
 
@@ -127,16 +164,20 @@ class ToolSettingsView(IApplicationView):
         self._btn_add_slot = QPushButton(qta.icon("fa5s.plus", color="white"), "  Add Slot")
         self._btn_edit_slot = QPushButton(qta.icon("fa5s.pen", color="white"), "  Edit Slot")
         self._btn_remove_slot = QPushButton(qta.icon("fa5s.trash", color="white"), "  Remove Slot")
-        for b in (self._btn_add_slot, self._btn_edit_slot, self._btn_remove_slot):
-            b.setStyleSheet(_BTN)
+        self._btn_sequences = QPushButton(qta.icon("fa5s.route", color="white"), "  Teach Sequences")
+        for b in (self._btn_add_slot, self._btn_edit_slot, self._btn_sequences, self._btn_remove_slot):
+            b.setStyleSheet(ACTION_BTN_STYLE)
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
             btn_row.addWidget(b)
         layout.addLayout(btn_row)
 
         self._btn_add_slot.clicked.connect(self.add_slot_requested.emit)
         self._btn_edit_slot.clicked.connect(self._on_edit_slot)
         self._btn_remove_slot.clicked.connect(self._on_remove_slot)
+        self._btn_sequences.clicked.connect(self._on_edit_sequences)
         self._btn_edit_slot.setEnabled(False)
         self._btn_remove_slot.setEnabled(False)
+        self._btn_sequences.setEnabled(False)
 
         return box
 
@@ -149,6 +190,10 @@ class ToolSettingsView(IApplicationView):
             self._tools_table.insertRow(row)
             self._tools_table.setItem(row, 0, QTableWidgetItem(str(t.id)))
             self._tools_table.setItem(row, 1, QTableWidgetItem(t.name))
+            transform = list(getattr(t, "relative_transform", [0, 0, 0, 0, 0, 0]))
+            for column, value in enumerate(transform[:3], start=2):
+                self._tools_table.setItem(row, column, QTableWidgetItem(f"{float(value):.3f}"))
+            self._tools_table.setItem(row, 5, QTableWidgetItem(str(getattr(t, "collision_profile", ""))))
 
     def set_slots(self, slots, tools) -> None:
         from PyQt6.QtWidgets import QComboBox
@@ -185,6 +230,7 @@ class ToolSettingsView(IApplicationView):
         has = bool(self._tools_table.selectedItems())
         self._btn_edit_tool.setEnabled(has)
         self._btn_remove_tool.setEnabled(has)
+        self._btn_geometry.setEnabled(has)
 
     def _on_edit_tool(self) -> None:
         tid, name = self.selected_tool()
@@ -195,6 +241,21 @@ class ToolSettingsView(IApplicationView):
         tid, _ = self.selected_tool()
         if tid is not None:
             self.remove_tool_requested.emit(tid)
+
+    def _on_edit_geometry(self) -> None:
+        tool_id, _ = self.selected_tool()
+        if tool_id is not None:
+            self.edit_geometry_requested.emit(tool_id)
+
+    def _on_activate(self) -> None:
+        tool_id, _ = self.selected_tool()
+        if tool_id is not None:
+            self.activate_tool_requested.emit(tool_id)
+
+    def _on_solve(self) -> None:
+        tool_id, _ = self.selected_tool()
+        if tool_id is not None:
+            self.solve_calibration_requested.emit(tool_id)
 
     def _on_save_slot(self) -> None:
         from PyQt6.QtWidgets import QComboBox
@@ -230,16 +291,22 @@ class ToolSettingsView(IApplicationView):
         has = bool(self._slots_table.selectedItems())
         self._btn_edit_slot.setEnabled(has)
         self._btn_remove_slot.setEnabled(has)
+        self._btn_sequences.setEnabled(has)
 
     def _on_edit_slot(self) -> None:
         sid, tid = self.selected_slot()
-        if sid is not None and tid is not None:
+        if sid is not None:
             self.edit_slot_requested.emit(sid, tid)
 
     def _on_remove_slot(self) -> None:
         sid = self.selected_slot_id()
         if sid is not None:
             self.remove_slot_requested.emit(sid)
+
+    def _on_edit_sequences(self) -> None:
+        slot_id = self.selected_slot_id()
+        if slot_id is not None:
+            self.edit_sequences_requested.emit(slot_id)
 
     def _on_save_slots(self) -> None:
         from PyQt6.QtWidgets import QComboBox
@@ -254,3 +321,8 @@ class ToolSettingsView(IApplicationView):
 
     def clean_up(self) -> None:
         pass
+
+    def changeEvent(self, event) -> None:
+        if event.type() == QEvent.Type.LanguageChange:
+            self.setWindowTitle(self.tr("Tools & Magazine"))
+        super().changeEvent(event)

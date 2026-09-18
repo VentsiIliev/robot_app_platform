@@ -554,6 +554,29 @@ class TestPaintDashboardUi(unittest.TestCase):
         self.assertTrue(view._message_panel.isHidden())
         self.assertIsNotNone(view._message_rail_button)
 
+    def test_tray_layout_can_offer_camera_as_optional_tab(self) -> None:
+        view = PaintDashboardView(
+            config=PaintDashboardConfig(),
+            action_buttons=PAINT_DASHBOARD_ACTIONS,
+            cards=[],
+            auxiliary_toggles=[],
+            ui_config=PaintDashboardUiConfig(
+                show_camera_preview=False,
+                show_tray_camera_tab=True,
+                use_collapsible_settings_panel=True,
+            ),
+        )
+
+        self.assertIsNotNone(view._expanded_tabs)
+        self.assertEqual(2, view._expanded_tabs.count())
+        self.assertIs(view._expanded_tabs.widget(0), view._plate_layout)
+        self.assertIs(
+            view._expanded_tabs.widget(1),
+            view._dashboard.trajectory_widget,
+        )
+        self.assertEqual("Tray", view._expanded_tabs.tabToolTip(0))
+        self.assertEqual("Camera", view._expanded_tabs.tabToolTip(1))
+
     def test_camera_disabled_moves_status_cards_to_exclusive_compact_rail(self) -> None:
         view = PaintDashboardView(
             config=PaintDashboardConfig(),

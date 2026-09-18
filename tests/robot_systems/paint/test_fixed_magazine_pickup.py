@@ -37,9 +37,34 @@ from src.robot_systems.paint.applications.paint_process_settings.mapper import (
 
 
 class TestFixedMagazinePickup(unittest.TestCase):
-    def test_cached_auto_discovery_moves_to_magazine_before_skipping_camera_wait(self):
+    def test_verified_prepositioned_auto_discovery_recaptures_without_duplicate_move(self):
         load_service = MagicMock()
-        load_service._move_to_group_with_pause_resume_recovery.return_value = True
+        service = MagicMock()
+        service._magazine_load_service = load_service
+        service._consume_verified_prepositioned_start_group.return_value = True
+        config = PaintMagazineLoadConfig(
+            enabled=True,
+            pickup_mode=MAGAZINE_PICKUP_MODE_AUTO_DISCOVERY_SENSOR_CONTROLLED_FAST_LIN,
+            magazine_group_id="Magazine",
+            recapture_every_cycle=True,
+        )
+        ctx = self._context(service, config)
+
+        next_state = handle_magazine_move_to_magazine(ctx)
+
+        self.assertEqual(PaintExecutionState.MAGAZINE_WAIT_CAMERA_SETTLE, next_state)
+        load_service._move_to_group_with_pause_resume_recovery.assert_not_called()
+        load_service._move_to_pose_with_pause_resume_recovery.assert_not_called()
+        load_service._mark_magazine_capture_area_active.assert_called_once_with()
+        service._restore_magazine_capture_view.assert_called_once_with(
+            "after verifying prepositioned magazine pickup"
+        )
+
+    def test_cached_auto_discovery_moves_to_known_pile_approach_before_skipping_camera_wait(self):
+        load_service = MagicMock()
+        approach_pose = [25.0, -30.0, 120.0, 180.0, 0.0, 5.0]
+        load_service._resolve_auto_discovery_approach_pose.return_value = approach_pose
+        load_service._move_to_pose_with_pause_resume_recovery.return_value = True
         service = MagicMock()
         service._magazine_load_service = load_service
         service._consume_verified_prepositioned_start_group.return_value = False
@@ -60,11 +85,12 @@ class TestFixedMagazinePickup(unittest.TestCase):
                 PaintExecutionState.MAGAZINE_MOVE_TO_MAGAZINE
             ],
         )
-        load_service._move_to_group_with_pause_resume_recovery.assert_called_once()
+        load_service._move_to_pose_with_pause_resume_recovery.assert_called_once()
         self.assertEqual(
-            "Magazine",
-            load_service._move_to_group_with_pause_resume_recovery.call_args.args[2],
+            approach_pose,
+            load_service._move_to_pose_with_pause_resume_recovery.call_args.args[2],
         )
+        load_service._move_to_group_with_pause_resume_recovery.assert_not_called()
         load_service._mark_magazine_capture_area_active.assert_called_once_with()
         service._restore_capture_view.assert_not_called()
 
@@ -283,6 +309,11 @@ class TestFixedMagazinePickup(unittest.TestCase):
         load_service._wait.assert_called_once_with(0.3, ctx.motion_cancel_requested)
         service._capture_snapshot_service.capture_snapshot.assert_called_once_with(
             source="paint_magazine_load"
+        )
+        service._set_dashboard_live_view_paused.assert_called_once_with(
+            True,
+            image=service._capture_snapshot_service.capture_snapshot.return_value.frame,
+            reason="magazine snapshot captured",
         )
 
     def test_verified_prepositioned_fixed_group_skips_duplicate_move(self):

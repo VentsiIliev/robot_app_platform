@@ -14,6 +14,7 @@ from src.engine.robot.targeting.vision_pose_request import VisionPoseRequest
 from src.robot_systems.paint.processes.paint.config import PaintMagazineLoadConfig
 from src.robot_systems.paint.processes.paint.magazine_load.context import MagazineLoadContext
 from src.robot_systems.paint.processes.paint.magazine_load.machine_factory import MagazineLoadMachineFactory
+from src.robot_systems.paint.processes.paint.work_area_nesting import WorkAreaNestingService
 
 _logger = logging.getLogger(__name__)
 
@@ -50,6 +51,16 @@ class PaintMagazineLoadService:
         self._control_lock = threading.Lock()
         self._active_context: MagazineLoadContext | None = None
         self._machine_factory = MagazineLoadMachineFactory()
+        self._work_area_nesting = WorkAreaNestingService()
+
+    def clear_work_area_nesting(self) -> None:
+        self._work_area_nesting.clear()
+
+    def commit_work_area_nesting(self) -> None:
+        self._work_area_nesting.commit()
+
+    def cancel_work_area_nesting(self) -> None:
+        self._work_area_nesting.cancel()
 
     def load_to_calibration(
         self,
@@ -103,6 +114,33 @@ class PaintMagazineLoadService:
         with self._control_lock:
             context = self._active_context
         return context.snapshot_dict() if context is not None else {}
+
+    def _resolve_auto_discovery_approach_pose(
+        self,
+        contour,
+        magazine_group: str,
+        config: PaintMagazineLoadConfig,
+    ) -> list[float] | None:
+        """Resolve the safe vertical approach pose for an already-captured pile."""
+        if contour is None:
+            return None
+        magazine_pose = self._navigation.get_group_position(magazine_group)
+        if magazine_pose is None or len(magazine_pose) < 6:
+            return None
+        target = self._resolve_pickup_target(contour, magazine_pose)
+        if target is None:
+            return None
+        pickup_xy = target.get("pickup_xy")
+        if pickup_xy is None or len(pickup_xy) < 2:
+            return None
+        return [
+            float(pickup_xy[0]),
+            float(pickup_xy[1]),
+            float(config.full_retract_z_mm),
+            float(magazine_pose[3]),
+            float(magazine_pose[4]),
+            float(target["pickup_rz"]),
+        ]
 
     def _move_to_group_with_pause_resume_recovery(
         self,
@@ -241,6 +279,68 @@ class PaintMagazineLoadService:
             monotonic() - started,
         )
         return release_pose
+
+    def _resolve_nested_work_area_release_pose(
+        self,
+        *,
+        base_pose: list[float],
+        frame,
+        release_z_mm: float,
+        robot_contour_xy,
+        margin_mm: float,
+        padding_mm: float,
+    ) -> tuple[list[float] | None, bool, str]:
+        image_size = self._release_image_size(frame)
+        points = (
+            self._work_area_service.get_work_area(self._release_work_area_id)
+            if self._work_area_service is not None
+            else None
+        )
+        resolver = self._resolver()
+        if image_size is None or points is None or len(points) == 0 or resolver is None or len(base_pose) < 6:
+            return None, False, "Batch nesting could not resolve the paint work area"
+        width_px, height_px = image_size
+        target_point = resolver.registry.by_name(self._target_point_name)
+        boundary_xy = []
+        for normalized_x, normalized_y in points:
+            result = resolver.resolve(
+                VisionPoseRequest(
+                    x_pixels=float(normalized_x) * float(width_px),
+                    y_pixels=float(normalized_y) * float(height_px),
+                    z_mm=float(release_z_mm),
+                    rx_degrees=float(base_pose[3]),
+                    ry_degrees=float(base_pose[4]),
+                    rz_degrees=float(base_pose[5]),
+                ),
+                target_point,
+                frame=self._release_frame_name,
+            )
+            boundary_xy.append((float(result.final_xy[0]), float(result.final_xy[1])))
+        contour = np.asarray(robot_contour_xy, dtype=np.float64).reshape(-1, 2)
+        if len(contour) < 3:
+            return None, False, "Batch nesting could not determine the workpiece footprint"
+        (_center, dimensions, _angle) = cv2.minAreaRect(contour.astype(np.float32))
+        # A square based on the longest side is conservative for every release
+        # orientation and prevents rotated workpieces from violating padding.
+        footprint = max(float(dimensions[0]), float(dimensions[1]))
+        reservation, message = self._work_area_nesting.reserve(
+            boundary_xy,
+            width_mm=footprint,
+            height_mm=footprint,
+            margin_mm=float(margin_mm),
+            padding_mm=float(padding_mm),
+        )
+        if reservation is None:
+            return None, False, message
+        release_pose = list(base_pose[:6])
+        release_pose[0], release_pose[1] = reservation.center_xy
+        release_pose[2] = float(release_z_mm)
+        _logger.info(
+            "[BATCH_NESTING] reserved release_xy=(%.3f, %.3f) footprint_mm=%.3f has_more=%s",
+            release_pose[0], release_pose[1], footprint,
+            reservation.has_space_for_same_footprint,
+        )
+        return release_pose, reservation.has_space_for_same_footprint, ""
 
     def _release_work_area_center_px(self, frame) -> tuple[float, float] | None:
         started = monotonic()
@@ -442,6 +542,7 @@ class PaintMagazineLoadService:
         return {
             "pickup_xy": (float(center_result.final_xy[0]), float(center_result.final_xy[1])),
             "pickup_rz": float(pickup_rz),
+            "robot_contour_xy": robot_contour_xy,
         }
 
     def _resolver(self):

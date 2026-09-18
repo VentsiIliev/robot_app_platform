@@ -70,6 +70,7 @@ PREPROCESSING_GROUP = SettingGroup("Preprocessing", [
 ])
 
 BRIGHTNESS_GROUP = SettingGroup("Brightness Control", [
+    SettingField("hardware_auto_exposure", "Hardware Auto Exposure", "toggle", default=False),
     SettingField("brightness_auto",   "Auto Adjust",      "toggle",  default=True),
     SettingField("brightness_kp",     "Kp",               "double_spinbox",
                  default=0.0,  min_val=0.0, max_val=10.0, step=0.001, decimals=3,

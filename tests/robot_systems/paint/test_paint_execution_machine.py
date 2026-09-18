@@ -1,6 +1,6 @@
 import unittest
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 
@@ -20,7 +20,45 @@ from src.robot_systems.paint.processes.paint.execution_machine.handlers.common.m
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handlers import (
     open_dropoff_passage_for_preparation,
 )
+from src.robot_systems.paint.processes.paint.execution_machine.handlers.workflow.pickup_handler import (
+    handle_pickup,
+)
+from src.robot_systems.paint.processes.paint.execute.pickup_executor import (
+    pickup_condition_is_active_after_retract,
+)
 from src.robot_systems.paint.processes.paint.magazine_load_service import PaintMagazineLoadService
+
+
+class TestPostRetractPickupVerification(unittest.TestCase):
+    @patch("src.robot_systems.paint.processes.paint.execute.pickup_executor.time.sleep")
+    def test_rejects_signal_that_drops_during_sustained_verification(self, sleep_mock):
+        condition = MagicMock()
+        condition.is_active.side_effect = [True, True, False]
+
+        detected = pickup_condition_is_active_after_retract(
+            condition,
+            required_samples=4,
+            sample_interval_s=0.1,
+        )
+
+        self.assertFalse(detected)
+        self.assertEqual(3, condition.is_active.call_count)
+        self.assertEqual(2, sleep_mock.call_count)
+
+    @patch("src.robot_systems.paint.processes.paint.execute.pickup_executor.time.sleep")
+    def test_accepts_only_sustained_signal(self, sleep_mock):
+        condition = MagicMock()
+        condition.is_active.return_value = True
+
+        detected = pickup_condition_is_active_after_retract(
+            condition,
+            required_samples=4,
+            sample_interval_s=0.1,
+        )
+
+        self.assertTrue(detected)
+        self.assertEqual(4, condition.is_active.call_count)
+        self.assertEqual(3, sleep_mock.call_count)
 
 
 class TestDropoffPassagePreparation(unittest.TestCase):
@@ -97,6 +135,53 @@ class TestCycleStartUnwind(unittest.TestCase):
             vel=24.0,
             acc=18.0,
         )
+
+
+class TestCalibrationPickupTestMode(unittest.TestCase):
+    def test_completes_after_pickup_without_building_ordered_paint_chain(self):
+        pickup = MagicMock()
+        pickup.build_plan.return_value = SimpleNamespace()
+        pickup.execute.return_value = (True, "")
+        executor = SimpleNamespace(
+            _pickup=pickup,
+            _paint_process_config=lambda: PaintProcessConfig(),
+            _wait_for_paint_resume=lambda _control: True,
+        )
+        ctx = PaintExecutionContext(
+            production_service=SimpleNamespace(_path_executor=executor),
+            stop_requested=lambda: False,
+            control=PaintExecutionControl(),
+            process_config=PaintProcessConfig(stop_after_calibration_pickup=True),
+            execution_plan=object(),
+        )
+
+        with (
+            patch(
+                "src.robot_systems.paint.processes.paint.execution_machine.handlers.workflow.pickup_handler.start_paint_motion_if_needed"
+            ),
+            patch(
+                "src.robot_systems.paint.processes.paint.execution_machine.handlers.workflow.pickup_handler.unwind_joint6_at_cycle_start",
+                return_value=True,
+            ),
+            patch(
+                "src.robot_systems.paint.processes.paint.execution_machine.handlers.workflow.pickup_handler.try_execute_ordered_pickup_and_paint_contact"
+            ) as ordered_chain,
+            patch(
+                "src.robot_systems.paint.processes.paint.execution_machine.handlers.workflow.pickup_handler.finish_paint_motion"
+            ) as finish_motion,
+        ):
+            next_state = handle_pickup(ctx)
+
+        self.assertEqual(PaintExecutionState.COMPLETED, next_state)
+        self.assertTrue(ctx.result_ok)
+        self.assertEqual("Calibration pickup test completed", ctx.result_message)
+        ordered_chain.assert_not_called()
+        pickup.execute.assert_called_once_with(
+            ctx.execution_plan,
+            pickup_plan=pickup.build_plan.return_value,
+            stop_after_retract=True,
+        )
+        finish_motion.assert_called_once_with(ctx, success=True)
 
 
 class TestPaintExecutionMachineScaffold(unittest.TestCase):
@@ -214,6 +299,7 @@ class TestPaintExecutionMachineScaffold(unittest.TestCase):
 
     def test_machine_executes_mocked_single_cycle_to_completion(self):
         service = MagicMock()
+        service._wait_for_fresh_capture_frame.return_value = (True, "")
         service._capture_snapshot_service.capture_snapshot.return_value = VisionCaptureSnapshot(
             frame="frame",
             contours=[
@@ -251,6 +337,29 @@ class TestPaintExecutionMachineScaffold(unittest.TestCase):
         service._path_executor.execute_paint_process.assert_called_once()
         self.assertIs(service._path_executor.execute_paint_process.call_args.args[0], ctx.execution_plan)
         self.assertIs(service._path_executor.execute_paint_process.call_args.kwargs["control"], ctx.control)
+
+    def test_direct_capture_waits_for_fresh_frame(self):
+        service = MagicMock()
+        service._vision_service = object()
+        service._wait_for_fresh_capture_frame.return_value = (False, "camera did not become ready")
+        ctx = PaintExecutionContext(
+            production_service=service,
+            stop_requested=lambda: False,
+            control=PaintExecutionControl(),
+            magazine_config=PaintMagazineLoadConfig(enabled=False),
+        )
+        machine = PaintExecutionMachineFactory().build(ctx)
+
+        machine.step()
+        machine.step()
+
+        self.assertEqual(PaintExecutionState.ERROR, machine.current_state)
+        self.assertEqual("camera did not become ready", ctx.result_message)
+        service._wait_for_fresh_capture_frame.assert_called_once_with(
+            1.0,
+            ctx.motion_cancel_requested,
+        )
+        service._capture_snapshot_service.capture_snapshot.assert_not_called()
 
     def test_machine_records_no_contour_as_error_result(self):
         service = MagicMock()

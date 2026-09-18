@@ -145,7 +145,12 @@ def _build_tool_settings_application(robot_system):
     from src.applications.tool_settings import (
         ToolSettingsFactory, ToolSettingsApplicationService,
     )
-    service = ToolSettingsApplicationService(robot_system._settings_service)
+    from src.engine.robot.calibration.ros_tool_registry_client import RosToolRegistryClient
+    service = ToolSettingsApplicationService(
+        robot_system._settings_service,
+        robot_service=robot_system.get_optional_service(CommonServiceID.ROBOT),
+        tool_registry_client=RosToolRegistryClient(),
+    )
     jog_service = build_robot_system_jog_service(robot_system)
     return WidgetApplication(
         widget_factory=lambda ms: ToolSettingsFactory().build(service, messaging=ms, jog_service=jog_service)

@@ -183,6 +183,19 @@ class TestPlateLayoutDropoff(unittest.TestCase):
 
         self.assertFalse(_plate_route_uses_center(dropoff, reservation))
 
+    def test_automatic_center_route_can_be_disabled_near_corner(self) -> None:
+        dropoff = SimpleNamespace(
+            plate_use_center_waypoint=False,
+            plate_auto_center_near_corner=False,
+            plate_corners=[[0.0, 0.0, 0.0, 180.0, 0.0, 0.0]],
+        )
+        reservation = SimpleNamespace(
+            transit_pose=[100.0, 100.0, 50.0, 180.0, 0.0, 0.0],
+            release_pose=[25.0, 25.0, 10.0, 180.0, 0.0, 0.0],
+        )
+
+        self.assertFalse(_plate_route_uses_center(dropoff, reservation))
+
     def test_explicit_center_route_setting_forces_center_for_far_position(self) -> None:
         dropoff = SimpleNamespace(
             plate_use_center_waypoint=True,
@@ -229,6 +242,7 @@ class TestPlateLayoutDropoff(unittest.TestCase):
             plate_robot_tool=7,
             plate_robot_user=3,
             plate_passage_gate_pose=[200, 100, 180, 180, 0, 0],
+            plate_exit_gate_pose=[210, 110, 250, 180, 0, 0],
             plate_next_cycle_midpoint_enabled=True,
             plate_next_cycle_midpoint_pose=[150, 50, 160, 180, 0, 10],
             plate_use_center_waypoint=False,
@@ -255,8 +269,13 @@ class TestPlateLayoutDropoff(unittest.TestCase):
         self.assertEqual(7, restored.dropoff.plate_robot_tool)
         self.assertEqual(3, restored.dropoff.plate_robot_user)
         self.assertEqual([200, 100, 180, 180, 0, 0], restored.dropoff.plate_passage_gate_pose)
+        self.assertEqual([210, 110, 250, 180, 0, 0], restored.dropoff.plate_exit_gate_pose)
         self.assertTrue(restored.dropoff.plate_next_cycle_midpoint_enabled)
         self.assertEqual([150, 50, 160, 180, 0, 10], restored.dropoff.plate_next_cycle_midpoint_pose)
+        self.assertEqual(
+            [150, 50, 160, 180, 0, 10],
+            restored.dropoff.plate_next_cycle_waypoints[0]["position"],
+        )
         self.assertFalse(restored.dropoff.plate_use_center_waypoint)
         self.assertTrue(restored.dropoff.plate_distribute_unwind)
         self.assertEqual(config.dropoff.plate_motion_profiles, restored.dropoff.plate_motion_profiles)
@@ -315,8 +334,24 @@ class TestPlateLayoutDropoff(unittest.TestCase):
             strategy="plate_layout",
             plate_corners=_corners(),
             plate_passage_gate_pose=[200, 100, 180, 180, 0, 0],
+            plate_exit_gate_pose=[250, 125, 240, 180, 0, 5],
             plate_next_cycle_midpoint_enabled=True,
-            plate_next_cycle_midpoint_pose=[150, 50, 160, 180, 0, 10],
+            plate_next_cycle_waypoints=[
+                {
+                    "position": [175, 75, 200, 180, 0, 7],
+                    "vel_percent": 31,
+                    "acc_percent": 41,
+                    "motion_type": "ptp",
+                    "blendR": 11,
+                },
+                {
+                    "position": [150, 50, 160, 180, 0, 10],
+                    "vel_percent": 32,
+                    "acc_percent": 42,
+                    "motion_type": "linear",
+                    "blendR": 12,
+                },
+            ],
             plate_use_center_waypoint=False,
             plate_distribute_unwind=True,
             plate_approach_clearance_mm=40.0,
@@ -341,6 +376,7 @@ class TestPlateLayoutDropoff(unittest.TestCase):
         executor = MagicMock()
         executor._paint_process_config.return_value = config
         executor._plate_layout_service = service
+        executor._contact_motion_config.rotation_index = 5
         executor._last_process_start_rz = 0.0
         executor._last_process_end_pose = [0, 0, 0, 180, 0, 360.0]
         executor._motion.move_ordered_pickup_sequence.return_value = True
@@ -361,12 +397,18 @@ class TestPlateLayoutDropoff(unittest.TestCase):
         entry = executor._motion.move_ordered_pickup_sequence.call_args_list[0].args[1]
         exit_chain = executor._motion.move_ordered_pickup_sequence.call_args_list[1].args[1]
         self.assertEqual([1, 2, 0.0], [item["blendR"] for item in entry])
-        self.assertEqual([4, 5, 7, 0.0], [item["blendR"] for item in exit_chain])
+        self.assertEqual([4, 5, 11, 12, 0.0], [item["blendR"] for item in exit_chain])
         self.assertEqual(["ptp", "ptp", "linear"], [item["type"] for item in entry])
         self.assertIn("center to calculated dropoff", entry[-1]["label"])
         self.assertAlmostEqual(90.0, entry[-1]["position"][5] % 360.0)
         self.assertAlmostEqual(0.0, exit_chain[-1]["position"][5] % 360.0)
+        exit_gate_segment = next(
+            item for item in exit_chain if "to passage gate" in item["label"]
+        )
+        self.assertEqual([250, 125, 240], exit_gate_segment["position"][:3])
+        self.assertEqual([175, 75, 200], exit_chain[-3]["position"][:3])
         self.assertEqual([150, 50, 160], exit_chain[-2]["position"][:3])
+        self.assertEqual("linear", exit_chain[-2]["type"])
         self.assertEqual(2, executor._motion.move_ordered_pickup_sequence.call_count)
         self.assertEqual("Start", executor._last_prepositioned_start_group)
         executor._robot_service.unwind_joint6.assert_not_called()
@@ -407,7 +449,8 @@ class TestPlateLayoutDropoff(unittest.TestCase):
 
         poses = _plate_route_poses_with_distributed_unwind(
             executor,
-            gate_pose=[1, 2, 3, 180, 0, 0],
+            entry_gate_pose=[1, 2, 3, 180, 0, 0],
+            exit_gate_pose=[11, 12, 13, 180, 0, 0],
             center_pose=[4, 5, 6, 180, 0, 0],
             dropoff_pose=[7, 8, 9, 180, 0, 0],
             next_start_pose=[10, 11, 12, 180, 0, 0],
@@ -430,7 +473,8 @@ class TestPlateLayoutDropoff(unittest.TestCase):
 
         poses = _plate_route_poses_with_distributed_unwind(
             executor,
-            gate_pose=[1, 2, 3, 180, 0, 0],
+            entry_gate_pose=[1, 2, 3, 180, 0, 0],
+            exit_gate_pose=[1, 2, 3, 180, 0, 0],
             center_pose=[4, 5, 6, 180, 0, 0],
             dropoff_pose=[7, 8, 9, 180, 0, 0],
             next_start_pose=[10, 11, 12, 180, 0, 0],
@@ -451,7 +495,8 @@ class TestPlateLayoutDropoff(unittest.TestCase):
 
         poses = _plate_route_poses_with_distributed_unwind(
             executor,
-            gate_pose=[1, 2, 3, 180, 0, 0],
+            entry_gate_pose=[1, 2, 3, 180, 0, 0],
+            exit_gate_pose=[11, 12, 13, 180, 0, 0],
             center_pose=[4, 5, 6, 180, 0, 0],
             dropoff_pose=[7, 8, 9, 180, 0, 25],
             next_start_pose=[10, 11, 12, 180, 0, 0],
@@ -462,6 +507,7 @@ class TestPlateLayoutDropoff(unittest.TestCase):
         self.assertEqual(25.0, poses["dropoff"][5] % 180.0)
         self.assertEqual(282.5, poses["entry_gate"][5])
         self.assertEqual(102.5, poses["exit_gate"][5])
+        self.assertEqual([11, 12, 13], poses["exit_gate"][:3])
 
     def test_failed_reservation_does_not_consume_position(self) -> None:
         service = PlateLayoutService()

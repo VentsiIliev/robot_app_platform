@@ -14,6 +14,25 @@ def handle_capture_workpiece(ctx: PaintExecutionContext) -> PaintExecutionState:
 
     service = ctx.production_service
     service._restore_brightness_for_capture("before paint capture")
+    magazine_enabled = bool(
+        ctx.magazine_config is not None
+        and getattr(ctx.magazine_config, "enabled", False)
+    )
+    # Lightweight test/stub services may not own vision lifecycle state. The
+    # real production service does, and therefore must prove that resume has
+    # yielded a fresh frame before attempting the direct capture.
+    vision_service = getattr(service, "__dict__", {}).get("_vision_service")
+    if not magazine_enabled and vision_service is not None:
+        ready, message = service._wait_for_fresh_capture_frame(
+            1.0,
+            ctx.motion_cancel_requested,
+        )
+        if not ready:
+            if ctx.motion_cancel_requested():
+                ctx.set_result(False, "Paint process stopped")
+                return PaintExecutionState.STOPPED
+            ctx.set_result(False, message)
+            return PaintExecutionState.ERROR
     phase_start = perf_counter()
     ctx.snapshot = service._capture_snapshot_service.capture_snapshot(source="paint_process")
     contour_count = len(ctx.snapshot.contours or [])

@@ -8,6 +8,7 @@ from src.robot_systems.paint.processes.paint.execution_machine.handlers.common.g
 from src.robot_systems.paint.processes.paint.execution_machine.state import PaintExecutionState
 from src.robot_systems.paint.processes.paint.config import (
     MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN,
+    MAGAZINE_PROCESSING_STRATEGY_BATCH_NESTING,
 )
 
 _logger = logging.getLogger(__name__)
@@ -59,11 +60,30 @@ def handle_magazine_prepare_pickup_release(ctx: PaintExecutionContext) -> PaintE
     pickup_elapsed = perf_counter() - pickup_started
 
     release_started = perf_counter()
-    ctx.magazine_release_pose = load_service._resolve_work_area_center_release_pose(
-        base_pose=base_release_pose,
-        frame=getattr(ctx.magazine_snapshot, "frame", None),
-        release_z_mm=float(ctx.magazine_config.release_z_mm),
+    batch_nesting = (
+        str(getattr(ctx.magazine_config, "processing_strategy", "direct") or "direct")
+        .strip().lower() == MAGAZINE_PROCESSING_STRATEGY_BATCH_NESTING
     )
+    if batch_nesting:
+        ctx.magazine_release_pose, ctx.magazine_nesting_has_more, nesting_error = (
+            load_service._resolve_nested_work_area_release_pose(
+                base_pose=base_release_pose,
+                frame=getattr(ctx.magazine_snapshot, "frame", None),
+                release_z_mm=float(ctx.magazine_config.release_z_mm),
+                robot_contour_xy=ctx.magazine_target.get("robot_contour_xy", ()),
+                margin_mm=float(ctx.magazine_config.nesting_margin_mm),
+                padding_mm=float(ctx.magazine_config.nesting_padding_mm),
+            )
+        )
+        if ctx.magazine_release_pose is None:
+            ctx.set_result(False, nesting_error)
+            return PaintExecutionState.COMPLETED
+    else:
+        ctx.magazine_release_pose = load_service._resolve_work_area_center_release_pose(
+            base_pose=base_release_pose,
+            frame=getattr(ctx.magazine_snapshot, "frame", None),
+            release_z_mm=float(ctx.magazine_config.release_z_mm),
+        )
     release_elapsed = perf_counter() - release_started
     if ctx.magazine_release_pose is None:
         ctx.set_result(False, f"Could not resolve {load_service._release_work_area_id} work area center release pose")

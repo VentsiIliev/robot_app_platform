@@ -6,6 +6,7 @@ from src.engine.robot.path_preparation import (
     PIXEL_TO_MM_MODE_HOMOGRAPHY_RESIDUAL,
 )
 from src.robot_systems.paint.processes.paint.config import (
+    MAGAZINE_PROCESSING_STRATEGIES,
     MAGAZINE_PICKUP_MODES,
     PICKUP_CONTACT_MODES,
 )
@@ -133,6 +134,10 @@ def build_process_groups(
     return [
         SettingGroup(_t("General"), [
             _toggle("enable_vacuum_pump", "Enable Vacuum Pump"),
+            _toggle(
+                "stop_after_calibration_pickup",
+                "Stop After Calibration Pickup (Test Mode)",
+            ),
             _toggle("run_while_workpiece_found", "Run While Workpiece Found", True),
             _toggle("enable_workpiece_matching", "Enable Workpiece Matching", True),
             _toggle("enable_execution_state_timing", "Enable Execution State Timing", True),
@@ -161,14 +166,21 @@ def build_process_groups(
                 "paint_waypoint_table",
                 default={"vel_percent": 70.0, "acc_percent": 50.0},
             ),
-            _toggle("dropoff_plate_next_cycle_midpoint_enabled", "Use Gate-to-Next-Cycle Midpoint"),
+            SettingField(
+                "dropoff_plate_exit_gate",
+                _t("Plate Exit Gate Pose (Optional)"),
+                "paint_waypoint_table",
+                default={"vel_percent": 70.0, "acc_percent": 50.0},
+            ),
+            _toggle("dropoff_plate_next_cycle_midpoint_enabled", "Use Gate-to-Next-Cycle Waypoints"),
             SettingField(
                 "dropoff_plate_next_cycle_midpoint",
-                _t("Gate-to-Next-Cycle Midpoint Pose"),
+                _t("Gate-to-Next-Cycle Waypoints"),
                 "paint_waypoint_table",
                 default={"vel_percent": 60.0, "acc_percent": 40.0},
             ),
             _toggle("dropoff_plate_use_center_waypoint", "Use Plate Center Waypoint", True),
+            _toggle("dropoff_plate_auto_center_near_corner", "Auto Center Near Plate Corner", True),
             _toggle("dropoff_plate_distribute_unwind", "Distribute Joint 6 Unwind Across Plate Route"),
             _profile_table("dropoff_plate_motion_profiles", "Plate Dropoff Moves (Execution Order)", [
                 _profile("entry_gate", "1. Paint Detach to Passage Gate", 70.0, 50.0, "ptp", 20.0),
@@ -176,8 +188,8 @@ def build_process_groups(
                 _profile("center_to_dropoff", "3. Plate Center to Dropoff and Release", 70.0, 50.0, "ptp", 0.0),
                 _profile("exit_center", "4. Dropoff to Plate Center", 70.0, 50.0, "ptp", 20.0),
                 _profile("exit_gate", "5. Plate Center to Passage Gate", 70.0, 50.0, "ptp", 20.0),
-                _profile("gate_to_next_midpoint", "6. Passage Gate to Next-Cycle Midpoint", 60.0, 40.0, "ptp", 20.0),
-                _profile("gate_to_next_start", "7. Next-Cycle Midpoint to Next-Cycle Start", 60.0, 40.0, "ptp", 0.0),
+                _profile("gate_to_next_midpoint", "6. Passage Gate Through Next-Cycle Waypoints", 60.0, 40.0, "ptp", 20.0),
+                _profile("gate_to_next_start", "7. Last Waypoint to Next-Cycle Start", 60.0, 40.0, "ptp", 0.0),
             ]),
             _mm_field("dropoff_plate_release_z_offset_mm", "Plate Release Z Offset", 0.0),
             _mm_field("dropoff_plate_approach_clearance_mm", "Plate Approach Clearance", 50.0, min_val=0.0),
@@ -199,6 +211,23 @@ def build_process_groups(
         ]),
         SettingGroup(_t("Magazine Load"), [
             _toggle("magazine_load_enabled", "Load From Magazine Before Paint"),
+            _toggle(
+                "magazine_recapture_after_pile_done",
+                "Recapture Magazine After Pile Is Empty",
+            ),
+            _toggle(
+                "magazine_recapture_every_cycle",
+                "Recapture Magazine Every Cycle",
+            ),
+            SettingField(
+                "magazine_processing_strategy",
+                _t("Magazine Processing Strategy"),
+                "combo",
+                default="direct",
+                choices=list(MAGAZINE_PROCESSING_STRATEGIES),
+            ),
+            _mm_field("magazine_nesting_margin_mm", "Batch Nesting Work Area Margin", 10.0, min_val=0.0),
+            _mm_field("magazine_nesting_padding_mm", "Batch Nesting Workpiece Padding", 10.0, min_val=0.0),
             SettingField(
                 "magazine_pickup_mode",
                 _t("Magazine Pickup Mode"),

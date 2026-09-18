@@ -6,6 +6,7 @@ from src.engine.common_settings_ids import CommonSettingsID
 from src.engine.robot.configuration import ToolChangerSettings
 from src.engine.robot.interfaces.tool_definition import ToolDefinition
 from src.engine.robot.tool_changer import SlotConfig
+from src.engine.robot.tool_changer import ToolChangeStep
 
 
 def _make_tc(tools=None, slots=None):
@@ -173,6 +174,26 @@ class TestToolSettingsApplicationServiceSlots(unittest.TestCase):
         ok, msg = svc.remove_slot(10)
         self.assertTrue(ok)
         self.assertEqual(msg, "Slot removed")
+        ss.save.assert_called_once()
+
+    def test_update_slot_sequences_persists_typed_steps(self):
+        tc = _make_tc(slots=[SlotConfig(id=10, tool_id=None)])
+        svc, ss = _make_svc(tc)
+        pickup = [{"kind": "motion", "pose": [1, 2, 3, 4, 5, 6]}]
+        ok, _ = svc.update_slot_sequences(10, pickup, [{"kind": "attach"}])
+        self.assertTrue(ok)
+        self.assertIsInstance(tc.slots[0].pickup_sequence[0], ToolChangeStep)
+        self.assertEqual(tc.slots[0].dropoff_sequence[0].kind, "attach")
+
+
+class TestToolSettingsApplicationServiceCalibration(unittest.TestCase):
+    def test_update_tool_geometry_persists_relative_transform(self):
+        tc = ToolChangerSettings(tools=[ToolDefinition(2, "Vacuum")], reference_tool_id=1)
+        svc, ss = _make_svc(tc)
+        ok, _ = svc.update_tool_geometry(2, [1, 2, 3, 0, 0, 0], "vacuum")
+        self.assertTrue(ok)
+        self.assertEqual(tc.tools[0].relative_transform[:3], [1.0, 2.0, 3.0])
+        self.assertEqual(tc.tools[0].reference_tool_id, 1)
         ss.save.assert_called_once()
 
 
