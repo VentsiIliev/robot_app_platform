@@ -514,7 +514,11 @@ class PaintPickupExecutor:
         control = getattr(self._owner, "_active_execution_control", None)
         result = procedure.run(
             config=ServoUntilConditionConfig(
-                execution_mode="sensor_controlled_fast_lin",
+                execution_mode=str(getattr(
+                    pickup_motion,
+                    "calibration_contact_execution_mode",
+                    "sensor_controlled_fast_lin",
+                )),
                 axis=RobotAxis.Z,
                 direction=Direction.MINUS,
                 linear_mm_s=contact_speed_mm_s,

@@ -201,6 +201,8 @@
     "Batch Nesting Work Area Margin": "Batch Nesting Work Area Margin",
     "Batch Nesting Workpiece Padding": "Batch Nesting Workpiece Padding",
     "Calibration Pickup": "Calibration Pickup",
+    "Calibration Sensor Stop Execution": "Calibration Sensor Stop Execution",
+    "Magazine Sensor Stop Execution": "Magazine Sensor Stop Execution",
     "Stop After Calibration Pickup (Test Mode)": "Stop After Calibration Pickup (Test Mode)",
     "Servo Contact Settings": "Servo Contact Settings",
     "Controlled Stop Duration": "Controlled Stop Duration",

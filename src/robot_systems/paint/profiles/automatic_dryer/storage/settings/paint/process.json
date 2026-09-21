@@ -61,6 +61,8 @@
     "first_contact_motion_type": "linear",
     "first_contact_blendR": 0.0,
     "pickup_contact_mode": "planned",
+    "calibration_contact_execution_mode": "ros_managed",
+    "magazine_contact_execution_mode": "ros_managed",
     "servo_contact_linear_mm_s": 10.0,
     "servo_contact_min_z_mm": 0.0,
     "servo_contact_fast_lin_velocity_percent": 10.0,

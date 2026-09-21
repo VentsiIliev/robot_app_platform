@@ -14,6 +14,13 @@ PICKUP_CONTACT_MODES = (
     PICKUP_CONTACT_MODE_HEIGHT_MEASURE,
 )
 
+PICKUP_SENSOR_EXECUTION_MODE_PLATFORM = "sensor_controlled_fast_lin"
+PICKUP_SENSOR_EXECUTION_MODE_ROS_MANAGED = "ros_managed"
+PICKUP_SENSOR_EXECUTION_MODES = (
+    PICKUP_SENSOR_EXECUTION_MODE_PLATFORM,
+    PICKUP_SENSOR_EXECUTION_MODE_ROS_MANAGED,
+)
+
 MAGAZINE_PICKUP_MODE_VISION_PLANNED = "vision_planned"
 MAGAZINE_PICKUP_MODE_VISION_SENSOR_CONTROLLED_FAST_LIN = "vision_sensor_controlled_fast_lin"
 MAGAZINE_PICKUP_MODE_AUTO_DISCOVERY_SENSOR_CONTROLLED_FAST_LIN = (
@@ -116,6 +123,8 @@ class PickupMotionConfig:
     # Pickup contact strategy. Defaults preserve the fully planned
     # approach/descend/lift sequence. Valid values: planned | servo_contact | height_measure.
     pickup_contact_mode: str = PICKUP_CONTACT_MODE_PLANNED  # [LIVE SETTINGS]
+    calibration_contact_execution_mode: str = PICKUP_SENSOR_EXECUTION_MODE_PLATFORM  # [LIVE SETTINGS]
+    magazine_contact_execution_mode: str = PICKUP_SENSOR_EXECUTION_MODE_PLATFORM  # [LIVE SETTINGS]
     servo_contact_linear_mm_s: float = 10.0  # [LIVE SETTINGS]
     servo_contact_min_z_mm: float = 0.0  # [LIVE SETTINGS]
     servo_contact_fast_lin_velocity_percent: float = 10.0  # [LIVE SETTINGS]

@@ -787,6 +787,9 @@ class TestServoUntilConditionProcedure(unittest.TestCase):
                     },
                 }
 
+            def get_current_position(self):
+                return [0.0, 0.0, 80.0, 0.0, 0.0, 0.0]
+
             def publish_conditional_servo_sensor(self, **event):
                 self.sensor_events.append(event)
                 if event["state"]:
@@ -815,14 +818,63 @@ class TestServoUntilConditionProcedure(unittest.TestCase):
             execution_mode="ros_managed",
             poll_interval_s=0.001,
             timeout_s=0.1,
+            minimum_z_mm=50.0,
         ))
 
         self.assertTrue(result.success)
         self.assertTrue(result.detected)
         self.assertEqual(result.message, "condition_detected")
         self.assertEqual(robot.started, [])
+        self.assertEqual(robot.request["execution_mode"], "fast_lin")
+        self.assertEqual(robot.request["fast_lin"]["position"][2], 50.0)
         self.assertEqual([False, True], [event["state"] for event in robot.sensor_events])
         self.assertTrue(robot.sensor_events[-1]["detected_monotonic_ns"] > 0)
+
+    def test_ros_managed_mode_ignores_idle_status_without_operation_id(self):
+        class ManagedRobot(FakeRobot):
+            def __init__(self):
+                super().__init__()
+                self.sensor_events = []
+
+            def start_conditional_servo(self, request):
+                return {
+                    "success": True,
+                    "conditional_servo": {
+                        "operation_id": "managed-current",
+                        "state": "moving",
+                    },
+                }
+
+            def get_current_position(self):
+                return [0.0, 0.0, 80.0, 0.0, 0.0, 0.0]
+
+            def publish_conditional_servo_sensor(self, **event):
+                self.sensor_events.append(event)
+                return True
+
+            def get_conditional_servo_status(self):
+                if len(self.sensor_events) < 2:
+                    return {"operation_id": None, "state": "idle"}
+                return {
+                    "operation_id": "managed-current",
+                    "state": "condition_met",
+                }
+
+            def cancel_conditional_servo(self):
+                return True
+
+        robot = ManagedRobot()
+        result = ServoUntilConditionProcedure(
+            robot, _ConditionSequence(False, False, False, True)
+        ).run(config=ServoUntilConditionConfig(
+            execution_mode="ros_managed",
+            poll_interval_s=0.001,
+            timeout_s=0.1,
+            minimum_z_mm=50.0,
+        ))
+
+        self.assertTrue(result.success)
+        self.assertEqual([False, True], [event["state"] for event in robot.sensor_events])
 
     def test_ros_managed_mode_fails_without_capabilities_and_never_starts_legacy_servo(self):
         robot = FakeRobot()

@@ -9,6 +9,7 @@ from src.robot_systems.paint.processes.paint.config import (
     MAGAZINE_PROCESSING_STRATEGIES,
     MAGAZINE_PICKUP_MODES,
     PICKUP_CONTACT_MODES,
+    PICKUP_SENSOR_EXECUTION_MODES,
 )
 
 _CTX = "PaintProcessSettings"
@@ -276,6 +277,20 @@ def build_process_groups(
             ),
         ]),
         SettingGroup(_t("Sensor-Controlled Fast LIN"), [
+            SettingField(
+                "pickup_calibration_contact_execution_mode",
+                _t("Calibration Sensor Stop Execution"),
+                "combo",
+                default="sensor_controlled_fast_lin",
+                choices=list(PICKUP_SENSOR_EXECUTION_MODES),
+            ),
+            SettingField(
+                "pickup_magazine_contact_execution_mode",
+                _t("Magazine Sensor Stop Execution"),
+                "combo",
+                default="sensor_controlled_fast_lin",
+                choices=list(PICKUP_SENSOR_EXECUTION_MODES),
+            ),
             _mm_field("pickup_servo_contact_min_z_mm", "Descent Target / Minimum Z", 0.0, min_val=-100.0),
             _percent_field("pickup_servo_contact_fast_lin_velocity_percent", "Descent Velocity", 10.0),
             _percent_field("pickup_servo_contact_fast_lin_acceleration_percent", "Descent Acceleration", 30.0),

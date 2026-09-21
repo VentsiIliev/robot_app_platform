@@ -389,23 +389,37 @@ class HttpWebSocketRobotClient(RobotClientAdapter):
                 ) as websocket:
                     self._sensor_ws_connected = True
                     logger.info("Connected to ROS2 sensor WebSocket at %s", self._sensor_ws_url)
-                    while not self._sensor_ws_stop.is_set():
-                        send_task = asyncio.create_task(queue.get())
-                        receive_task = asyncio.create_task(websocket.recv())
-                        done, pending = await asyncio.wait(
-                            {send_task, receive_task},
-                            return_when=asyncio.FIRST_COMPLETED,
-                        )
-                        for task in pending:
-                            task.cancel()
-                        if send_task in done:
-                            await websocket.send(send_task.result())
-                        if receive_task in done:
-                            self._accept_sensor_ws_message(receive_task.result())
+                    await self._run_sensor_websocket_session(websocket, queue)
             except Exception as exc:
                 self._sensor_ws_connected = False
                 logger.debug("Sensor WebSocket unavailable at %s: %s", self._sensor_ws_url, exc)
                 await asyncio.sleep(1.0)
+
+    async def _run_sensor_websocket_session(self, websocket, queue):
+        """Run both directions independently so status traffic cannot starve sensors."""
+        async def send_sensor_events():
+            while not self._sensor_ws_stop.is_set():
+                await websocket.send(await queue.get())
+
+        async def receive_status():
+            while not self._sensor_ws_stop.is_set():
+                self._accept_sensor_ws_message(await websocket.recv())
+
+        tasks = {
+            asyncio.create_task(send_sensor_events()),
+            asyncio.create_task(receive_status()),
+        }
+        try:
+            done, _pending = await asyncio.wait(
+                tasks,
+                return_when=asyncio.FIRST_EXCEPTION,
+            )
+            for task in done:
+                task.result()
+        finally:
+            for task in tasks:
+                task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
 
     def _accept_sensor_ws_message(self, message):
         try:
@@ -446,11 +460,23 @@ class HttpWebSocketRobotClient(RobotClientAdapter):
         return True
 
     def get_conditional_servo_status(self) -> dict | None:
+        with self._sensor_ws_lock:
+            sensor_snapshot = (
+                dict(self._conditional_servo_latest)
+                if self._conditional_servo_latest else None
+            )
         execution = self._get_execution_ws_status()
         if isinstance(execution, dict) and isinstance(execution.get("conditional_servo"), dict):
-            return dict(execution["conditional_servo"])
-        with self._sensor_ws_lock:
-            return dict(self._conditional_servo_latest) if self._conditional_servo_latest else None
+            execution_snapshot = dict(execution["conditional_servo"])
+            expected_operation_id = (
+                sensor_snapshot.get("operation_id") if sensor_snapshot else None
+            )
+            if (
+                expected_operation_id is None
+                or execution_snapshot.get("operation_id") == expected_operation_id
+            ):
+                return execution_snapshot
+        return sensor_snapshot
 
     def _mark_execution_request_sent(self, label: str) -> float:
         now = time.monotonic()

@@ -482,7 +482,11 @@ def _execute_magazine_servo_contact_pickup_release(
         control = getattr(executor, "_active_execution_control", None)
         result = ServoUntilConditionProcedure(executor._robot_service, condition).run(
             config=ServoUntilConditionConfig(
-                execution_mode="sensor_controlled_fast_lin",
+                execution_mode=str(getattr(
+                    pickup_motion,
+                    "magazine_contact_execution_mode",
+                    "sensor_controlled_fast_lin",
+                )),
                 axis=RobotAxis.Z,
                 direction=Direction.MINUS,
                 linear_mm_s=contact_speed_mm_s,

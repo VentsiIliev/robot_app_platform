@@ -18,7 +18,7 @@
   "enable_workpiece_matching": false,
   "default_paint_velocity_percent": 100.0,
   "default_paint_acceleration_percent": 80.00000000000001,
-  "paint_process_acceleration_scale_percent": 90.0,
+  "paint_process_acceleration_scale_percent": 100.0,
   "default_paint_offset_mm": 0.0,
   "unmatched_paint_pass_count": 1,
   "unmatched_second_pass": {
@@ -61,6 +61,8 @@
     "first_contact_motion_type": "linear",
     "first_contact_blendR": 0.0,
     "pickup_contact_mode": "sensor_controlled_fast_lin",
+    "calibration_contact_execution_mode": "ros_managed",
+    "magazine_contact_execution_mode": "ros_managed",
     "servo_contact_linear_mm_s": 10.0,
     "servo_contact_min_z_mm": 0.0,
     "servo_contact_fast_lin_velocity_percent": 40.0,

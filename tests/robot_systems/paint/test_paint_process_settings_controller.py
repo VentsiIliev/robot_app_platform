@@ -179,6 +179,25 @@ class TestPaintProcessSettingsController(unittest.TestCase):
         self.assertEqual(0.15, restored.pickup_motion.servo_contact_controlled_stop_duration_s)
         self.assertEqual(4.5, restored.pickup_motion.servo_contact_stop_confirmation_timeout_s)
 
+    def test_pickup_sensor_execution_modes_round_trip_independently(self):
+        base = PaintProcessConfig()
+        flat = PaintProcessSettingsMapper.to_flat_dict(base)
+
+        self.assertEqual("sensor_controlled_fast_lin", flat["pickup_calibration_contact_execution_mode"])
+        self.assertEqual("sensor_controlled_fast_lin", flat["pickup_magazine_contact_execution_mode"])
+        flat["pickup_calibration_contact_execution_mode"] = "ros_managed"
+
+        restored = PaintProcessSettingsMapper.from_flat_dict(flat, base)
+
+        self.assertEqual(
+            "ros_managed",
+            restored.pickup_motion.calibration_contact_execution_mode,
+        )
+        self.assertEqual(
+            "sensor_controlled_fast_lin",
+            restored.pickup_motion.magazine_contact_execution_mode,
+        )
+
     def test_magazine_retract_policy_round_trips(self):
         base = PaintProcessConfig()
         flat = PaintProcessSettingsMapper.to_flat_dict(base)

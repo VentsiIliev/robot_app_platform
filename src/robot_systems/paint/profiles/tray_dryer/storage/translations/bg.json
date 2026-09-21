@@ -202,6 +202,8 @@
     "Batch Nesting Work Area Margin": "Отстъп от работната зона при групово подреждане",
     "Batch Nesting Workpiece Padding": "Разстояние между детайлите при групово подреждане",
     "Calibration Pickup": "Вземане от калибрационната зона",
+    "Calibration Sensor Stop Execution": "Изпълнение на сензорното спиране при калибрационно вземане",
+    "Magazine Sensor Stop Execution": "Изпълнение на сензорното спиране при вземане от магазина",
     "Stop After Calibration Pickup (Test Mode)": "Спиране след вземане от калибрационната зона (тестов режим)",
     "Servo Contact Settings": "Настройки за Servo Contact",
     "Controlled Stop Duration": "Продължителност на контролираното спиране",

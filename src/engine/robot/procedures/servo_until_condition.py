@@ -345,6 +345,7 @@ class ServoUntilConditionProcedure:
                     cancel_requested=cancel_requested,
                     stop_guard=stop_guard,
                     on_retract_start=on_retract_start,
+                    start_pose=travel_start_pose,
                 )
 
             fast_phase_active = cfg.initial_linear_mm_s is not None
@@ -647,6 +648,7 @@ class ServoUntilConditionProcedure:
         cancel_requested: Callable[[], bool] | None,
         stop_guard: Callable[[], bool] | None,
         on_retract_start: Callable[[tuple[float, ...], float], None] | None,
+        start_pose: Sequence[float] | None,
     ) -> ServoUntilConditionResult:
         starter = getattr(self._robot, "start_conditional_servo", None)
         publisher = getattr(self._robot, "publish_conditional_servo_sensor", None)
@@ -686,7 +688,25 @@ class ServoUntilConditionProcedure:
                 "operator": "less_or_equal",
                 "value_mm": float(cfg.minimum_z_mm),
             }
+        if start_pose is None or cfg.minimum_z_mm is None:
+            return self._result(
+                started_at, success=False, detected=False, timed_out=False,
+                start_failed=True, condition_failed=False, guard_triggered=True,
+                message="ros_managed_fast_lin_missing_start_or_minimum_z",
+            )
+        target_pose = [float(value) for value in start_pose[:6]]
+        target_pose[2] = float(cfg.minimum_z_mm)
         request = {
+            "execution_mode": "fast_lin",
+            "fast_lin": {
+                "position": target_pose,
+                "tool": int(cfg.tool),
+                "user": int(cfg.user),
+                "vel": float(cfg.approach_velocity),
+                "acc": float(cfg.approach_acceleration),
+                "trajectory_optimizer": "TOTG",
+                "controlled_stop_duration_s": cfg.controlled_stop_duration_s,
+            },
             "servo": {
                 "axis": cfg.axis.name,
                 "direction": cfg.direction.name,
@@ -726,7 +746,7 @@ class ServoUntilConditionProcedure:
             return self._result(
                 started_at, success=False, detected=False, timed_out=False,
                 start_failed=True, condition_failed=False, guard_triggered=False,
-                message=f"ros_managed_servo_start_failed:{response.get('error') or response.get('result')}",
+                message=f"ros_managed_fast_lin_start_failed:{response.get('error') or response.get('result')}",
             )
 
         operation = response.get("conditional_servo") or {}
@@ -778,13 +798,20 @@ class ServoUntilConditionProcedure:
                     canceller()
 
             status = status_getter() or {}
-            if operation_id and status.get("operation_id") not in (None, operation_id):
+            status_operation_id = status.get("operation_id")
+            if operation_id and status_operation_id not in (None, operation_id):
                 canceller()
                 return self._result(
                     started_at, success=False, detected=False, timed_out=False,
                     start_failed=False, condition_failed=True, guard_triggered=False,
                     message="ros_managed_operation_replaced",
                 )
+            if operation_id and status_operation_id is None:
+                # WebSocket status is asynchronous. An idle snapshot from before
+                # this operation must not terminate the sensor publisher before
+                # its first heartbeat reaches ROS.
+                time.sleep(poll_interval)
+                continue
             state = str(status.get("state") or "").strip().lower()
             if state in {"moving", "arming", "stopping", "awaiting_stationary", ""}:
                 time.sleep(poll_interval)

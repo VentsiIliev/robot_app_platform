@@ -1,3 +1,6 @@
+import asyncio
+import json
+import threading
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -9,7 +12,54 @@ from src.engine.robot.drivers.client_adapters import (
 from src.engine.robot.drivers.ros2_robot import Ros2Robot
 
 
+class TestSensorWebSocketSession(unittest.IsolatedAsyncioTestCase):
+
+    async def test_incoming_status_frames_do_not_starve_sensor_send(self):
+        client = object.__new__(HttpWebSocketRobotClient)
+        client._sensor_ws_stop = threading.Event()
+        client._sensor_ws_lock = threading.Lock()
+        client._conditional_servo_latest = None
+        queue = asyncio.Queue()
+        await queue.put("sensor-heartbeat")
+
+        class BusyWebSocket:
+            def __init__(self):
+                self.sent = []
+
+            async def send(inner_self, payload):
+                inner_self.sent.append(payload)
+                client._sensor_ws_stop.set()
+
+            async def recv(inner_self):
+                await asyncio.sleep(0)
+                return json.dumps({"conditional_servo": {"state": "moving"}})
+
+        websocket = BusyWebSocket()
+        await asyncio.wait_for(
+            client._run_sensor_websocket_session(websocket, queue),
+            timeout=0.2,
+        )
+
+        self.assertEqual(websocket.sent, ["sensor-heartbeat"])
+
+
 class TestRobotClientAdapters(unittest.TestCase):
+
+    def test_conditional_status_ignores_uncorrelated_execution_snapshot(self):
+        client = object.__new__(HttpWebSocketRobotClient)
+        client._sensor_ws_lock = threading.Lock()
+        client._conditional_servo_latest = {
+            "operation_id": "current-operation",
+            "state": "moving",
+        }
+        client._get_execution_ws_status = MagicMock(return_value={
+            "conditional_servo": {"operation_id": None, "state": "idle"},
+        })
+
+        status = client.get_conditional_servo_status()
+
+        self.assertEqual(status["operation_id"], "current-operation")
+        self.assertEqual(status["state"], "moving")
 
     @patch("src.engine.robot.drivers.client_adapters.http_websocket.requests.get")
     def test_init_sets_disconnected_state_when_bridge_is_unavailable(self, get_mock):

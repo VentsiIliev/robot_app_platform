@@ -320,6 +320,8 @@ class PaintProcessSettingsMapper:
             "staging_detach_paint_axis_offset_mm": staging.detach_paint_axis_offset_mm,
             "staging_detach_perpendicular_axis_offset_mm": staging.detach_perpendicular_axis_offset_mm,
             "pickup_contact_mode": pickup.pickup_contact_mode,
+            "pickup_calibration_contact_execution_mode": pickup.calibration_contact_execution_mode,
+            "pickup_magazine_contact_execution_mode": pickup.magazine_contact_execution_mode,
             "pickup_servo_contact_linear_mm_s": pickup.servo_contact_linear_mm_s,
             "pickup_servo_contact_min_z_mm": pickup.servo_contact_min_z_mm,
             "pickup_servo_contact_fast_lin_velocity_percent": pickup.servo_contact_fast_lin_velocity_percent,
@@ -532,6 +534,14 @@ class PaintProcessSettingsMapper:
             pickup_contact_mode=normalize_pickup_contact_mode(
                 flat.get("pickup_contact_mode", base.pickup_motion.pickup_contact_mode)
             ),
+            calibration_contact_execution_mode=str(flat.get(
+                "pickup_calibration_contact_execution_mode",
+                base.pickup_motion.calibration_contact_execution_mode,
+            )),
+            magazine_contact_execution_mode=str(flat.get(
+                "pickup_magazine_contact_execution_mode",
+                base.pickup_motion.magazine_contact_execution_mode,
+            )),
             servo_contact_linear_mm_s=float(
                 flat.get("pickup_servo_contact_linear_mm_s", base.pickup_motion.servo_contact_linear_mm_s)
             ),
