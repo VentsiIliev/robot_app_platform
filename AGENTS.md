@@ -252,7 +252,7 @@ class _Worker(QObject):
 
 class MyController(IApplicationController):
     def __init__(self, model, view):
-        self._active: List[Tuple[QThread, _Worker]] = []     # must hold both — strong refs
+        self._active_workers: List[Tuple[QThread, _Worker]] = []     # must hold both — strong refs
 
     def _run_blocking(self, fn, on_done):
         thread = QThread()
@@ -261,7 +261,7 @@ class MyController(IApplicationController):
         thread.started.connect(worker.run)
         worker.finished.connect(on_done)
         worker.finished.connect(thread.quit)
-        self._active.append((thread, worker))                 # prevents GC
+        self._active_workers.append((thread, worker))                 # prevents GC
         thread.start()
 ```
 Reference: `ModbusSettingsController`

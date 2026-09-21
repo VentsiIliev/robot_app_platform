@@ -24,6 +24,7 @@ class FrameGrabber:
         read_timeout_s=0.25,
         restart_after_failures=4,
         restart_cooldown_s=1.0,
+        restart_max_cooldown_s=10.0,
         post_restart_settle_s=0.2,
         stale_frame_timeout_s=1.0,
     ):
@@ -33,7 +34,9 @@ class FrameGrabber:
         maxlen: number of frames to keep in buffer
         read_timeout_s: timeout passed to camera.capture() for each frame read
         restart_after_failures: consecutive failed reads before attempting restart
-        restart_cooldown_s: minimum time between restart attempts
+        restart_cooldown_s: base wait between restart attempts (doubles on each
+            failed restart, capped at restart_max_cooldown_s)
+        restart_max_cooldown_s: upper bound for the restart backoff
         post_restart_settle_s: short wait after restarting the stream
         stale_frame_timeout_s: how long the latest buffered frame may be reused
             before it is considered stale and hidden from callers
@@ -46,7 +49,9 @@ class FrameGrabber:
         self.thread = threading.Thread(target=self._grab_loop, daemon=True)
         self.read_timeout_s = float(read_timeout_s)
         self.restart_after_failures = max(1, int(restart_after_failures))
-        self.restart_cooldown_s = float(restart_cooldown_s)
+        self._base_restart_cooldown_s = max(0.0, float(restart_cooldown_s))
+        self._restart_max_cooldown_s = max(self._base_restart_cooldown_s, float(restart_max_cooldown_s))
+        self._restart_cooldown_s = self._base_restart_cooldown_s
         self.post_restart_settle_s = float(post_restart_settle_s)
         self.stale_frame_timeout_s = float(stale_frame_timeout_s)
         self._consecutive_failures = 0
@@ -77,6 +82,7 @@ class FrameGrabber:
                 if not self._resume_event.is_set():
                     continue
                 self._consecutive_failures = 0
+                self._restart_cooldown_s = self._base_restart_cooldown_s
                 captured_at = time.time()
                 with self.lock:
                     self._frame_sequence += 1
@@ -100,13 +106,14 @@ class FrameGrabber:
             return False
         if not hasattr(self.camera, "start_stream") or not hasattr(self.camera, "stop_stream"):
             return False
-        return (time.time() - self._last_restart_at) >= self.restart_cooldown_s
+        return (time.time() - self._last_restart_at) >= self._restart_cooldown_s
 
     def _restart_stream(self) -> None:
         self._last_restart_at = time.time()
         _logger.warning(
-            "FrameGrabber restarting camera stream after %d consecutive capture failures",
+            "FrameGrabber restarting camera stream after %d consecutive capture failures (backoff %.1fs)",
             self._consecutive_failures,
+            self._restart_cooldown_s,
         )
         with self.lock:
             self.buffer.clear()
@@ -121,6 +128,18 @@ class FrameGrabber:
             self.camera.start_stream()
         except Exception:
             _logger.exception("FrameGrabber failed to start camera stream during recovery")
+        opened = False
+        opener = getattr(self.camera, "isOpened", None)
+        if callable(opener):
+            try:
+                opened = bool(opener())
+            except Exception:
+                opened = False
+        self._restart_cooldown_s = (
+            self._base_restart_cooldown_s
+            if opened
+            else min(self._restart_cooldown_s * 2, self._restart_max_cooldown_s)
+        )
         self._consecutive_failures = 0
 
     def get_latest(self):

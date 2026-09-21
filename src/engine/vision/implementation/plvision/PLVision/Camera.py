@@ -17,6 +17,7 @@ Public methods:
 """
 import time
 import platform
+import threading
 
 import cv2
 
@@ -54,6 +55,11 @@ class Camera:
         self.cap = None
         self.open_start_time = None
         self.active = False  # Indicates if camera is active and initialized
+        # Serialises device access. The FrameGrabber thread (capture + stream
+        # restarts) and application threads (set_auto_exposure stream restart)
+        # both mutate `cap`; without this lock they race and the V4L2 open
+        # fails with "device may be busy".
+        self._io_lock = threading.RLock()
         self._init_capture()
 
     # def _resolve_backend_for_platform(self):
@@ -185,8 +191,9 @@ class Camera:
 
     # Public API
     def isOpened(self):
-        self.active = (self.cap is not None) and self.cap.isOpened()
-        return self.active
+        with self._io_lock:
+            self.active = (self.cap is not None) and self.cap.isOpened()
+            return self.active
 
     def get_properties(self):
         if not self.isOpened():
@@ -222,48 +229,58 @@ class Camera:
     def set_auto_exposure(self, enabled: bool):
         """
         Change AE mode reliably by restarting stream.
+        Serialised with capture()/stream restarts via _io_lock so the restart
+        never races the FrameGrabber thread. On failure the stream is restored
+        before raising so the camera is never left released.
         """
+        with self._io_lock:
 
-        # Stop stream (required for many UVC cameras)
-        self.stop_stream()
-        time.sleep(0.2)  # Increased wait time for device release
-
-        # Restart stream but DO NOT read frames yet, with retries
-        max_retries = 10
-        delay = 0.1
-        for attempt in range(max_retries):
-            self.start_stream()
-            if self.isOpened():
-                break
+            # Stop stream (required for many UVC cameras)
             self.stop_stream()
-            time.sleep(delay)
-        else:
-            self.active = False
-            raise RuntimeError("Camera could not restart while changing auto exposure (device may be busy)")
+            time.sleep(0.2)  # Increased wait time for device release
 
-        # Candidate values to try
-        if enabled:
-            candidates = (3.0, 1.0, 0.75, 0.25)
-        else:
-            candidates = (1.0, 0.25, 0.0, 0.75)
-
-        last_ok = None
-        for v in candidates:
-            try:
-                if self.verbose_ae:
-                    print(f"[AE] trying: {v}")
-                ok = self.cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, float(v))
-                if ok:
-                    last_ok = v
-                    time.sleep(0.02)
+            # Restart stream but DO NOT read frames yet, with retries
+            max_retries = 10
+            delay = 0.1
+            stream_open = False
+            for attempt in range(max_retries):
+                self.start_stream()
+                if self.isOpened():
+                    stream_open = True
                     break
-            except:
-                continue
+                self.stop_stream()
+                time.sleep(delay)
+            if not stream_open:
+                # Final restore attempt so a failure never leaves the device released.
+                self.start_stream()
 
-        try:
-            return self.cap.get(cv2.CAP_PROP_AUTO_EXPOSURE)
-        except:
-            return last_ok
+            # Candidate values to try
+            if enabled:
+                candidates = (3.0, 1.0, 0.75, 0.25)
+            else:
+                candidates = (1.0, 0.25, 0.0, 0.75)
+
+            last_ok = None
+            for v in candidates:
+                try:
+                    if self.verbose_ae:
+                        print(f"[AE] trying: {v}")
+                    ok = self.cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, float(v))
+                    if ok:
+                        last_ok = v
+                        time.sleep(0.02)
+                        break
+                except:
+                    continue
+
+            if not stream_open and not self.isOpened():
+                self.active = False
+                raise RuntimeError("Camera could not restart while changing auto exposure (device may be busy)")
+
+            try:
+                return self.cap.get(cv2.CAP_PROP_AUTO_EXPOSURE)
+            except:
+                return last_ok
 
     def get_auto_exposure(self):
         """Return the current AUTO_EXPOSURE property value (or None)."""
@@ -286,40 +303,42 @@ class Camera:
             pass
 
     def capture(self, grab_only=False, timeout=1.0):
-        if not self.isOpened():
-            return None
-
-        start = time.time()
-        while True:
-            if grab_only:
-                try:
-                    ok = self.cap.grab()
-                    if not ok and (time.time() - start) > timeout:
-                        return None
-                    if not ok:
-                        continue
-                    ok, frame = self.cap.retrieve()
-                except Exception:
-                    return None
-            else:
-                try:
-                    ok, frame = self.cap.read()
-                except Exception:
-                    return None
-
-            if ok:
-                return frame
-            if (time.time() - start) > timeout:
+        with self._io_lock:
+            if not self.isOpened():
                 return None
 
+            start = time.time()
+            while True:
+                if grab_only:
+                    try:
+                        ok = self.cap.grab()
+                        if not ok and (time.time() - start) > timeout:
+                            return None
+                        if not ok:
+                            continue
+                        ok, frame = self.cap.retrieve()
+                    except Exception:
+                        return None
+                else:
+                    try:
+                        ok, frame = self.cap.read()
+                    except Exception:
+                        return None
+
+                if ok:
+                    return frame
+                if (time.time() - start) > timeout:
+                    return None
+
     def close(self):
-        if self.cap is not None:
-            try:
-                self.cap.release()
-            except Exception:
-                pass
-        self.cap = None
-        self.active = False
+        with self._io_lock:
+            if self.cap is not None:
+                try:
+                    self.cap.release()
+                except Exception:
+                    pass
+            self.cap = None
+            self.active = False
 
     # Backward-compatible aliases
     def stopCapture(self):
@@ -327,35 +346,37 @@ class Camera:
 
     def stop_stream(self):
         """Stop the camera stream without destroying Camera object."""
-        if self.cap is not None:
-            try:
-                self.cap.release()
-            except:
-                pass
-        self.cap = None
-        self.active = False
-
-    def start_stream(self):
-        """Restart camera stream with previous parameters. Retry if device is busy."""
-        api = self._resolve_backend_for_platform()
-        max_retries = 10
-        delay = 0.1
-        for attempt in range(max_retries):
-            self.cap = cv2.VideoCapture(self.device, api)
-            if self.cap is not None and self.cap.isOpened():
-                self._configure_capture()
-                self.active = True
-                return
+        with self._io_lock:
             if self.cap is not None:
                 try:
                     self.cap.release()
-                except Exception:
+                except:
                     pass
             self.cap = None
-            time.sleep(delay)
-        # If we reach here, failed to open after retries
-        self.cap = None
-        self.active = False
+            self.active = False
+
+    def start_stream(self):
+        """Restart camera stream with previous parameters. Retry if device is busy."""
+        with self._io_lock:
+            api = self._resolve_backend_for_platform()
+            max_retries = 10
+            delay = 0.1
+            for attempt in range(max_retries):
+                self.cap = cv2.VideoCapture(self.device, api)
+                if self.cap is not None and self.cap.isOpened():
+                    self._configure_capture()
+                    self.active = True
+                    return
+                if self.cap is not None:
+                    try:
+                        self.cap.release()
+                    except Exception:
+                        pass
+                self.cap = None
+                time.sleep(delay)
+            # If we reach here, failed to open after retries
+            self.cap = None
+            self.active = False
 
 
 if __name__ == '__main__':

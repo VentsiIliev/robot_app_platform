@@ -1,7 +1,7 @@
 """
 BackgroundWorker — mixin that provides a thread-safe _run_in_thread() helper.
 
-Eliminates the private ``_Worker`` class + ``_active`` list + ``_run_in_thread``
+Eliminates the private ``_Worker`` class + worker-list + ``_run_in_thread``
 boilerplate that was duplicated across modbus_settings, robot_settings,
 height_measuring, and device_control controllers.
 
@@ -29,10 +29,14 @@ Notes
 - ``BackgroundWorker`` is NOT a ``QObject`` subclass — it does not interfere
   with Qt's meta-object system.  Always put Qt base classes first in the MRO.
 - A strong reference to every ``(QThread, _Worker)`` pair is kept in
-  ``self._active`` so Python's GC cannot destroy the worker while its thread
-  is still running.
+  ``self._active_workers`` so Python's GC cannot destroy the worker while its
+  thread is still running.
+- The attribute is deliberately named ``_active_workers``, NOT ``_active``:
+  controller classes in this codebase widely use ``self._active`` as a
+  boolean "controller is live" flag, and a subclass assignment would
+  otherwise silently shadow the worker list (``bool`` has no ``append``).
 - ``_on_thread_finished`` is connected to ``thread.finished``; it prunes
-  completed pairs automatically, so ``_active`` stays lean.
+  completed pairs automatically, so ``_active_workers`` stays lean.
 """
 from __future__ import annotations
 
@@ -88,7 +92,7 @@ class BackgroundWorker:
     """
 
     def __init__(self) -> None:
-        self._active: List[Tuple[QThread, _Worker, _UiRelay]] = []
+        self._active_workers: List[Tuple[QThread, _Worker, _UiRelay]] = []
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def _run_in_thread(
@@ -128,13 +132,13 @@ class BackgroundWorker:
         thread.finished.connect(relay.deleteLater)
         thread.finished.connect(thread.deleteLater)
 
-        self._active.append((thread, worker, relay))
+        self._active_workers.append((thread, worker, relay))
         thread.start()
 
     def _stop_threads(self, timeout_ms: int = 3000) -> None:
         """Quit and wait for every running thread.  Call from ``stop()``."""
         still_running: List[Tuple[QThread, _Worker, _UiRelay]] = []
-        for thread, worker, relay in self._active:
+        for thread, worker, relay in self._active_workers:
             if not thread.isRunning():
                 continue
             thread.quit()
@@ -147,7 +151,7 @@ class BackgroundWorker:
             )
             thread.wait()
             still_running.append((thread, worker, relay))
-        self._active = [(t, w, r) for t, w, r in still_running if t.isRunning()]
+        self._active_workers = [(t, w, r) for t, w, r in still_running if t.isRunning()]
 
     def _on_thread_finished(self) -> None:
-        self._active = [(t, w, r) for t, w, r in self._active if t.isRunning()]
+        self._active_workers = [(t, w, r) for t, w, r in self._active_workers if t.isRunning()]

@@ -208,7 +208,7 @@ class TestModbusSettingsControllerStop(unittest.TestCase):
     def test_stop_clears_active_list(self):
         ctrl, _, _ = _make_controller()
         ctrl.stop()
-        self.assertEqual(ctrl._active, [])
+        self.assertEqual(ctrl._active_workers, [])
 
     def test_stop_returns_none_when_empty(self):
         ctrl, _, _ = _make_controller()

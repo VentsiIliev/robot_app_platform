@@ -117,7 +117,12 @@ class CameraSettingsController(IApplicationController, BrokerSubscriptionMixin, 
 
     def _on_save(self, flat: dict) -> None:
         settings = CameraSettingsMapper.from_flat_dict(flat, self._model.current_settings)
-        self._model.save(settings)
+        try:
+            self._model.save(settings)
+        except Exception:
+            # A failed save (e.g. camera busy during an auto-exposure restart)
+            # must never escape a Qt slot — PyQt6 aborts the app on that.
+            self._logger.error("Failed to save camera settings", exc_info=True)
 
     def _on_background_save_done(self, _result) -> None:
         self._logger.info("Camera hardware auto-exposure setting applied")
