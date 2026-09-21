@@ -425,10 +425,6 @@
     "calibration_move_motion_type": "ptp",
     "calibration_move_blendR": 0.0
   },
-  "interpolation": {
-    "path_tangent_lookahead_mm": 15.0,
-    "path_tangent_deadband_deg": 0.0
-  },
   "enable_pivot_debug_plot": false,
   "enable_path_debug_plots": false
 }

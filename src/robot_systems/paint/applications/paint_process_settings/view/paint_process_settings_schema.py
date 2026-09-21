@@ -454,15 +454,6 @@ def build_cleanup_groups() -> list[SettingGroup]:
     ]
 
 
-def build_interpolation_groups() -> list[SettingGroup]:
-    return [
-        SettingGroup(_t("Path Tangent"), [
-            _mm_field("path_tangent_lookahead_mm", "Tangent Lookahead", default=15.0, min_val=1.0),
-            _deg_field("path_tangent_deadband_deg", "Tangent Deadband", default=5.0, min_val=0.0),
-        ]),
-    ]
-
-
 def build_diagnostics_groups() -> list[SettingGroup]:
     return [
         SettingGroup(_t("Debug"), [
@@ -485,7 +476,6 @@ def build_paint_process_settings_tabs(
         (_t("Motion Speeds"), build_motion_speed_groups()),
         (_t("Distances & Offsets"), build_distance_offset_groups()),
         (_t("Paint Path"), build_paint_path_groups()),
-        (_t("Interpolation"), build_interpolation_groups()),
         (_t("Cleanup"), build_cleanup_groups()),
         (_t("Diagnostics"), build_diagnostics_groups()),
     ]

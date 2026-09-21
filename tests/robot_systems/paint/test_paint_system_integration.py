@@ -88,7 +88,7 @@ class TestPaintApplicationWiring(unittest.TestCase):
         self.assertIs(kwargs["transformer_getter"](), transformer)
         self.assertIs(kwargs["resolver_getter"](), resolver)
         self.assertEqual(123.0, kwargs["z_min"])
-        self.assertEqual("path_tangent", kwargs["rz_mode"])
+        self.assertEqual("constant", kwargs["rz_mode"])
         self.assertTrue(kwargs["execute_from_workpiece_layer"])
         self.assertEqual("paint_frame", kwargs["calibration_frame_name"])
         self.assertEqual(application_wiring._get_paint_execution_target_point_name(robot_system), kwargs["target_point_name"])
@@ -106,8 +106,8 @@ class TestPaintApplicationWiring(unittest.TestCase):
         self.assertEqual([1, 2, 3, 4, 5, 6], kwargs["base_position_provider"]())
         contour_settings = {}
         kwargs["source_contour_processor"](np.asarray([[0.0, 0.0], [10.0, 0.0], [10.0, 10.0]], dtype=float), contour_settings)
-        self.assertEqual(15.0, contour_settings["path_tangent_lookahead_mm"])
-        self.assertEqual(5.0, contour_settings["path_tangent_deadband_deg"])
+        self.assertNotIn("path_tangent_lookahead_mm", contour_settings)
+        self.assertNotIn("path_tangent_deadband_deg", contour_settings)
         from src.robot_systems.paint import paint_system_config
         raw_robot_path = np.asarray([
             [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],

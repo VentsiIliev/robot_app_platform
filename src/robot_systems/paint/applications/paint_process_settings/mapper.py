@@ -284,7 +284,6 @@ class PaintProcessSettingsMapper:
         safe_travel = settings.safe_travel
         dropoff_safe_travel = settings.dropoff_safe_travel
         nav = settings.navigation_return
-        interpolation = settings.interpolation
         return {
             "enable_vacuum_pump": settings.enable_vacuum_pump,
             "stop_after_calibration_pickup": settings.stop_after_calibration_pickup,
@@ -510,8 +509,6 @@ class PaintProcessSettingsMapper:
                     "calibration_move_acc_percent",
                 ),
             ],
-            "path_tangent_lookahead_mm": interpolation.path_tangent_lookahead_mm,
-            "path_tangent_deadband_deg": interpolation.path_tangent_deadband_deg,
             "enable_pivot_debug_plot": settings.enable_pivot_debug_plot,
             "enable_path_debug_plots": settings.enable_path_debug_plots,
             "enable_execution_motion_trace": settings.enable_execution_motion_trace,
@@ -994,15 +991,6 @@ class PaintProcessSettingsMapper:
             calibration_move_motion_type=str(PaintProcessSettingsMapper._profile_value(navigation_profiles, "calibration_move", "motion_type", flat, "nav_calibration_move_motion_type", base.navigation_return.calibration_move_motion_type)),
             calibration_move_blendR=float(PaintProcessSettingsMapper._profile_value(navigation_profiles, "calibration_move", "blendR", flat, "nav_calibration_move_blendR", base.navigation_return.calibration_move_blendR)),
         )
-        interpolation = replace(
-            base.interpolation,
-            path_tangent_lookahead_mm=float(
-                flat.get("path_tangent_lookahead_mm", base.interpolation.path_tangent_lookahead_mm)
-            ),
-            path_tangent_deadband_deg=float(
-                flat.get("path_tangent_deadband_deg", base.interpolation.path_tangent_deadband_deg)
-            ),
-        )
         return replace(
             base,
             enable_z_shift_pixel_compensation=bool(
@@ -1088,7 +1076,6 @@ class PaintProcessSettingsMapper:
             safe_travel=safe_travel,
             dropoff_safe_travel=dropoff_safe_travel,
             navigation_return=nav,
-            interpolation=interpolation,
             enable_pivot_debug_plot=bool(flat.get("enable_pivot_debug_plot", base.enable_pivot_debug_plot)),
             enable_path_debug_plots=bool(flat.get("enable_path_debug_plots", base.enable_path_debug_plots)),
         )

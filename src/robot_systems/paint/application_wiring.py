@@ -415,19 +415,12 @@ def _build_paint_path_preparation_service(robot_system):
     def _pose_path_from_xy(xy_points):
         return [[float(point[0]), float(point[1]), 0.0, 0.0, 0.0, 0.0] for point in xy_points]
 
-    def _apply_process_interpolation_settings(settings):
-        interpolation = _get_paint_process_config(robot_system).interpolation
-        settings["path_tangent_lookahead_mm"] = float(interpolation.path_tangent_lookahead_mm)
-        settings["path_tangent_deadband_deg"] = float(interpolation.path_tangent_deadband_deg)
-        return settings
-
     def _paint_source_contour_processor(pts_px, settings):
         started_at = perf_counter()
-        _apply_process_interpolation_settings(settings)
         if _bypass_contour_preparation_enabled():
             _logger.warning(
-                "[PAINT_DIAGNOSTIC_BYPASS] Pixel contour interpolation, smoothing, "
-                "fairing, and cleanup are DISABLED; using %d captured points directly",
+                "[PAINT_DIAGNOSTIC_BYPASS] Pixel contour interpolation and smoothing "
+                "are DISABLED; using %d captured points directly",
                 len(pts_px),
             )
             return np.asarray(pts_px, dtype=float)[:, :2].copy()
@@ -452,11 +445,10 @@ def _build_paint_path_preparation_service(robot_system):
 
     def _paint_mm_contour_processor(path_pts, settings):
         started_at = perf_counter()
-        _apply_process_interpolation_settings(settings)
         if _bypass_contour_preparation_enabled():
             _logger.warning(
-                "[PAINT_DIAGNOSTIC_BYPASS] Robot-space 1 mm resampling and contour "
-                "cleanup are DISABLED; using %d transformed points directly",
+                "[PAINT_DIAGNOSTIC_BYPASS] Robot-space 1 mm resampling, hairpin cleanup, "
+                "and bounded smoothing are DISABLED; using %d transformed points directly",
                 len(path_pts),
             )
             unchanged_xy = np.asarray(path_pts, dtype=float)[:, :2].copy()
@@ -536,7 +528,7 @@ def _build_paint_path_preparation_service(robot_system):
         transformer_getter=lambda: robot_system.get_shared_vision_resolver()[0],
         resolver_getter=lambda: robot_system.get_shared_vision_resolver()[1],
         z_min=z_min,
-        rz_mode="path_tangent",
+        rz_mode="constant",
         execute_from_workpiece_layer=True,
         target_point_name=execution_target_point_name,
         pickup_target_point_name=execution_target_point_name,

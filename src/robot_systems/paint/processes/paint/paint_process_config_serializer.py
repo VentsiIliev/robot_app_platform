@@ -9,7 +9,6 @@ from src.robot_systems.paint.processes.paint.config import (
     PAINT_PROCESS_CONFIG,
     PaintDropoffConfig,
     PaintEdgeCleanupConfig,
-    PaintInterpolationConfig,
     PaintMagazineLoadConfig,
     PaintNavigationReturnConfig,
     PaintContactStagingConfig,
@@ -63,7 +62,6 @@ class PaintProcessConfigSerializer(ISettingsSerializer[PaintProcessConfig]):
                 "safe_travel",
                 "dropoff_safe_travel",
                 "navigation_return",
-                "interpolation",
                 "unmatched_second_pass",
             }
         })
@@ -134,11 +132,6 @@ class PaintProcessConfigSerializer(ISettingsSerializer[PaintProcessConfig]):
             PaintNavigationReturnConfig,
             _section(raw, "navigation_return"),
             default.navigation_return,
-        )
-        values["interpolation"] = _build_dataclass(
-            PaintInterpolationConfig,
-            _section(raw, "interpolation"),
-            default.interpolation,
         )
         values["unmatched_second_pass"] = _build_dataclass(
             UnmatchedSecondPassConfig,

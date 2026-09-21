@@ -355,16 +355,6 @@ class PaintNavigationReturnConfig:
 
 
 @dataclass(frozen=True)
-class PaintInterpolationConfig:
-    """Path-heading interpolation tuning for paint contour preparation."""
-
-    # Lookahead distance used when deriving per-point RZ from the path tangent.
-    path_tangent_lookahead_mm: float = 15.0  # [LIVE SETTINGS]
-    # Ignore smaller tangent heading changes when rebuilding path RZ.
-    path_tangent_deadband_deg: float = 5.0  # [LIVE SETTINGS]
-
-
-@dataclass(frozen=True)
 class PaintProjectionTuning:
     """Numeric tuning values for projected paint-path geometry."""
     smooth_max_linear_step_mm: float = 1.0
@@ -508,8 +498,6 @@ class PaintProcessConfig:
     dropoff_safe_travel: PaintToDropoffSafeTravelConfig = field(default_factory=PaintToDropoffSafeTravelConfig)
     # Cleanup return motion used before moving back to calibration.
     navigation_return: PaintNavigationReturnConfig = field(default_factory=PaintNavigationReturnConfig)
-    # Interpolation and heading reconstruction tuning.
-    interpolation: PaintInterpolationConfig = field(default_factory=PaintInterpolationConfig)
     # Enables the matplotlib debug plot generated after pivot path computation.
     enable_pivot_debug_plot: bool = False  # [LIVE SETTINGS]
     # Enables path-preparation diagnostic plots such as contour canonicalization and trajectory comparison.

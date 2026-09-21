@@ -145,7 +145,7 @@ class TestPaintContourInterpolation(unittest.TestCase):
         self.assertLessEqual(float(np.mean(execution_to_raw)), 0.8)
         self.assertLessEqual(_max_xy_spacing(result.execution_path), 3.0 + 1e-9)
 
-    def test_resample_contour_removes_tiny_backtrack_fold(self) -> None:
+    def test_mm_hairpin_cleanup_removes_fold_after_simple_resampling(self) -> None:
         folded_paths = [
             np.asarray(
                 [
@@ -174,12 +174,17 @@ class TestPaintContourInterpolation(unittest.TestCase):
         for raw_xy in folded_paths:
             with self.subTest(raw_xy=raw_xy.tolist()):
                 resampled = resample_contour_xy(raw_xy, spacing=1.0, closed=False)
-                vectors = np.diff(resampled, axis=0)
+                cleaned = remove_local_hairpin_reversals_xy(
+                    resampled,
+                    spacing=1.0,
+                    closed=False,
+                )
+                vectors = np.diff(cleaned, axis=0)
                 lengths = np.linalg.norm(vectors, axis=1)
                 unit_vectors = vectors[lengths > 1e-9] / lengths[lengths > 1e-9, None]
                 turn_dots = np.sum(unit_vectors[1:] * unit_vectors[:-1], axis=1)
 
-                self.assertGreaterEqual(len(resampled), 4)
+                self.assertGreaterEqual(len(cleaned), 4)
                 self.assertTrue(np.all(turn_dots > -0.95))
 
 

@@ -265,15 +265,12 @@ class TestPaintProcessConfig(unittest.TestCase):
         self.assertEqual(default_config.pickup_motion.stage_transition_acc_percent, 20.0)
         self.assertEqual(default_config.pickup_motion.first_contact_vel_percent, 80.0)
         self.assertEqual(default_config.pickup_motion.first_contact_acc_percent, 30.0)
-        self.assertEqual(default_config.interpolation.path_tangent_lookahead_mm, 15.0)
-        self.assertEqual(default_config.interpolation.path_tangent_deadband_deg, 5.0)
-
-    def test_process_settings_mapper_roundtrips_interpolation_settings(self) -> None:
+    def test_process_settings_mapper_ignores_removed_interpolation_settings(self) -> None:
         base = PaintProcessConfig()
         flat = PaintProcessSettingsMapper.to_flat_dict(base)
 
-        self.assertEqual(flat["path_tangent_lookahead_mm"], 15.0)
-        self.assertEqual(flat["path_tangent_deadband_deg"], 5.0)
+        self.assertNotIn("path_tangent_lookahead_mm", flat)
+        self.assertNotIn("path_tangent_deadband_deg", flat)
 
         restored = PaintProcessSettingsMapper.from_flat_dict(
             {
@@ -284,8 +281,7 @@ class TestPaintProcessConfig(unittest.TestCase):
             base,
         )
 
-        self.assertEqual(restored.interpolation.path_tangent_lookahead_mm, 22.5)
-        self.assertEqual(restored.interpolation.path_tangent_deadband_deg, 3.5)
+        self.assertFalse(hasattr(restored, "interpolation"))
 
     def test_process_settings_mapper_roundtrips_default_paint_motion(self) -> None:
         base = PaintProcessConfig()
@@ -485,12 +481,9 @@ class TestPaintProcessConfig(unittest.TestCase):
         self.assertTrue(restored.safe_travel.enabled)
         self.assertEqual([1, 2, 3, 4, 5, 6], restored.safe_travel.position)
 
-    def test_process_settings_schema_has_interpolation_tab(self) -> None:
+    def test_process_settings_schema_omits_removed_interpolation_tab(self) -> None:
         tabs = build_paint_process_settings_tabs()
-        interpolation = dict(tabs)["Interpolation"]
-        keys = [field.key for group in interpolation for field in group.fields]
-
-        self.assertEqual(keys, ["path_tangent_lookahead_mm", "path_tangent_deadband_deg"])
+        self.assertNotIn("Interpolation", dict(tabs))
 
     def test_default_paint_motion_controls_are_under_motion_speeds(self) -> None:
         tabs = dict(build_paint_process_settings_tabs())
