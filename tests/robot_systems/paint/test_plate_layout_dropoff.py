@@ -2,15 +2,16 @@ import unittest
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import MagicMock
-from src.engine.robot.motion_sequence import serialize_ordered_motion_commands
+from src.engine.robot.motion_sequence import OrderedMotionType, serialize_ordered_motion_commands
 
-from src.robot_systems.paint.processes.paint.config import PaintDropoffConfig
+from src.robot_systems.paint.processes.paint.config import DropoffStrategy, PaintDropoffConfig
 from src.robot_systems.paint.processes.paint.config import PaintProcessConfig
+from src.robot_systems.paint.processes.paint.next_cycle_target import NextCycleTarget
 from src.robot_systems.paint.applications.paint_process_settings.mapper import PaintProcessSettingsMapper
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_execute_pickup_release_handler import (
     calculate_workpiece_dropoff_pose,
 )
-from src.robot_systems.paint.processes.paint.plate_layout import (
+from src.robot_systems.paint.processes.paint.tray_dry.plate_layout import (
     PlateLayoutService,
     validate_plate_corners,
 )
@@ -163,6 +164,7 @@ class TestPlateLayoutDropoff(unittest.TestCase):
     def test_automatic_center_route_is_used_inside_half_corner_to_center_radius(self) -> None:
         dropoff = SimpleNamespace(
             plate_use_center_waypoint=False,
+            plate_auto_center_near_corner=True,
             plate_corners=[[0.0, 0.0, 0.0, 180.0, 0.0, 0.0]],
         )
         reservation = SimpleNamespace(
@@ -175,6 +177,7 @@ class TestPlateLayoutDropoff(unittest.TestCase):
     def test_automatic_center_route_is_skipped_outside_half_corner_to_center_radius(self) -> None:
         dropoff = SimpleNamespace(
             plate_use_center_waypoint=False,
+            plate_auto_center_near_corner=True,
             plate_corners=[[0.0, 0.0, 0.0, 180.0, 0.0, 0.0]],
         )
         reservation = SimpleNamespace(
@@ -219,9 +222,21 @@ class TestPlateLayoutDropoff(unittest.TestCase):
         ))
         self.assertEqual(3, executor._robot_service.get_execution_status.call_count)
 
+    def test_plate_entry_rejects_missing_execution_status_api(self) -> None:
+        executor = SimpleNamespace(_robot_service=SimpleNamespace())
+
+        self.assertFalse(_wait_for_motion_slot_idle(executor, timeout_s=0.1))
+
+    def test_plate_entry_rejects_malformed_execution_status(self) -> None:
+        executor = SimpleNamespace(
+            _robot_service=SimpleNamespace(get_execution_status=lambda: None)
+        )
+
+        self.assertFalse(_wait_for_motion_slot_idle(executor, timeout_s=0.1))
+
     def test_plate_dropoff_preparation_is_not_appended_to_pickup_paint_chain(self) -> None:
         executor = MagicMock()
-        executor._paint_process_config.return_value.dropoff.strategy = "plate_layout"
+        executor._paint_process_config.return_value.dropoff.strategy = DropoffStrategy.PLATE_LAYOUT
 
         self.assertFalse(_should_preplan_dropoff_in_ordered_chain(executor))
         executor._edge_cleanup.should_run_after_xz_ry.assert_not_called()
@@ -229,7 +244,7 @@ class TestPlateLayoutDropoff(unittest.TestCase):
 
     def test_existing_dropoff_strategy_keeps_ordered_preparation(self) -> None:
         executor = MagicMock()
-        executor._paint_process_config.return_value.dropoff.strategy = "movement_group"
+        executor._paint_process_config.return_value.dropoff.strategy = DropoffStrategy.MOVEMENT_GROUP
         executor._edge_cleanup.should_run_after_xz_ry.return_value = False
         executor._edge_cleanup.should_run_after_xy_rz.return_value = False
 
@@ -384,13 +399,23 @@ class TestPlateLayoutDropoff(unittest.TestCase):
         executor._motion.turn_vacuum_off.return_value = (True, "")
         executor._enable_vacuum_pump = False
         executor._is_vacuum_pump_enabled.return_value = False
+        executor._robot_service.get_execution_status.return_value = {
+            "is_executing": False,
+            "state": "idle",
+        }
         executor._robot_service.get_current_position_fresh.side_effect = [
             [0, 0, 0, 180, 0, 360],
             [200, 100, 180, 180, 0, 0],
             [10, 20, 30, 180, 0, 0],
             [10, 20, 30, 180, 0, 0],
         ]
-        next_start = {"group_id": "Start", "position": [10, 20, 30, 180, 0, 0]}
+        next_start = NextCycleTarget(
+            group_id="Start",
+            position=(10, 20, 30, 180, 0, 0),
+            velocity_percent=30.0,
+            acceleration_percent=30.0,
+            motion_type=OrderedMotionType.PTP,
+        )
 
         ok, message = _execute_plate_layout_ordered_release(executor, next_cycle_start=next_start)
 

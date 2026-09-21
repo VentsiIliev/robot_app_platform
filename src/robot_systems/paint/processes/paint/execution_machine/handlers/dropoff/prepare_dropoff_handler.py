@@ -27,12 +27,17 @@ def handle_prepare_dropoff(ctx: PaintExecutionContext) -> PaintExecutionState:
 
     ok, msg = execute_dropoff_preparation_for_executor(executor)
     if not ok:
-        _logger.info(
-            "[TIMING] paint_process success=false stage=prepare_dropoff_unwind total_elapsed_s=%.3f",
-            elapsed_s(ctx.paint_started_at),
-        )
+        log_timing(ctx, "prepare_dropoff")
         set_paint_result(ctx, False, msg)
         finish_paint_motion(ctx, success=False)
         return PaintExecutionState.ERROR
     executor._dropoff_unwind_prepared = True
     return PaintExecutionState.DROPOFF
+
+
+def log_timing(ctx: PaintExecutionContext, stage: str) -> None:
+    _logger.debug(
+        "[TIMING] paint_process success=false stage=%s total_elapsed_s=%.3f",
+        stage,
+        elapsed_s(ctx.paint_started_at),
+    )

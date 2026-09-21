@@ -126,7 +126,7 @@ class TestFixedMagazinePickup(unittest.TestCase):
 
         self.assertTrue(ok, message)
         waypoints = execute_servo.call_args.args[1]
-        self.assertEqual([10.0, 20.0, 120.0, 180.0, 0.0, 30.0], waypoints[0][1])
+        self.assertEqual([10.0, 20.0, 120.0, 180.0, 0.0, 30.0], waypoints[0].pose)
         self.assertEqual(
             [10.0, 20.0, 120.0, 180.0, 0.0, 30.0],
             execute_servo.call_args.kwargs["retract_reference_pose"],
@@ -169,24 +169,19 @@ class TestFixedMagazinePickup(unittest.TestCase):
 
         self.assertEqual(MAGAZINE_PICKUP_MODE_VISION_PLANNED, restored.magazine_load.pickup_mode)
 
-    def test_legacy_servo_and_fixed_target_migrate_to_combined_mode(self):
-        restored = PaintProcessConfigSerializer().from_dict({
-            "pickup_motion": {"magazine_pickup_contact_mode": "servo_contact"},
-            "magazine_load": {"pickup_target_mode": "fixed_group"},
-        })
+    def test_legacy_servo_and_fixed_target_are_rejected(self):
+        with self.assertRaisesRegex(ValueError, "magazine_pickup_contact_mode"):
+            PaintProcessConfigSerializer().from_dict({
+                "pickup_motion": {"magazine_pickup_contact_mode": "servo_contact"},
+                "magazine_load": {"pickup_target_mode": "fixed_group"},
+            })
 
-        self.assertEqual(
-            MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN,
-            restored.magazine_load.pickup_mode,
-        )
-
-    def test_legacy_servo_without_target_migrates_to_vision_servo(self):
-        restored = PaintProcessConfigSerializer().from_dict({
-            "pickup_motion": {"magazine_pickup_contact_mode": "servo_contact"},
-            "magazine_load": {},
-        })
-
-        self.assertEqual(MAGAZINE_PICKUP_MODE_VISION_SENSOR_CONTROLLED_FAST_LIN, restored.magazine_load.pickup_mode)
+    def test_legacy_servo_without_target_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "magazine_pickup_contact_mode"):
+            PaintProcessConfigSerializer().from_dict({
+                "pickup_motion": {"magazine_pickup_contact_mode": "servo_contact"},
+                "magazine_load": {},
+            })
 
     def test_fixed_group_settings_round_trip_through_ui_mapper(self):
         base = PaintProcessConfig()

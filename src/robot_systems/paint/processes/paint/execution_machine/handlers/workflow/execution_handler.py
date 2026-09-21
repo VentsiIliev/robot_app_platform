@@ -14,14 +14,12 @@ def handle_execute_paint(ctx: PaintExecutionContext) -> PaintExecutionState:
 
     service = ctx.production_service
     phase_start = perf_counter()
-    execute_process = getattr(service._path_executor, "execute_paint_process", None)
-    if execute_process is None:
-        execute_process = service._path_executor.execute_pickup_and_paint
-    try:
-        ok, msg = execute_process(ctx.execution_plan, control=ctx.control)
-    except TypeError:
-        ok, msg = execute_process(ctx.execution_plan)
+    ok, msg = service._path_executor.execute_paint_process(
+        ctx.execution_plan,
+        control=ctx.control,
+    )
     service._log_phase_timing("paint_execution", phase_start, success=ok, cycle=ctx.cycle_index)
+
     if not ok:
         prefix = f"{ctx.workpiece_description}: " if ctx.workpiece_description else ""
         ctx.set_result(False, f"{prefix}{msg}")
@@ -30,4 +28,5 @@ def handle_execute_paint(ctx: PaintExecutionContext) -> PaintExecutionState:
     service._log_phase_timing("run_once_total", ctx.total_started_at, success=True, cycle=ctx.cycle_index)
     prefix = f"{ctx.workpiece_description}: " if ctx.workpiece_description else ""
     ctx.set_result(True, f"{prefix}{msg}")
+
     return PaintExecutionState.COMPLETED

@@ -22,6 +22,7 @@ from src.robot_systems.paint.processes.paint.execute.projection_preview import (
     projection_tool_anchor_xy,
 )
 from src.robot_systems.paint.processes.paint.motion.path_geometry import shift_path_rotation
+from src.robot_systems.paint.processes.paint.paint_contact_job import PaintContactCommandJob
 from src.robot_systems.paint.timing import timed_block, timed_step
 
 _logger = logging.getLogger(__name__)
@@ -85,15 +86,7 @@ def _remove_projected_local_reversals(
 def _workpiece_min_rect_size_mm(execution_plan: WorkpieceExecutionPlan) -> tuple[float, float]:
     """Return the prepared geometry's minimum-area-rectangle sides in millimetres."""
     points: list[list[float]] = []
-    execution_paths = getattr(execution_plan, "execution_paths", None)
-    paths = (
-        execution_paths()
-        if callable(execution_paths)
-        else [
-            list(job.get("execution_path") or job.get("path") or [])
-            for job in getattr(execution_plan, "execution_jobs", [])
-        ]
-    )
+    paths = execution_plan.execution_paths()
     for path in paths:
         points.extend(pose for pose in path if len(pose) >= 2)
     if not points:
@@ -158,7 +151,7 @@ class PaintContactExecutor:
         retreat_fn: Callable[[list[list[float]]], list[list[float]]] | None = None,
         execute_robot: bool = True,
         collected_command_paths: list[list[list[float]]] | None = None,
-        collected_command_jobs: list[dict] | None = None,
+        collected_command_jobs: list[PaintContactCommandJob] | None = None,
         control=None,
         pivot_offset_override_mm: float | None = None,
     ) -> tuple[bool, str, int]:
@@ -179,7 +172,6 @@ class PaintContactExecutor:
             workpiece_height_mm,
             detach_clearance_mm,
         )
-        total_jobs = len(execution_plan.execution_jobs)
         for job_index, job in enumerate(execution_plan.execution_jobs, start=1):
             job_label = f"job_{job_index}"
             job_started = perf_counter()
@@ -237,7 +229,7 @@ class PaintContactExecutor:
                         source_rotation_deg=source_rotation_deg,
                     )
             if not projected:
-                _logger.info(
+                _logger.debug(
                     "[TIMING] paint_contact_job index=%d pattern=%s success=false stage=build total_elapsed_s=%.3f",
                     job_index,
                     pattern_type,
@@ -246,7 +238,7 @@ class PaintContactExecutor:
                 return False, "Pickup succeeded, but paint-contact geometry could not be built", total_waypoints
             pivot_path, snapshots, diagnostics, pivot_pose = projected
             if not pivot_path:
-                _logger.info(
+                _logger.debug(
                     "[TIMING] paint_contact_job index=%d pattern=%s success=false stage=build total_elapsed_s=%.3f",
                     job_index,
                     pattern_type,
@@ -375,19 +367,17 @@ class PaintContactExecutor:
             if collected_command_paths is not None:
                 collected_command_paths.append([list(pose) for pose in command_pivot_path])
             if collected_command_jobs is not None:
-                collected_command_jobs.append(
-                    {
-                        "job_index": job_index,
-                        "pattern_type": pattern_type,
-                        "vel": vel,
-                        "acc": acc,
-                    }
-                )
+                collected_command_jobs.append(PaintContactCommandJob(
+                    job_index=job_index,
+                    pattern_type=str(pattern_type),
+                    velocity_percent=float(vel),
+                    acceleration_percent=float(acc),
+                ))
 
             if not execute_robot:
                 total_waypoints += len(command_pivot_path)
                 owner._last_process_end_pose = list(command_pivot_path[-1])
-                _logger.info(
+                _logger.debug(
                     "[TIMING] paint_contact_job index=%d pattern=%s success=true input_pts=%d output_pts=%d execute_skipped=true total_elapsed_s=%.3f",
                     job_index,
                     pattern_type,
@@ -398,17 +388,10 @@ class PaintContactExecutor:
                 continue
 
             paint_pivot_config = owner._contact_motion_config
-            if job_index == total_jobs:
-                edge_cleanup = getattr(owner, "_edge_cleanup", None)
-                start_preplanning = getattr(edge_cleanup, "start_preplanning_during_paint", None)
-                if callable(start_preplanning):
-                    start_preplanning(execution_plan, started=started)
-
             execute_started = perf_counter()
             with timed_block(_logger, "paint_contact_job_robot_execute", label=f"{job_label}:{pattern_type}"):
-                protected_phase = getattr(control, "protected_phase", None)
-                if callable(protected_phase):
-                    with protected_phase():
+                if control is not None:
+                    with control.protected_phase():
                         result = execute_paint_trajectory_with_optional_trace(
                             robot_service=owner._robot_service,
                             debug_dump_dir=owner._debug_dump_dir,
@@ -437,7 +420,7 @@ class PaintContactExecutor:
                         paint_process_config=owner._paint_process_config(),
                     )
             if result not in (0, True, None):
-                _logger.info(
+                _logger.debug(
                     "[TIMING] paint_contact_job index=%d pattern=%s success=false input_pts=%d output_pts=%d execute_elapsed_s=%.3f total_elapsed_s=%.3f",
                     job_index,
                     pattern_type,
@@ -449,7 +432,7 @@ class PaintContactExecutor:
                 return False, f"Pickup succeeded, but {pattern_type} paint contact failed with code {result}", total_waypoints
             total_waypoints += len(command_pivot_path)
             owner._last_process_end_pose = list(command_pivot_path[-1])
-            _logger.info(
+            _logger.debug(
                 "[TIMING] paint_contact_job index=%d pattern=%s success=true input_pts=%d output_pts=%d execute_elapsed_s=%.3f total_elapsed_s=%.3f",
                 job_index,
                 pattern_type,
@@ -458,10 +441,9 @@ class PaintContactExecutor:
                 elapsed_s(execute_started),
                 elapsed_s(job_started),
             )
-            wait_if_paused = getattr(control, "wait_if_paused", None)
-            if callable(wait_if_paused) and not wait_if_paused():
+            if control is not None and not control.wait_if_paused():
                 return False, "Paint process stopped", total_waypoints
-        _logger.info(
+        _logger.debug(
             "[TIMING] paint_contact_paths success=true jobs=%d total_waypoints=%d elapsed_s=%.3f",
             len(execution_plan.execution_jobs),
             total_waypoints,

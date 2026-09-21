@@ -34,6 +34,8 @@ from src.robot_systems.paint.processes.paint.execute.paint_contact_executor impo
 )
 from src.engine.robot.path_preparation import WorkpieceExecutionPlan
 from src.robot_systems.paint.processes.paint.execute.workpiece_path_executor import (
+    PaintExecutorContactMotionConfig,
+    PaintExecutorDependencies,
     PaintWorkpiecePathExecutor,
     _camera_to_tcp_delta,
     _normalize_contact_motion_config,
@@ -561,9 +563,13 @@ class TestPaintProcessConfig(unittest.TestCase):
             },
         )()
         executor = PaintWorkpiecePathExecutor(
-            robot_service=None,
-            pivot_motion_plane="xz_y_ry",
-            paint_process_config_service=service,
+            dependencies=PaintExecutorDependencies(
+                robot_service=None,
+                paint_process_config_service=service,
+            ),
+            contact_motion_config=PaintExecutorContactMotionConfig(
+                motion_plane="xz_y_ry"
+            ),
         )
 
         executor._refresh_paint_process_config_snapshot()

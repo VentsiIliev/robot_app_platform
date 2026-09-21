@@ -3,6 +3,7 @@ from .servo_until_condition import (
     ServoUntilConditionResult,
     ServoUntilConditionProcedure,
     ServoRetractConfig,
+    ServoRetractMotionType,
 )
 from .dummy_pickup_condition import TimedDummyPickupCondition
 from .vacuum_pickup_condition import VacuumPickupCondition
@@ -12,6 +13,7 @@ __all__ = [
     "ServoUntilConditionResult",
     "ServoUntilConditionProcedure",
     "ServoRetractConfig",
+    "ServoRetractMotionType",
     "TimedDummyPickupCondition",
     "VacuumPickupCondition",
 ]

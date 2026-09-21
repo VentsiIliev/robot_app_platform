@@ -13,6 +13,7 @@ from src.robot_systems.paint.processes.paint.motion import (
 from src.robot_systems.paint.processes.paint.execute.pickup_executor import (
     build_ordered_paint_contact_segments,
 )
+from src.robot_systems.paint.processes.paint.paint_contact_job import PaintContactCommandJob
 
 
 class _FakeClock:
@@ -156,7 +157,12 @@ class TestOrderedPaintContactCommands(unittest.TestCase):
                 [1.0, 2.0, 3.0, 180.0, 0.0, 10.0],
                 [2.0, 2.0, 3.0, 180.0, 0.0, 20.0],
             ]],
-            paint_jobs=[{"pattern_type": "Contour", "vel": 12.0, "acc": 40.0}],
+            paint_jobs=[PaintContactCommandJob(
+                job_index=0,
+                pattern_type="Contour",
+                velocity_percent=12.0,
+                acceleration_percent=40.0,
+            )],
             contact_staging=SimpleNamespace(
                 attach_vel_percent=20.0,
                 attach_acc_percent=30.0,

@@ -31,6 +31,7 @@ def handle_edge_cleanup(ctx: PaintExecutionContext) -> PaintExecutionState:
         if not ok:
             fail_paint_motion(ctx, msg)
             return PaintExecutionState.ERROR
+
     elif executor._edge_cleanup.should_run_after_xy_rz():
         ok, msg, cleanup_waypoints = executor._edge_cleanup.execute_after_xy_rz_paint(
             ctx.execution_plan,
@@ -39,10 +40,11 @@ def handle_edge_cleanup(ctx: PaintExecutionContext) -> PaintExecutionState:
         )
         ctx.paint_total_waypoints += int(cleanup_waypoints)
         if not ok:
-            _logger.info(
+            _logger.debug(
                 "[TIMING] paint_process success=false stage=edge_cleanup_xy_rz total_elapsed_s=%.3f",
                 elapsed_s(ctx.paint_started_at),
             )
             fail_paint_motion(ctx, msg)
             return PaintExecutionState.ERROR
+
     return PaintExecutionState.PREPARE_DROPOFF

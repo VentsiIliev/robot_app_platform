@@ -40,9 +40,6 @@ from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_execute_pickup_release_handler import (
     handle_magazine_execute_pickup_release,
 )
-from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_load_compat_handler import (
-    handle_magazine_load,
-)
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_move_to_calibration_handler import (
     handle_magazine_move_to_calibration,
 )
@@ -105,7 +102,6 @@ class PaintExecutionMachineFactory:
             context.state_timing_recorder = TimingRecorder(f"paint_execution_cycle_{context.cycle_index}")
 
         _register(registry, context, S.STARTING, handle_starting)
-        _register(registry, context, S.MAGAZINE_LOAD, handle_magazine_load)
         _register(registry, context, S.MAGAZINE_MOVE_TO_MAGAZINE, handle_magazine_move_to_magazine)
         _register(registry, context, S.MAGAZINE_WAIT_CAMERA_SETTLE, handle_magazine_wait_camera_settle)
         _register(registry, context, S.MAGAZINE_CAPTURE, handle_magazine_capture)
@@ -251,4 +247,4 @@ def _state_timing_enabled(context: PaintExecutionContext) -> bool:
     config = context.process_config
     if config is None:
         return True
-    return bool(getattr(config, "enable_execution_state_timing", True))
+    return bool(config.enable_execution_state_timing)

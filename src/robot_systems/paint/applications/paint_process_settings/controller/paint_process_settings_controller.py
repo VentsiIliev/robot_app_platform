@@ -242,7 +242,7 @@ class PaintProcessSettingsController(IApplicationController, BackgroundWorker):
         if strategy == "movement_group":
             return self._model.is_dropoff_movement_group_configured()
         if strategy == "plate_layout":
-            from src.robot_systems.paint.processes.paint.plate_layout import (
+            from src.robot_systems.paint.processes.paint.tray_dry.plate_layout import (
                 validate_plate_corners,
                 validate_plate_passage_gate,
             )

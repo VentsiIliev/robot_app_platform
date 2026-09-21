@@ -546,13 +546,13 @@ def execute_paint_trajectory_with_optional_trace(
     config = paint_process_config or PAINT_PROCESS_CONFIG
     trace = None
     if (
-        bool(getattr(config, "enable_execution_motion_trace", False))
+        bool(config.enable_execution_motion_trace)
         and robot_service is not None
     ):
         trace = start_robot_motion_trace(
             get_pose=robot_service.get_current_position,
             sample_period_s=float(
-                getattr(config, "execution_motion_trace_sample_period_s", 0.05)
+                config.execution_motion_trace_sample_period_s
             ),
         )
     try:

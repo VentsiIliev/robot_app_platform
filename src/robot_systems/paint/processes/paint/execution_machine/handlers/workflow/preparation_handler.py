@@ -29,9 +29,7 @@ def handle_prepare_workpiece(ctx: PaintExecutionContext) -> PaintExecutionState:
     ctx.raw_workpiece, ctx.workpiece_description = service._workpiece_preparation.prepare_workpiece(
         ctx.contour,
         ctx.snapshot.frame,
-        enable_matching=bool(
-            getattr(ctx.process_config, "enable_workpiece_matching", True)
-        ),
+        enable_matching=bool(ctx.process_config.enable_workpiece_matching),
         default_settings_override=_cycle_default_paint_settings(ctx),
     )
     service._log_phase_timing("workpiece_preparation", phase_start, cycle=ctx.cycle_index)

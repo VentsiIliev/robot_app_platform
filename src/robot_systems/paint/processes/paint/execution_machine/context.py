@@ -97,9 +97,9 @@ class PaintExecutionContext:
 
     def snapshot_dict(self) -> dict:
         return {
-            "current_state": getattr(self.current_state, "name", None),
-            "paused_from_state": getattr(self.paused_from_state, "name", None),
-            "resume_state": getattr(self.resume_state, "name", None),
+            "current_state": None if self.current_state is None else self.current_state.name,
+            "paused_from_state": None if self.paused_from_state is None else self.paused_from_state.name,
+            "resume_state": None if self.resume_state is None else self.resume_state.name,
             "stop_requested": self.should_stop(),
             "run_allowed": self.run_allowed.is_set(),
             "result_ok": self.result_ok,

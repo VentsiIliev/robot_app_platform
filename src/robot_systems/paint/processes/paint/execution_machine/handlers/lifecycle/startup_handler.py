@@ -4,9 +4,6 @@ from src.robot_systems.paint.processes.paint.execution_machine.context import Pa
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.common.motion_handlers import (
     unwind_joint6_at_cycle_start,
 )
-from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_load_handler import (
-    supports_fine_magazine_states,
-)
 from src.robot_systems.paint.processes.paint.execution_machine.state import PaintExecutionState
 
 
@@ -26,14 +23,14 @@ def handle_starting(ctx: PaintExecutionContext) -> PaintExecutionState:
     if ctx.cached_workpiece_contour is not None and ctx.snapshot is not None:
         service._restore_capture_view("processing cached staged workpiece")
         return PaintExecutionState.PREPARE_WORKPIECE
-    if ctx.magazine_config is not None and bool(getattr(ctx.magazine_config, "enabled", False)):
-        if supports_fine_magazine_states(getattr(service, "_magazine_load_service", None)):
-            service._set_dashboard_live_view_paused(
-                True,
-                reason="magazine workflow robot motion starting",
-            )
-            return PaintExecutionState.MAGAZINE_MOVE_TO_MAGAZINE
-        service._restore_capture_view("before legacy magazine load")
-        return PaintExecutionState.MAGAZINE_LOAD
+    if ctx.magazine_config is not None and ctx.magazine_config.enabled:
+        if service._magazine_load_service is None:
+            ctx.set_result(False, "Magazine loading is enabled but its service is not configured")
+            return PaintExecutionState.ERROR
+        service._set_dashboard_live_view_paused(
+            True,
+            reason="magazine workflow robot motion starting",
+        )
+        return PaintExecutionState.MAGAZINE_MOVE_TO_MAGAZINE
     service._restore_capture_view("at paint capture location")
     return PaintExecutionState.CAPTURE_WORKPIECE

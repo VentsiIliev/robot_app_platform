@@ -16,7 +16,13 @@ from src.engine.robot.motion_sequence import (
     OrderedUnwindJoint6Command,
 )
 from src.robot_systems.paint.processes.paint.motion.pose_comparison import poses_close
-from src.robot_systems.paint.processes.paint.config import PAINT_PROCESS_CONFIG
+from src.robot_systems.paint.processes.paint.motion.pose_sampling import read_fresh_pose
+from src.robot_systems.paint.processes.paint.next_cycle_target import NextCycleTarget
+from src.robot_systems.paint.processes.paint.config import (
+    PAINT_PROCESS_CONFIG,
+    PICKUP_CONTACT_MODE_SENSOR_CONTROLLED_FAST_LIN,
+    DropoffStrategy,
+)
 from src.robot_systems.paint.processes.paint.execute.diagnostics import elapsed_s
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.common.motion_handlers import (
     motion_failure_message,
@@ -96,35 +102,30 @@ class _PlateNextWaypoint:
 class DropoffReleasePlan:
     """Resolved release sequence for the currently held painted workpiece."""
 
-    strategy_name: str
+    strategy_name: DropoffStrategy
     waypoints: tuple[DropoffReleaseWaypoint, ...]
 
 
 def open_dropoff_passage_for_preparation(executor: object) -> tuple[bool, str]:
     """Open the configured passage before planning any route that crosses its lid."""
-    if _dropoff_strategy_name(executor) == "plate_layout":
+    if _dropoff_strategy_name(executor) is DropoffStrategy.PLATE_LAYOUT:
         return True, ""
     # Validate the configured release target before changing the planning scene.
     # A disabled sub-zero dropoff must not open the paint passage or allow an
     # ordered cleanup chain containing that target to execute.
-    if _dropoff_strategy_name(executor) == "movement_group":
+    if _dropoff_strategy_name(executor) is DropoffStrategy.MOVEMENT_GROUP:
         dropoff = executor._paint_process_config().dropoff
         pose = _resolve_dropoff_align_pose(executor)
-        if pose is not None and float(pose[2]) < 0.0 and not bool(
-            getattr(dropoff, "allow_sub_zero_dropoff", False)
-        ):
+        if pose is not None and float(pose[2]) < 0.0 and not dropoff.allow_sub_zero_dropoff:
             _logger.error(
                 "[DROPOFF] Refusing preparation before opening passage: "
                 "negative target with Allow Sub-Zero Dropoff disabled"
             )
             return False, "Dropoff cancelled: Allow Sub-Zero Dropoff is disabled"
-    passage_id = str(getattr(executor, "_dropoff_motion_corridor_id", "") or "")
+    passage_id = str(executor._dropoff_motion_corridor_id or "")
     if not passage_id:
         return True, ""
-    setter = getattr(executor._robot_service, "set_motion_passage_closed", None)
-    if not callable(setter):
-        return False, f"Dropoff preparation cancelled: passage control is unavailable for '{passage_id}'"
-    if not setter(passage_id, False):
+    if not executor._robot_service.set_motion_passage_closed(passage_id, False):
         return False, f"Dropoff preparation cancelled: failed to open passage '{passage_id}'"
     _logger.info("[DROPOFF] Opened motion passage '%s' before dropoff-route planning", passage_id)
     return True, ""
@@ -135,8 +136,8 @@ def execute_dropoff_preparation_for_executor(executor: object) -> tuple[bool, st
     """Build and execute paint-to-dropoff safe travel, align, and Joint 6 unwind."""
     dryer_ready = (
         None
-        if _dropoff_strategy_name(executor) == "plate_layout"
-        else getattr(executor, "_dryer_ready_for_release", None)
+        if _dropoff_strategy_name(executor) is DropoffStrategy.PLATE_LAYOUT
+        else executor._dryer_ready_for_release
     )
     if callable(dryer_ready):
         try:
@@ -152,7 +153,7 @@ def execute_dropoff_preparation_for_executor(executor: object) -> tuple[bool, st
         _logger.info("[DROPOFF] Pre-dropoff align/unwind already completed by ordered cleanup chain")
         return True, ""
 
-    if _dropoff_strategy_name(executor) == "plate_layout":
+    if _dropoff_strategy_name(executor) is DropoffStrategy.PLATE_LAYOUT:
         return _execute_plate_layout_preparation(executor)
 
     if _should_prepare_dropoff_align_before_unwind(executor):
@@ -160,12 +161,12 @@ def execute_dropoff_preparation_for_executor(executor: object) -> tuple[bool, st
         if not opened:
             return False, message
 
-    if getattr(executor, "_last_pickup_contact_mode", None) == "sensor_controlled_fast_lin":
+    if executor._last_pickup_contact_mode == PICKUP_CONTACT_MODE_SENSOR_CONTROLLED_FAST_LIN:
         commands, final_pose = build_ordered_dropoff_preparation_segments(executor)
         if not commands:
             return False, "Pivot paint finished, but ordered dropoff preparation could not be built"
         segments = commands
-        _logger.info(
+        _logger.debug(
             "[DROPOFF] Executing servo-contact dropoff preparation as one ordered chain segments=%d blendR=%s",
             len(segments),
             [
@@ -191,14 +192,11 @@ def execute_dropoff_preparation_for_executor(executor: object) -> tuple[bool, st
         for index, safe_waypoint in enumerate(safe_waypoints, start=1):
             if not executor._motion.move_pickup_phase(
                 f"Moving through paint-to-dropoff safe travel waypoint {index}",
-                safe_waypoint["position"],
-                velocity=float(safe_waypoint["vel_percent"]),
-                acceleration=float(safe_waypoint["acc_percent"]),
-                motion_type=_parse_motion_type(
-                    safe_waypoint.get("motion_type", OrderedMotionType.PTP),
-                    field_name=f"dropoff safe waypoint {index}",
-                ).value,
-                blendR=float(safe_waypoint.get("blendR", 0.0)),
+                safe_waypoint.position,
+                velocity=safe_waypoint.velocity_percent,
+                acceleration=safe_waypoint.acceleration_percent,
+                motion_type=safe_waypoint.motion_type,
+                blendR=safe_waypoint.blend_radius,
             ):
                 return False, "Pivot paint finished, but paint-to-dropoff safe travel move failed"
 
@@ -214,7 +212,7 @@ def execute_dropoff_preparation_for_executor(executor: object) -> tuple[bool, st
             motion_type=_parse_motion_type(
                 config.dropoff.release_align_motion_type,
                 field_name="dropoff.release_align_motion_type",
-            ).value,
+            ),
             blendR=float(config.dropoff.release_align_blendR),
         ):
             return False, "Pivot paint finished, but move to dropoff pose failed before unwind"
@@ -245,17 +243,17 @@ def execute_dropoff_preparation_for_executor(executor: object) -> tuple[bool, st
 def execute_dropoff_release_for_executor(
     executor: object,
     *,
-    next_cycle_start: dict | None = None,
+    next_cycle_start: NextCycleTarget | None = None,
 ) -> tuple[bool, str]:
     """Build and execute the configured dropoff release strategy."""
     started = perf_counter()
     executor._last_prepositioned_start_group = None
-    if _dropoff_strategy_name(executor) == "plate_layout":
+    if _dropoff_strategy_name(executor) is DropoffStrategy.PLATE_LAYOUT:
         return _execute_plate_layout_ordered_release(executor, next_cycle_start=next_cycle_start)
     plan = _build_dropoff_release_plan(executor)
     release_count = sum(1 for waypoint in plan.waypoints if waypoint.release_here)
     if release_count != 1:
-        if plan.strategy_name == "movement_group":
+        if plan.strategy_name is DropoffStrategy.MOVEMENT_GROUP:
             return False, "Dropoff movement group 'Dropoff' is not configured"
         return False, f"Dropoff strategy '{plan.strategy_name}' must define exactly one release waypoint"
 
@@ -270,9 +268,9 @@ def execute_dropoff_release_for_executor(
         if waypoint.release_here
     )
     ordered_release_pose_completed = (
-        bool(getattr(executor, "_dropoff_unwind_prepared", False))
+        bool(executor._dropoff_unwind_prepared)
         and release_waypoint.pose is not None
-        and poses_close(release_waypoint.pose, getattr(executor, "_last_process_end_pose", None))
+        and poses_close(release_waypoint.pose, executor._last_process_end_pose)
     )
     release_completed = False
     ordered_exit_waypoint: DropoffReleaseWaypoint | None = None
@@ -309,11 +307,11 @@ def execute_dropoff_release_for_executor(
                     OrderedMotionType.LINEAR
                     if waypoint.corridor_id
                     else waypoint.motion_type
-                ).value,
+                ),
                 blendR=waypoint.blendR,
                 corridor_id=waypoint.corridor_id,
             ):
-                _logger.info(
+                _logger.debug(
                     "[TIMING] pre_release_dropoff success=false strategy=%s waypoint=%d label=%s elapsed_s=%.3f total_elapsed_s=%.3f",
                     plan.strategy_name,
                     index,
@@ -332,7 +330,7 @@ def execute_dropoff_release_for_executor(
         if waypoint.release_here:
             ok, msg = executor._motion.turn_vacuum_off()
             if not ok:
-                _logger.info(
+                _logger.debug(
                     "[TIMING] pre_release_dropoff success=false strategy=%s waypoint=%d stage=release elapsed_s=%.3f total_elapsed_s=%.3f",
                     plan.strategy_name,
                     index,
@@ -342,7 +340,7 @@ def execute_dropoff_release_for_executor(
                 return False, msg
             ok, msg = _verify_workpiece_released(executor)
             if not ok:
-                _logger.info(
+                _logger.debug(
                     "[TIMING] pre_release_dropoff success=false strategy=%s waypoint=%d stage=release_verification elapsed_s=%.3f total_elapsed_s=%.3f",
                     plan.strategy_name,
                     index,
@@ -353,7 +351,7 @@ def execute_dropoff_release_for_executor(
             release_completed = True
             ok, msg = _on_workpiece_release_verified(executor)
             if not ok:
-                _logger.info(
+                _logger.debug(
                     "[TIMING] pre_release_dropoff success=false strategy=%s waypoint=%d "
                     "stage=release_verified_callback elapsed_s=%.3f total_elapsed_s=%.3f",
                     plan.strategy_name,
@@ -379,7 +377,7 @@ def execute_dropoff_release_for_executor(
             return False, "Dropoff retracted safely, but move to next-cycle start failed"
         if not _wait_for_next_cycle_start_pose(executor, next_cycle_start):
             return False, "Dropoff retracted safely, but next-cycle start pose was not reached"
-        executor._last_prepositioned_start_group = str(next_cycle_start["group_id"])
+        executor._last_prepositioned_start_group = next_cycle_start.group_id
         _logger.info(
             "[NEXT_CYCLE] Reached start group='%s'",
             executor._last_prepositioned_start_group,
@@ -396,7 +394,7 @@ def execute_dropoff_release_for_executor(
 def _execute_movement_group_ordered_exit(
     executor: object,
     retract_waypoint: DropoffReleaseWaypoint,
-    next_cycle_start: dict,
+    next_cycle_start: NextCycleTarget,
 ) -> tuple[bool, str]:
     """Blend a sub-zero corridor retract into the next-cycle start move."""
     corridor_id = str(retract_waypoint.corridor_id or "").strip()
@@ -404,13 +402,7 @@ def _execute_movement_group_ordered_exit(
         return False, "Workpiece released, but the sub-zero exit route is incomplete"
     blend_radius = max(
         0.0,
-        float(
-            getattr(
-                executor._paint_process_config().dropoff,
-                "sub_zero_exit_blendR_mm",
-                10.0,
-            )
-        ),
+        float(executor._paint_process_config().dropoff.sub_zero_exit_blendR_mm),
     )
     commands = [
         _ordered_position_command(
@@ -423,14 +415,11 @@ def _execute_movement_group_ordered_exit(
             protected=True,
         ),
         _ordered_position_command(
-            f"Moving to next-cycle start '{next_cycle_start['group_id']}'",
-            next_cycle_start["position"],
-            next_cycle_start["vel"],
-            next_cycle_start["acc"],
-            _parse_motion_type(
-                next_cycle_start.get("type", OrderedMotionType.PTP),
-                field_name="next_cycle_start.type",
-            ),
+            f"Moving to next-cycle start '{next_cycle_start.group_id}'",
+            next_cycle_start.position,
+            next_cycle_start.velocity_percent,
+            next_cycle_start.acceleration_percent,
+            next_cycle_start.motion_type,
             0.0,
             protected=True,
         ),
@@ -450,8 +439,7 @@ def _execute_movement_group_ordered_exit(
             "Workpiece released, but the ordered corridor retract and "
             "next-cycle return failed; the dropoff passage remains open"
         )
-    passage_setter = getattr(executor._robot_service, "set_motion_passage_closed", None)
-    if not callable(passage_setter) or not bool(passage_setter(corridor_id, True)):
+    if not executor._robot_service.set_motion_passage_closed(corridor_id, True):
         return False, (
             f"Next-cycle start was reached, but dropoff passage '{corridor_id}' could not be closed"
         )
@@ -462,37 +450,34 @@ def _execute_movement_group_ordered_exit(
     return True, ""
 
 
-def _move_to_next_cycle_start(executor: object, next_cycle_start: dict) -> bool:
+def _move_to_next_cycle_start(executor: object, next_cycle_start: NextCycleTarget) -> bool:
     return bool(executor._motion.move_pickup_phase(
-        f"Moving to next-cycle start '{next_cycle_start['group_id']}'",
-        list(next_cycle_start["position"]),
-        velocity=float(next_cycle_start["vel"]),
-        acceleration=float(next_cycle_start["acc"]),
-        motion_type=_parse_motion_type(
-            next_cycle_start.get("type", OrderedMotionType.PTP),
-            field_name="next_cycle_start.type",
-        ).value,
+        f"Moving to next-cycle start '{next_cycle_start.group_id}'",
+        list(next_cycle_start.position),
+        velocity=next_cycle_start.velocity_percent,
+        acceleration=next_cycle_start.acceleration_percent,
+        motion_type=next_cycle_start.motion_type,
         blendR=0.0,
     ))
 
 
 def _next_cycle_start_pose_reached(
     executor: object,
-    next_cycle_start: dict,
+    next_cycle_start: NextCycleTarget,
     position_tolerance_mm: float = 2.0,
     orientation_tolerance_deg: float = 2.0,
     *,
     log_result: bool = True,
 ) -> bool:
-    getter = getattr(executor._robot_service, "get_current_position_fresh", None)
-    if not callable(getter):
-        return False
     try:
-        actual = getter()
-    except Exception:
-        _logger.exception("[NEXT_CYCLE] Failed to read pose after start move")
+        actual = read_fresh_pose(
+            executor._robot_service,
+            error_message="Failed to read fresh pose after next-cycle start move",
+        )
+    except Exception as exc:
+        _logger.error("[NEXT_CYCLE] %s", exc)
         return False
-    expected = next_cycle_start.get("position")
+    expected = next_cycle_start.position
     if not isinstance(actual, (list, tuple)) or not isinstance(expected, (list, tuple)):
         return False
     if len(actual) < 6 or len(expected) < 6:
@@ -525,7 +510,7 @@ def _next_cycle_start_pose_reached(
 
 def _wait_for_next_cycle_start_pose(
     executor: object,
-    next_cycle_start: dict,
+    next_cycle_start: NextCycleTarget,
     *,
     timeout_s: float = 2.0,
     poll_interval_s: float = 0.05,
@@ -552,14 +537,14 @@ def _wait_for_next_cycle_start_pose(
 
 def _on_workpiece_release_verified(executor: object) -> tuple[bool, str]:
     """Notify the composed system after release verification succeeds."""
-    if _dropoff_strategy_name(executor) == "plate_layout":
-        service = getattr(executor, "_plate_layout_service", None)
+    if _dropoff_strategy_name(executor) is DropoffStrategy.PLATE_LAYOUT:
+        service = executor._plate_layout_service
         if service is None or service.pending is None:
             return False, "Workpiece released, but no plate-layout reservation was active"
         service.commit(executor._paint_process_config().dropoff)
         _logger.info("[PLATE_LAYOUT] Committed plate position after verified release")
         return True, ""
-    callback = getattr(executor, "_on_workpiece_release_verified", None)
+    callback = executor._on_workpiece_release_verified
     if callback is None:
         return True, ""
     try:
@@ -576,17 +561,12 @@ def _on_workpiece_release_verified(executor: object) -> tuple[bool, str]:
 
 def _verify_workpiece_released(executor: object) -> tuple[bool, str]:
     """Verify that vacuum cleared after pump-off at the dropoff waypoint."""
-    is_pump_enabled = getattr(executor, "_is_vacuum_pump_enabled", None)
-    pump_enabled = (
-        bool(is_pump_enabled())
-        if callable(is_pump_enabled)
-        else bool(getattr(executor, "_enable_vacuum_pump", True))
-    )
+    pump_enabled = bool(executor._is_vacuum_pump_enabled())
     if not pump_enabled:
         _logger.info("[DROPOFF] Release verification skipped: vacuum pump disabled")
         return True, ""
 
-    sensor = getattr(executor, "_vacuum_sensor", None)
+    sensor = executor._vacuum_sensor
     if sensor is None:
         _logger.warning("[DROPOFF] Release verification skipped: vacuum sensor not configured")
         return True, ""
@@ -609,18 +589,18 @@ def _verify_workpiece_released(executor: object) -> tuple[bool, str]:
 def _build_dropoff_release_plan(executor: object) -> DropoffReleasePlan:
     strategy_name = _dropoff_strategy_name(executor)
     dropoff = executor._paint_process_config().dropoff
-    if strategy_name == "movement_group":
+    if strategy_name is DropoffStrategy.MOVEMENT_GROUP:
         pose = _resolve_dropoff_align_pose(executor)
         if pose is None:
             _logger.info("[DROPOFF] movement_group has no configured pose for group 'Dropoff'")
             return DropoffReleasePlan(strategy_name=strategy_name, waypoints=())
         if float(pose[2]) < 0.0:
-            if not bool(getattr(dropoff, "allow_sub_zero_dropoff", False)):
+            if not dropoff.allow_sub_zero_dropoff:
                 _logger.error("[DROPOFF] Negative target rejected: Allow Sub-Zero Dropoff is disabled")
                 return DropoffReleasePlan(strategy_name=strategy_name, waypoints=())
             approach_pose = list(pose)
             approach_pose[2] = float(dropoff.sub_zero_approach_z_mm)
-            corridor_id = getattr(executor, "_dropoff_motion_corridor_id", None)
+            corridor_id = executor._dropoff_motion_corridor_id
             return DropoffReleasePlan(
                 strategy_name=strategy_name,
                 waypoints=(
@@ -694,14 +674,11 @@ def build_ordered_dropoff_preparation_segments(
         for index, safe_waypoint in enumerate(safe_waypoints, start=1):
             route_items.append(_DropoffRouteItem(
                 label=f"prepare_dropoff_safe_travel_{index}",
-                position=list(safe_waypoint["position"]),
-                velocity_percent=float(safe_waypoint["vel_percent"]),
-                acceleration_percent=float(safe_waypoint["acc_percent"]),
-                motion_type=_parse_motion_type(
-                    safe_waypoint.get("motion_type", OrderedMotionType.PTP),
-                    field_name=f"dropoff safe waypoint {index}",
-                ),
-                blend_radius=float(safe_waypoint.get("blendR", 0.0)),
+                position=list(safe_waypoint.position),
+                velocity_percent=safe_waypoint.velocity_percent,
+                acceleration_percent=safe_waypoint.acceleration_percent,
+                motion_type=safe_waypoint.motion_type,
+                blend_radius=safe_waypoint.blend_radius,
             ))
 
     if _should_prepare_dropoff_align_before_unwind(executor):
@@ -757,7 +734,7 @@ def build_ordered_dropoff_preparation_segments(
         release_pose is not None
         and len(release_pose) >= 3
         and float(release_pose[2]) < 0.0
-        and bool(getattr(config.dropoff, "allow_sub_zero_dropoff", False))
+        and config.dropoff.allow_sub_zero_dropoff
     ):
         # Unwind above the opening, then make the corridor descent the final
         # protected segment. The ordered chain therefore hard-stops exactly at
@@ -784,11 +761,10 @@ def _resolve_dropoff_safe_travel_waypoints(executor: object) -> list[dict]:
         return []
     dropoff = executor._paint_process_config().dropoff
     return executor._read_configured_waypoints(
-        getattr(config, "positions", []),
-        getattr(config, "position", []),
+        config.positions,
         float(dropoff.release_align_vel_percent),
         float(dropoff.release_align_acc_percent),
-        "ptp",
+        OrderedMotionType.PTP,
     )
 
 
@@ -875,7 +851,10 @@ def _apply_distributed_dropoff_unwind(
 
 
 def _should_prepare_dropoff_align_before_unwind(executor: object) -> bool:
-    if _dropoff_strategy_name(executor) in {"movement_group", "plate_layout"}:
+    if _dropoff_strategy_name(executor) in {
+        DropoffStrategy.MOVEMENT_GROUP,
+        DropoffStrategy.PLATE_LAYOUT,
+    }:
         return _resolve_dropoff_release_pose(executor) is not None
     return (
         executor._configured_contact_motion_plane == "xz_y_ry"
@@ -883,20 +862,16 @@ def _should_prepare_dropoff_align_before_unwind(executor: object) -> bool:
     )
 
 
-def _dropoff_strategy_name(executor: object) -> str:
-    config_getter = getattr(executor, "_paint_process_config", None)
-    if not callable(config_getter):
-        return "movement_group"
-    dropoff = getattr(config_getter(), "dropoff", None)
-    return str(getattr(dropoff, "strategy", "movement_group") or "movement_group").strip().lower()
+def _dropoff_strategy_name(executor: object) -> DropoffStrategy:
+    return executor._paint_process_config().dropoff.strategy
 
 
 def _resolve_dropoff_release_pose(executor: object) -> list[float] | None:
-    if _dropoff_strategy_name(executor) == "plate_layout":
-        service = getattr(executor, "_plate_layout_service", None)
+    if _dropoff_strategy_name(executor) is DropoffStrategy.PLATE_LAYOUT:
+        service = executor._plate_layout_service
         reservation = None if service is None else service.pending
         return None if reservation is None else list(reservation.release_pose)
-    if _dropoff_strategy_name(executor) == "movement_group":
+    if _dropoff_strategy_name(executor) is DropoffStrategy.MOVEMENT_GROUP:
         return executor._read_provider_position(executor._dropoff_position_provider)
     if executor._last_pickup_plan is not None and hasattr(executor._last_pickup_plan, "align_pose"):
         return list(executor._last_pickup_plan.align_pose)
@@ -915,15 +890,15 @@ def _resolve_dropoff_preparation_pose(
     reference_pose: list[float] | None = None,
 ) -> list[float] | None:
     """Resolve the safe above-floor endpoint used before a corridor dropoff."""
-    if _dropoff_strategy_name(executor) == "plate_layout":
-        service = getattr(executor, "_plate_layout_service", None)
+    if _dropoff_strategy_name(executor) is DropoffStrategy.PLATE_LAYOUT:
+        service = executor._plate_layout_service
         reservation = None if service is None else service.pending
         return None if reservation is None else list(reservation.approach_pose)
     pose = _resolve_dropoff_align_pose(executor, reference_pose)
     if pose is None or len(pose) < 3 or float(pose[2]) >= 0.0:
         return pose
     dropoff = executor._paint_process_config().dropoff
-    if not bool(getattr(dropoff, "allow_sub_zero_dropoff", False)):
+    if not dropoff.allow_sub_zero_dropoff:
         return pose
     approach_pose = list(pose)
     approach_pose[2] = float(dropoff.sub_zero_approach_z_mm)
@@ -931,33 +906,25 @@ def _resolve_dropoff_preparation_pose(
 
 
 def _plate_motion_profile(dropoff: object, key: str) -> _PlateMotionProfile:
-    fallback = _PlateMotionProfile(
-        velocity_percent=float(dropoff.release_align_vel_percent),
-        acceleration_percent=float(dropoff.release_align_acc_percent),
-        blend_radius=float(dropoff.release_align_blendR),
-        motion_type=_parse_motion_type(
-            dropoff.release_align_motion_type,
-            field_name="dropoff.release_align_motion_type",
-        ),
-    )
-    accepted_keys = {key}
-    if key == "center_to_dropoff":
-        accepted_keys.update({"descend_release", "center_to_approach"})
-    for raw in list(getattr(dropoff, "plate_motion_profiles", []) or []):
-        if isinstance(raw, dict) and str(raw.get("key", "")) in accepted_keys:
-            try:
-                return _PlateMotionProfile(
-                    velocity_percent=float(raw.get("vel_percent", fallback.velocity_percent)),
-                    acceleration_percent=float(raw.get("acc_percent", fallback.acceleration_percent)),
-                    blend_radius=max(0.0, float(raw.get("blendR", fallback.blend_radius))),
-                    motion_type=_parse_motion_type(
-                        raw.get("motion_type", raw.get("type", OrderedMotionType.PTP)),
-                        field_name=f"dropoff.plate_motion_profiles[{key}]",
-                    ),
-                )
-            except (TypeError, ValueError):
-                break
-    return fallback
+    for raw in dropoff.plate_motion_profiles:
+        if not isinstance(raw, dict) or raw.get("key") != key:
+            continue
+        required = {"key", "vel_percent", "acc_percent", "blendR", "motion_type"}
+        missing = required.difference(raw)
+        if missing:
+            raise ValueError(
+                f"dropoff.plate_motion_profiles[{key}] is missing {sorted(missing)}"
+            )
+        return _PlateMotionProfile(
+            velocity_percent=float(raw["vel_percent"]),
+            acceleration_percent=float(raw["acc_percent"]),
+            blend_radius=max(0.0, float(raw["blendR"])),
+            motion_type=_parse_motion_type(
+                raw["motion_type"],
+                field_name=f"dropoff.plate_motion_profiles[{key}]",
+            ),
+        )
+    raise ValueError(f"dropoff.plate_motion_profiles has no profile for '{key}'")
 
 
 def _plate_ordered_segment(
@@ -986,19 +953,24 @@ def _wait_for_motion_slot_idle(
     stable_samples: int = 2,
 ) -> bool:
     """Wait through the controller-success/backend-slot release handoff."""
-    getter = getattr(executor._robot_service, "get_execution_status", None)
-    if not callable(getter):
-        return True
     deadline = monotonic() + max(0.1, float(timeout_s))
     consecutive = 0
     while monotonic() < deadline:
         try:
-            status = getter()
+            status = executor._robot_service.get_execution_status()
+        except AttributeError:
+            _logger.error(
+                "[PLATE_LAYOUT] Cannot verify motion slot: get_execution_status() is unavailable"
+            )
+            return False
         except Exception:
             _logger.exception("[PLATE_LAYOUT] Failed to read execution status before entry")
             return False
         if not isinstance(status, dict):
-            return True
+            _logger.error(
+                "[PLATE_LAYOUT] Cannot verify motion slot: execution status is not a mapping"
+            )
+            return False
         ordered = status.get("ordered_motion_chain")
         ordered_active = bool(isinstance(ordered, dict) and ordered.get("active"))
         if not bool(status.get("is_executing")) and not ordered_active:
@@ -1031,19 +1003,15 @@ def _plate_route_poses_with_distributed_unwind(
     }
     if next_start_pose is not None:
         poses["next_start"] = list(next_start_pose)
-    getter = getattr(executor._robot_service, "get_current_position_fresh", None)
-    if not callable(getter):
-        getter = getattr(executor._robot_service, "get_current_position", None)
-    try:
-        current = list(getter() or []) if callable(getter) else []
-    except Exception:
-        _logger.exception("[PLATE_LAYOUT] Could not read pose for distributed unwind")
-        current = []
+    current = read_fresh_pose(
+        executor._robot_service,
+        error_message="Could not read fresh robot pose for distributed unwind",
+    )
     rotation_index = int(executor._contact_motion_config.rotation_index)
     if rotation_index < 0 or len(current) <= rotation_index:
         raise ValueError("Plate-layout distributed unwind requires a valid current rotation pose")
-    paint_start_rz = getattr(executor, "_last_process_start_rz", None)
-    paint_end_pose = getattr(executor, "_last_process_end_pose", None)
+    paint_start_rz = executor._last_process_start_rz
+    paint_end_pose = executor._last_process_end_pose
     try:
         paint_rz_delta = float(paint_end_pose[5]) - float(paint_start_rz)
     except (TypeError, ValueError, IndexError):
@@ -1102,7 +1070,7 @@ def _plate_route_uses_center(dropoff: object, reservation: object) -> bool:
     if bool(dropoff.plate_use_center_waypoint):
         _logger.info("[PLATE_LAYOUT] Center waypoint enabled explicitly")
         return True
-    if not bool(getattr(dropoff, "plate_auto_center_near_corner", True)):
+    if not dropoff.plate_auto_center_near_corner:
         _logger.info("[PLATE_LAYOUT] Automatic center routing near plate corner disabled")
         return False
 
@@ -1142,68 +1110,51 @@ def _plate_route_uses_center(dropoff: object, reservation: object) -> bool:
 def _execute_plate_layout_ordered_release(
     executor: object,
     *,
-    next_cycle_start: dict | None,
+    next_cycle_start: NextCycleTarget | None,
 ) -> tuple[bool, str]:
-    service = getattr(executor, "_plate_layout_service", None)
+    service = executor._plate_layout_service
     reservation = None if service is None else service.pending
     if reservation is None:
         return False, "Plate-layout dropoff has no active reservation"
     dropoff = executor._paint_process_config().dropoff
-    from src.robot_systems.paint.processes.paint.plate_layout import validate_plate_passage_gate
+    from src.robot_systems.paint.processes.paint.tray_dry.plate_layout import validate_plate_passage_gate
 
     gate_pose, error = validate_plate_passage_gate(dropoff.plate_passage_gate_pose)
     if error:
         return False, error
-    configured_exit_gate = getattr(dropoff, "plate_exit_gate_pose", None)
-    if configured_exit_gate:
-        exit_gate_pose, error = validate_plate_passage_gate(configured_exit_gate)
-        if error:
-            return False, f"Plate-layout exit gate: {error}"
-    else:
-        exit_gate_pose = list(gate_pose)
-        _logger.info("[PLATE_LAYOUT] Exit gate not configured; reusing passage gate")
+    exit_gate_pose, error = validate_plate_passage_gate(dropoff.plate_exit_gate_pose)
+    if error:
+        return False, f"Plate-layout exit gate: {error}"
     next_waypoints: list[_PlateNextWaypoint] = []
     if bool(dropoff.plate_next_cycle_midpoint_enabled) and next_cycle_start is not None:
-        configured_waypoints = list(
-            getattr(dropoff, "plate_next_cycle_waypoints", None) or []
-        )
-        if not configured_waypoints and getattr(dropoff, "plate_next_cycle_midpoint_pose", None):
-            configured_waypoints = [{
-                "position": list(dropoff.plate_next_cycle_midpoint_pose),
-            }]
+        configured_waypoints = list(dropoff.plate_next_cycle_waypoints)
         if not configured_waypoints:
             return False, "Plate-layout next-cycle waypoints are enabled but none are configured"
-        fallback_profile = _plate_motion_profile(dropoff, "gate_to_next_midpoint")
         for index, raw_waypoint in enumerate(configured_waypoints):
-            raw_pose = raw_waypoint.get("position", raw_waypoint.get("pose", [])) \
-                if isinstance(raw_waypoint, dict) else raw_waypoint
-            waypoint_pose, error = validate_plate_passage_gate(raw_pose)
+            if not isinstance(raw_waypoint, dict):
+                return False, f"Plate-layout next-cycle waypoint {index + 1}: expected a mapping"
+            required = {"position", "vel_percent", "acc_percent", "motion_type", "blendR"}
+            missing = required.difference(raw_waypoint)
+            if missing:
+                return False, (
+                    f"Plate-layout next-cycle waypoint {index + 1}: "
+                    f"missing {sorted(missing)}"
+                )
+            waypoint_pose, error = validate_plate_passage_gate(raw_waypoint["position"])
             if error:
                 return False, f"Plate-layout next-cycle waypoint {index + 1}: {error}"
-            profile = fallback_profile
-            if isinstance(raw_waypoint, dict):
-                try:
-                    profile = _PlateMotionProfile(
-                        velocity_percent=float(raw_waypoint.get(
-                            "vel_percent", profile.velocity_percent
-                        )),
-                        acceleration_percent=float(raw_waypoint.get(
-                            "acc_percent", profile.acceleration_percent
-                        )),
-                        motion_type=_parse_motion_type(
-                            raw_waypoint.get(
-                                "motion_type",
-                                raw_waypoint.get("type", profile.motion_type),
-                            ),
-                            field_name=f"dropoff.plate_next_cycle_waypoints[{index}]",
-                        ),
-                        blend_radius=max(0.0, float(raw_waypoint.get(
-                            "blendR",
-                            raw_waypoint.get("blend_r", profile.blend_radius),
-                        ))),
-                    )
-                except (TypeError, ValueError):
-                    return False, f"Plate-layout next-cycle waypoint {index + 1}: invalid motion settings"
+            try:
+                profile = _PlateMotionProfile(
+                    velocity_percent=float(raw_waypoint["vel_percent"]),
+                    acceleration_percent=float(raw_waypoint["acc_percent"]),
+                    motion_type=_parse_motion_type(
+                        raw_waypoint["motion_type"],
+                        field_name=f"dropoff.plate_next_cycle_waypoints[{index}]",
+                    ),
+                    blend_radius=max(0.0, float(raw_waypoint["blendR"])),
+                )
+            except (TypeError, ValueError):
+                return False, f"Plate-layout next-cycle waypoint {index + 1}: invalid motion settings"
             next_waypoints.append(_PlateNextWaypoint(waypoint_pose, profile))
     try:
         use_center_waypoint = _plate_route_uses_center(dropoff, reservation)
@@ -1217,7 +1168,7 @@ def _execute_plate_layout_ordered_release(
         "exit_gate": list(exit_gate_pose),
     }
     if next_cycle_start is not None:
-        route_poses["next_start"] = list(next_cycle_start["position"])
+        route_poses["next_start"] = list(next_cycle_start.position)
     if bool(dropoff.plate_distribute_unwind):
         try:
             route_poses = _plate_route_poses_with_distributed_unwind(
@@ -1226,7 +1177,7 @@ def _execute_plate_layout_ordered_release(
                 exit_gate_pose=exit_gate_pose,
                 center_pose=reservation.transit_pose,
                 dropoff_pose=reservation.release_pose,
-                next_start_pose=None if next_cycle_start is None else list(next_cycle_start["position"]),
+                next_start_pose=None if next_cycle_start is None else list(next_cycle_start.position),
                 use_center_waypoint=use_center_waypoint,
             )
         except (TypeError, ValueError):
@@ -1303,9 +1254,9 @@ def _execute_plate_layout_ordered_release(
             ))
         exit_segments.append(_plate_ordered_segment(
             (
-                f"Plate exit: last waypoint to next-cycle start '{next_cycle_start['group_id']}'"
+                f"Plate exit: last waypoint to next-cycle start '{next_cycle_start.group_id}'"
                 if next_waypoints
-                else f"Plate exit: passage gate to next-cycle start '{next_cycle_start['group_id']}'"
+                else f"Plate exit: passage gate to next-cycle start '{next_cycle_start.group_id}'"
             ),
             route_poses["next_start"],
             _plate_motion_profile(dropoff, "gate_to_next_start"),
@@ -1320,14 +1271,14 @@ def _execute_plate_layout_ordered_release(
         # marker.  A valid distributed-route endpoint avoids commanding the
         # same group a second time; an endpoint outside tolerance still takes
         # the normal correction-move path.
-        executor._last_prepositioned_start_group = str(next_cycle_start["group_id"])
+        executor._last_prepositioned_start_group = next_cycle_start.group_id
     _logger.info("[DROPOFF] strategy=plate_layout ordered entry/release/exit completed")
     return True, ""
 
 
 def _execute_plate_layout_preparation(executor: object) -> tuple[bool, str]:
     """Unwind at the paint-detach pose before the plate entry chain."""
-    service = getattr(executor, "_plate_layout_service", None)
+    service = executor._plate_layout_service
     reservation = None if service is None else service.pending
     if reservation is None:
         return False, "Plate-layout dropoff has no active reservation"

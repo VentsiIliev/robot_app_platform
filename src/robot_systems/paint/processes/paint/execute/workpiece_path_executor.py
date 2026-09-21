@@ -30,11 +30,15 @@ from src.applications.workpiece_editor.service.i_workpiece_path_executor import 
 )
 from src.engine.robot.path_preparation import IWorkpiecePathPreparationService
 from src.engine.robot.path_preparation import WorkpieceExecutionPlan
+from src.engine.robot.motion_sequence import OrderedMotionType
 from src.robot_systems.paint.processes.paint.config import (
     PAINT_PROCESS_CONFIG,
     PaintProcessConfig,
     scale_paint_process_accelerations,
     PaintSimulationConfig,
+)
+from src.robot_systems.paint.processes.paint.configured_motion_waypoint import (
+    ConfiguredMotionWaypoint,
 )
 from src.robot_systems.paint.processes.paint.plan import (
     build_paint_contact_source_plan,
@@ -59,7 +63,7 @@ from src.robot_systems.paint.processes.paint.execute.projection_preview import (
     project_pivot_paths_for_editor,
 )
 from src.robot_systems.paint.processes.paint.motion.path_geometry import shift_path_rotation
-from src.robot_systems.paint.timing import timed_block, timed_step
+from src.robot_systems.paint.timing import timed_block
 
 _logger = logging.getLogger(__name__)
 
@@ -231,58 +235,14 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
     supports_paint_motion_states = True
     def __init__(
         self,
-        robot_service=None,
         *,
-        dependencies: PaintExecutorDependencies | None = None,
+        dependencies: PaintExecutorDependencies,
         motion_config: PaintExecutorMotionConfig | None = None,
         contact_motion_config: PaintExecutorContactMotionConfig | None = None,
-        pivot_config: PaintExecutorContactMotionConfig | None = None,
-        **legacy_options,
     ) -> None:
         """Store robot dependencies and initialize the pivot/pickup execution configuration."""
-        dependencies = dependencies or PaintExecutorDependencies(
-            robot_service=robot_service,
-            path_preparation_service=legacy_options.get("path_preparation_service"),
-            base_position_provider=legacy_options.get("base_position_provider"),
-            pickup_base_position_provider=legacy_options.get("pickup_base_position_provider"),
-            cleanup_base_position_provider=legacy_options.get("cleanup_base_position_provider"),
-            dropoff_position_provider=legacy_options.get("dropoff_position_provider"),
-            calibration_position_provider=legacy_options.get("calibration_position_provider"),
-            post_execute_callback=legacy_options.get("post_execute_callback"),
-            dryer_ready_for_release=legacy_options.get("dryer_ready_for_release"),
-            on_workpiece_release_verified=legacy_options.get(
-                "on_workpiece_release_verified"
-            ),
-            robot_config_provider=legacy_options.get("robot_config_provider"),
-            vacuum_pump=legacy_options.get("vacuum_pump"),
-            vacuum_pump_enabled_provider=legacy_options.get("vacuum_pump_enabled_provider"),
-            vacuum_sensor=legacy_options.get("vacuum_sensor"),
-            pickup_condition=legacy_options.get("pickup_condition"),
-            pickup_condition_provider=legacy_options.get("pickup_condition_provider"),
-            paint_process_config_service=legacy_options.get("paint_process_config_service"),
-            dropoff_motion_corridor_id=legacy_options.get("dropoff_motion_corridor_id"),
-        )
-        motion_config = motion_config or PaintExecutorMotionConfig(
-            enable_vacuum_pump=legacy_options.get("enable_vacuum_pump", True),
-            pickup_tool=legacy_options.get("pickup_tool", 0),
-            pickup_user=legacy_options.get("pickup_user", 0),
-            pickup_z_mm=legacy_options.get("pickup_z_mm"),
-            debug_dump_dir=legacy_options.get("debug_dump_dir"),
-        )
-        contact_motion_config = contact_motion_config or pivot_config or PaintExecutorContactMotionConfig(
-            motion_plane=legacy_options.get("pivot_motion_plane", "xy_z_rz"),
-            translation_axis=legacy_options.get("pivot_translation_axis", "x"),
-            paint_side=legacy_options.get("pivot_side", "negative"),
-            translation_direction=legacy_options.get("pivot_translation_direction", "forward"),
-            flip_xz_ry_execution_rotation_direction=legacy_options.get(
-                "flip_xz_ry_execution_rotation_direction",
-                False,
-            ),
-            mirror_xz_ry_pickup_handoff=legacy_options.get("mirror_xz_ry_pickup_handoff", False),
-            apply_camera_to_tcp_for_pickup=legacy_options.get("apply_camera_to_tcp_for_pickup", False),
-            camera_to_tcp_x_offset=legacy_options.get("camera_to_tcp_x_offset", 0.0),
-            camera_to_tcp_y_offset=legacy_options.get("camera_to_tcp_y_offset", 0.0),
-        )
+        motion_config = motion_config or PaintExecutorMotionConfig()
+        contact_motion_config = contact_motion_config or PaintExecutorContactMotionConfig()
 
         # Dependencies.
         self._robot_service = dependencies.robot_service
@@ -347,7 +307,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         # Per-run state and phase executors.
         self._last_execution_plan: WorkpieceExecutionPlan | None = None
         self._last_pickup_plan: PickupTransferPlan | None = None
-        from src.robot_systems.paint.processes.paint.plate_layout import PlateLayoutService
+        from src.robot_systems.paint.processes.paint.tray_dry.plate_layout import PlateLayoutService
         self._plate_layout_service = PlateLayoutService()
         self._pending_stage_pose: list[float] | None = None
         self._dropoff = PaintDropoffExecutor(self)
@@ -403,27 +363,20 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         """Refresh robot-dependent pickup settings from the latest robot configuration."""
         if self._robot_config_provider is None:
             return
-        try:
-            robot_config = self._robot_config_provider()
-        except Exception:
-            _logger.debug("[PICKUP] Failed to refresh robot config", exc_info=True)
-            return
+        robot_config = self._robot_config_provider()
         if robot_config is None:
             return
-        self._pickup_tool = int(getattr(robot_config, "robot_tool", self._pickup_tool))
-        self._pickup_user = int(getattr(robot_config, "robot_user", self._pickup_user))
-        try:
-            self._pickup_safety_z_min_mm = float(getattr(getattr(robot_config, "safety_limits", None), "z_min", self._pickup_safety_z_min_mm))
-        except Exception:
-            pass
+        self._pickup_tool = int(robot_config.robot_tool)
+        self._pickup_user = int(robot_config.robot_user)
+        self._pickup_safety_z_min_mm = float(robot_config.safety_limits.z_min)
         self._contact_motion_config = _normalize_contact_motion_config(
             motion_plane=self._contact_motion_config.motion_plane,
             translation_axis=self._contact_motion_config.translation_axis,
             pivot_side=self._contact_motion_config.paint_side,
             translation_direction=self._contact_motion_config.translation_direction,
             apply_camera_to_tcp_for_pickup=self._contact_motion_config.apply_camera_to_tcp_for_pickup,
-            camera_to_tcp_x_offset=float(getattr(robot_config, "camera_to_tcp_x_offset", self._contact_motion_config.camera_to_tcp_x_offset)),
-            camera_to_tcp_y_offset=float(getattr(robot_config, "camera_to_tcp_y_offset", self._contact_motion_config.camera_to_tcp_y_offset)),
+            camera_to_tcp_x_offset=float(robot_config.camera_to_tcp_x_offset),
+            camera_to_tcp_y_offset=float(robot_config.camera_to_tcp_y_offset),
             rotation_direction_sign=_xz_ry_projection_rotation_sign(
                 self._contact_motion_config.motion_plane,
                 self._flip_xz_ry_execution_rotation_direction,
@@ -436,8 +389,8 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             pivot_side=self._pickup_contact_motion_config.paint_side,
             translation_direction=self._pickup_contact_motion_config.translation_direction,
             apply_camera_to_tcp_for_pickup=self._pickup_contact_motion_config.apply_camera_to_tcp_for_pickup,
-            camera_to_tcp_x_offset=float(getattr(robot_config, "camera_to_tcp_x_offset", self._pickup_contact_motion_config.camera_to_tcp_x_offset)),
-            camera_to_tcp_y_offset=float(getattr(robot_config, "camera_to_tcp_y_offset", self._pickup_contact_motion_config.camera_to_tcp_y_offset)),
+            camera_to_tcp_x_offset=float(robot_config.camera_to_tcp_x_offset),
+            camera_to_tcp_y_offset=float(robot_config.camera_to_tcp_y_offset),
         )
         self._contact_motion_strategy = get_execution_plane_strategy(self._contact_motion_config.motion_plane)
 
@@ -637,38 +590,36 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
     @staticmethod
     def _read_configured_pose(position: object) -> Optional[list[float]]:
         if isinstance(position, dict):
-            position = position.get("position", position.get("pose", []))
+            if "position" not in position:
+                raise ValueError("Configured waypoint is missing 'position'")
+            position = position["position"]
         if not position:
             return None
         try:
-            values = [float(value) for value in list(position)[:6]]
-        except (TypeError, ValueError):
-            return None
-        return values if len(values) >= 6 else None
+            values = [float(value) for value in list(position)]
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Configured waypoint position must be numeric") from exc
+        if len(values) != 6:
+            raise ValueError("Configured waypoint position must contain exactly six values")
+        return values
 
     @classmethod
     def _read_configured_waypoints(
         cls,
         positions: object,
-        legacy_position: object = None,
         default_vel: float = 50.0,
         default_acc: float = 20.0,
-        default_motion_type: str = "ptp",
-    ) -> list[dict]:
-        resolved: list[dict] = []
+        default_motion_type: OrderedMotionType = OrderedMotionType.PTP,
+    ) -> list[ConfiguredMotionWaypoint]:
+        resolved: list[ConfiguredMotionWaypoint] = []
         if positions:
-            try:
-                raw_positions = list(positions)
-            except TypeError:
-                raw_positions = []
+            raw_positions = list(positions)
             for item in raw_positions:
                 waypoint = cls._read_configured_waypoint(item, default_vel, default_acc, default_motion_type)
-                if waypoint is not None:
-                    resolved.append(waypoint)
-        if resolved:
-            return resolved
-        legacy = cls._read_configured_waypoint(legacy_position, default_vel, default_acc, default_motion_type)
-        return [legacy] if legacy is not None else []
+                if waypoint is None:
+                    raise ValueError("Configured waypoint cannot be empty")
+                resolved.append(waypoint)
+        return resolved
 
     @classmethod
     def _read_configured_waypoint(
@@ -676,50 +627,41 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         value: object,
         default_vel: float,
         default_acc: float,
-        default_motion_type: str = "ptp",
-    ) -> dict | None:
+        default_motion_type: OrderedMotionType = OrderedMotionType.PTP,
+    ) -> ConfiguredMotionWaypoint | None:
         pose = cls._read_configured_pose(value)
         if pose is None:
             return None
         vel = float(default_vel)
         acc = float(default_acc)
-        motion_type = str(default_motion_type or "ptp").strip().lower()
-        if motion_type not in {"ptp", "linear", "fast_lin"}:
-            motion_type = "ptp"
+        motion_type = OrderedMotionType.parse(
+            default_motion_type,
+            field_name="default_motion_type",
+        )
         blend_r = 0.0
         if isinstance(value, dict):
-            try:
-                vel = float(value.get("vel_percent", default_vel))
-                acc = float(value.get("acc_percent", default_acc))
-                blend_r = float(value.get("blendR", value.get("blend_r", 0.0)))
-            except (TypeError, ValueError):
-                vel = float(default_vel)
-                acc = float(default_acc)
-                blend_r = 0.0
-            candidate = str(value.get("motion_type", value.get("type", "ptp")) or "ptp").strip().lower()
-            if candidate in {"ptp", "linear", "fast_lin"}:
-                motion_type = candidate
+            required = {"position", "vel_percent", "acc_percent", "motion_type", "blendR"}
+            missing = required.difference(value)
+            if missing:
+                raise ValueError(f"Configured waypoint is missing {sorted(missing)}")
+            vel = float(value["vel_percent"])
+            acc = float(value["acc_percent"])
+            blend_r = float(value["blendR"])
+            motion_type = OrderedMotionType.parse(
+                value["motion_type"],
+                field_name="configured waypoint motion_type",
+            )
         else:
-            try:
-                raw = list(value)
-                if len(raw) >= 8:
-                    vel = float(raw[6])
-                    acc = float(raw[7])
-                if len(raw) >= 9:
-                    candidate = str(raw[8] or "ptp").strip().lower()
-                    if candidate in {"ptp", "linear", "fast_lin"}:
-                        motion_type = candidate
-                if len(raw) >= 10:
-                    blend_r = float(raw[9])
-            except (TypeError, ValueError):
-                pass
-        return {
-            "position": pose,
-            "vel_percent": vel,
-            "acc_percent": acc,
-            "motion_type": motion_type,
-            "blendR": max(0.0, blend_r),
-        }
+            raw = list(value)
+            if len(raw) != 6:
+                raise ValueError("Configured waypoint pose must contain exactly six values")
+        return ConfiguredMotionWaypoint(
+            position=tuple(pose),
+            velocity_percent=vel,
+            acceleration_percent=acc,
+            motion_type=motion_type,
+            blend_radius=max(0.0, blend_r),
+        )
 
     def _apply_pivot_offset(self, pivot_pose: list[float] | None, offset_mm: float) -> list[float] | None:
         """Apply the editor-configured pivot offset in the active pivot plane."""
@@ -1052,15 +994,12 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
 
     @staticmethod
     def _wait_for_paint_resume(control) -> bool:
-        wait_if_paused = getattr(control, "wait_if_paused", None)
-        if callable(wait_if_paused):
-            return bool(wait_if_paused())
-        return True
+        return bool(control.wait_if_paused())
 
     def _diagnostics_artifacts_enabled(self) -> bool:
         config = self._paint_process_config()
         return (
-            bool(getattr(config, "enable_path_debug_plots", False))
-            or bool(getattr(config, "enable_pivot_debug_plot", False))
-            or bool(getattr(config, "enable_execution_motion_trace", False))
+            bool(config.enable_path_debug_plots)
+            or bool(config.enable_pivot_debug_plot)
+            or bool(config.enable_execution_motion_trace)
         )

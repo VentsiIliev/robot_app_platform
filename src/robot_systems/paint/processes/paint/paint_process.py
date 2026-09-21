@@ -55,9 +55,7 @@ class PaintProcess(BaseProcess):
     def _on_stop(self) -> None:
         """Signal stop and request hardware halt without blocking the process lock."""
         self._stopping = True
-        stop_phase = getattr(self._production_service, "stop_current_phase", None)
-        if callable(stop_phase):
-            stop_phase()
+        self._production_service.stop_current_phase()
         self._request_hardware_stop()
 
     def _request_hardware_stop(self) -> None:
@@ -92,16 +90,12 @@ class PaintProcess(BaseProcess):
             return bool(PAINT_PROCESS_CONFIG.enable_vacuum_pump)
 
     def _on_pause(self) -> None:
-        """Pause the current cooperative Paint phase if it supports pause/resume."""
-        pause_phase = getattr(self._production_service, "pause_current_phase", None)
-        if callable(pause_phase):
-            pause_phase()
+        """Pause the current cooperative Paint phase."""
+        self._production_service.pause_current_phase()
 
     def _on_resume(self) -> None:
-        """Resume the current cooperative Paint phase if it supports pause/resume."""
-        resume_phase = getattr(self._production_service, "resume_current_phase", None)
-        if callable(resume_phase):
-            resume_phase()
+        """Resume the current cooperative Paint phase."""
+        self._production_service.resume_current_phase()
 
     def _on_reset_errors(self) -> None:
         """Clear the internal stop flag so a new run can be started after an error reset."""

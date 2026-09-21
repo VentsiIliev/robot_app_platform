@@ -3,7 +3,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-from src.robot_systems.paint.processes.paint.dryer_release_coordinator import (
+from src.robot_systems.paint.processes.paint.auto_dryer.dryer_release_coordinator import (
     DryerReleaseCoordinator,
 )
 
@@ -48,7 +48,12 @@ class TestDryerReleaseCoordinator(unittest.TestCase):
             SimpleNamespace(is_healthy=True, next_position_done=True),
             SimpleNamespace(is_healthy=True, next_position_moving=True, next_position_done=False),
             SimpleNamespace(is_healthy=True, next_position_moving=False, next_position_done=True),
-            SimpleNamespace(is_healthy=True, next_position_done=True, eject_done=False),
+            SimpleNamespace(
+                is_healthy=True,
+                next_position_done=True,
+                ejecting=False,
+                eject_done=False,
+            ),
             SimpleNamespace(is_healthy=True, next_position_done=True, ejecting=True, eject_done=False),
             SimpleNamespace(is_healthy=True, next_position_done=True, ejecting=False, eject_done=True),
         ]

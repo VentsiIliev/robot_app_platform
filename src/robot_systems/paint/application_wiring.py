@@ -294,7 +294,7 @@ def _build_paint_path_debug_dump_dir():
 
 
 def _build_dryer_release_coordinator(robot_system):
-    from src.robot_systems.paint.processes.paint.dryer_release_coordinator import (
+    from src.robot_systems.paint.processes.paint.auto_dryer.dryer_release_coordinator import (
         DryerReleaseCoordinator,
     )
 

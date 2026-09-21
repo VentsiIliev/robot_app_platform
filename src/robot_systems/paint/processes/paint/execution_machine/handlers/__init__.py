@@ -28,9 +28,6 @@ from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_execute_pickup_release_handler import (
     handle_magazine_execute_pickup_release,
 )
-from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_load_compat_handler import (
-    handle_magazine_load,
-)
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_move_to_calibration_handler import (
     handle_magazine_move_to_calibration,
 )
@@ -83,7 +80,6 @@ __all__ = [
     "handle_idle",
     "handle_magazine_capture",
     "handle_magazine_execute_pickup_release",
-    "handle_magazine_load",
     "handle_magazine_move_to_calibration",
     "handle_magazine_move_to_magazine",
     "handle_magazine_prepare_pickup_release",

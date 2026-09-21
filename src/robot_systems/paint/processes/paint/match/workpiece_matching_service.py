@@ -54,22 +54,17 @@ class PaintWorkpieceMatchingService(IWorkpieceMatcher):
                 return False, None, f"No match found. Saved workpieces checked: {len(candidates)}"
 
             best = workpieces[0]
-            raw = best.to_raw() if hasattr(best, "to_raw") else None
+            raw = best.to_raw()
             if raw is None:
                 return False, None, "Matched workpiece could not be converted."
 
-            confidence = None
-            if confidences:
-                try:
-                    confidence = float(confidences[0])
-                except Exception:
-                    confidence = None
+            confidence = float(confidences[0]) if confidences else None
 
             return True, {
                 "raw": raw,
-                "storage_id": getattr(best, "storage_id", None),
-                "workpieceId": getattr(best, "workpieceId", "") or raw.get("workpieceId", ""),
-                "name": getattr(best, "name", "") or raw.get("name", ""),
+                "storage_id": best.storage_id,
+                "workpieceId": best.workpieceId,
+                "name": best.name,
                 "candidate_count": len(candidates),
                 "no_match_count": int(no_match_count),
                 "confidence": confidence,

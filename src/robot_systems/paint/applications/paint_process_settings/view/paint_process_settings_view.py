@@ -60,7 +60,6 @@ _SENSOR_CONTROLLED_FAST_LIN_KEYS = {
     "pickup_servo_contact_stop_confirmation_timeout_s",
     "pickup_servo_contact_preflight_read_attempts",
     "pickup_servo_contact_read_failure_limit",
-    "pickup_servo_contact_fallback_to_planned_descend",
     "pickup_servo_contact_dummy_sensor_enabled",
     "pickup_servo_contact_dummy_detect_after_s",
 }

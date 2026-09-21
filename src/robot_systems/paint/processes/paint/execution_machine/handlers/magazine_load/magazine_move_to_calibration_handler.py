@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-from src.engine.robot.motion_sequence import OrderedMotionType
 from src.robot_systems.paint.processes.paint.execution_machine.context import PaintExecutionContext
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.common.guards import guard_control
-from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_load_handler import (
+from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_control import (
     interrupted_or_error,
 )
 from src.robot_systems.paint.processes.paint.execution_machine.state import PaintExecutionState
@@ -22,10 +21,7 @@ def handle_magazine_move_to_calibration(ctx: PaintExecutionContext) -> PaintExec
         ctx.calibration_group,
         velocity=float(config.transfer_to_calibration_vel_percent),
         acceleration=float(config.transfer_to_calibration_acc_percent),
-        motion_type=OrderedMotionType.parse(
-            config.transfer_to_calibration_motion_type,
-            field_name="magazine_load.transfer_to_calibration_motion_type",
-        ).value,
+        motion_type=config.transfer_to_calibration_motion_type,
         blendR=float(config.transfer_to_calibration_blendR),
     )
     if not ok:
@@ -35,8 +31,6 @@ def handle_magazine_move_to_calibration(ctx: PaintExecutionContext) -> PaintExec
             f"Move to calibration group '{ctx.calibration_group}' after release failed",
         )
 
-    mark_verified = getattr(load_service._navigation, "mark_group_observed_area_verified", None)
-    if callable(mark_verified):
-        mark_verified(ctx.calibration_group)
+    load_service._navigation.mark_group_observed_area_verified(ctx.calibration_group)
     ctx.production_service._restore_capture_view("after reaching calibration pickup")
     return PaintExecutionState.CALIBRATION_WAIT_CAMERA_SETTLE

@@ -5,11 +5,27 @@ import math
 import time
 import uuid
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import Callable, Protocol, Sequence
 
 from src.engine.robot.enums.axis import Direction, RobotAxis
 
 _logger = logging.getLogger(__name__)
+
+
+class ServoRetractMotionType(StrEnum):
+    SERVO = "servo"
+    PTP = "ptp"
+    FAST_LINEAR = "fast_lin"
+
+    @classmethod
+    def parse(cls, value: object) -> "ServoRetractMotionType":
+        if isinstance(value, cls):
+            return value
+        try:
+            return cls(str(value).strip().lower())
+        except ValueError as exc:
+            raise ValueError(f"Unsupported Servo retract motion type {value!r}") from exc
 
 
 class PickupCondition(Protocol):
@@ -47,7 +63,7 @@ class ServoUntilConditionConfig:
 class ServoRetractConfig:
     target_pose: Sequence[float] | None = None
     distance_mm: float | None = None
-    motion_type: str = "servo"
+    motion_type: ServoRetractMotionType = ServoRetractMotionType.SERVO
     linear_mm_s: float = 25.0
     ptp_velocity_percent: float = 30.0
     ptp_acceleration_percent: float = 30.0
@@ -61,6 +77,14 @@ class ServoRetractConfig:
     progress_timeout_s: float = 1.5
     fast_lin_velocity_percent: float = 80.0
     fast_lin_acceleration_percent: float = 60.0
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.motion_type, ServoRetractMotionType):
+            object.__setattr__(
+                self,
+                "motion_type",
+                ServoRetractMotionType.parse(self.motion_type),
+            )
 
 
 @dataclass(frozen=True)

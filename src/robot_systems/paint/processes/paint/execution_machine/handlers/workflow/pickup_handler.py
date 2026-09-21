@@ -16,6 +16,7 @@ from src.robot_systems.paint.processes.paint.execute.pickup_executor import (
 from src.robot_systems.paint.processes.paint.config import (
     PICKUP_CONTACT_MODE_PLANNED,
     PICKUP_CONTACT_MODE_SENSOR_CONTROLLED_FAST_LIN,
+    DropoffStrategy,
 )
 from src.robot_systems.paint.processes.paint.execution_machine.context import PaintExecutionContext
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.common.motion_handlers import (
@@ -35,6 +36,7 @@ from src.robot_systems.paint.processes.paint.execution_machine.state import Pain
 from src.robot_systems.paint.processes.paint.magazine_load_result import (
     NO_WORKPIECE_AT_CALIBRATION,
 )
+from src.robot_systems.paint.processes.paint.paint_contact_job import PaintContactCommandJob
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_execute_pickup_release_handler import (
     calculate_workpiece_dropoff_pose,
 )
@@ -56,22 +58,19 @@ def handle_pickup(ctx: PaintExecutionContext) -> PaintExecutionState:
         fail_paint_motion(ctx, "Cycle-start Joint 6 unwind failed before pickup")
         return PaintExecutionState.ERROR
 
-    build_plan = getattr(executor._pickup, "build_plan", None)
-    pickup_plan = build_plan(ctx.execution_plan) if callable(build_plan) else None
-    if callable(build_plan) and pickup_plan is None:
+    pickup_plan = executor._pickup.build_plan(ctx.execution_plan)
+    if pickup_plan is None:
         fail_paint_motion(ctx, "Could not compute pickup-to-pivot poses")
         return PaintExecutionState.ERROR
 
-    if pickup_plan is not None and _dropoff_strategy(executor) == "plate_layout":
+    if pickup_plan is not None and _dropoff_strategy(executor) is DropoffStrategy.PLATE_LAYOUT:
         ok, message = _reserve_plate_dropoff(ctx, executor, pickup_plan)
         if not ok:
             finish_paint_motion(ctx, success=False)
             ctx.set_result(False, message)
             return PaintExecutionState.COMPLETED if message == "Drop-off plate is full" else PaintExecutionState.ERROR
 
-    stop_after_pickup = bool(
-        getattr(ctx.process_config, "stop_after_calibration_pickup", False)
-    )
+    stop_after_pickup = bool(ctx.process_config.stop_after_calibration_pickup)
     ctx.paint_ordered_result = (
         try_execute_ordered_pickup_and_paint_contact(
             executor,
@@ -112,7 +111,7 @@ def handle_pickup(ctx: PaintExecutionContext) -> PaintExecutionState:
             pickup_plan=pickup_plan,
         )
     if not ok:
-        _logger.info(
+        _logger.debug(
             "[TIMING] paint_process success=false stage=pickup total_elapsed_s=%.3f",
             elapsed_s(ctx.paint_started_at),
         )
@@ -129,13 +128,13 @@ def handle_pickup(ctx: PaintExecutionContext) -> PaintExecutionState:
     return PaintExecutionState.PAINT_CONTACT
 
 
-def _dropoff_strategy(executor: object) -> str:
-    return str(executor._paint_process_config().dropoff.strategy or "movement_group").strip().lower()
+def _dropoff_strategy(executor: object) -> DropoffStrategy:
+    return executor._paint_process_config().dropoff.strategy
 
 
 def _reserve_plate_dropoff(ctx, executor, pickup_plan) -> tuple[bool, str]:
-    motion_plan = getattr(pickup_plan, "motion_plan", pickup_plan)
-    align_pose = getattr(motion_plan, "align_pose", None)
+    motion_plan = pickup_plan.motion_plan
+    align_pose = motion_plan.align_pose
     if align_pose is None or len(align_pose) < 6:
         return False, "Plate-layout dropoff could not resolve workpiece orientation at calibration"
     width_mm, height_mm, outlines_mm = _workpiece_layout_geometry(ctx.execution_plan)
@@ -145,11 +144,10 @@ def _reserve_plate_dropoff(ctx, executor, pickup_plan) -> tuple[bool, str]:
         executor,
     )
 
-    magazine = ctx.magazine_config or getattr(ctx.process_config, "magazine_load", None)
-    group_id = str(getattr(magazine, "calibration_group_id", "CALIBRATION") or "CALIBRATION")
-    navigation = getattr(ctx.production_service._magazine_load_service, "_navigation", None)
-    getter = getattr(navigation, "get_group_position", None)
-    calibration_pose = getter(group_id) if callable(getter) else None
+    magazine = ctx.magazine_config or ctx.process_config.magazine_load
+    group_id = str(magazine.calibration_group_id)
+    navigation = ctx.production_service._magazine_load_service._navigation
+    calibration_pose = navigation.get_group_position(group_id)
     if calibration_pose is None or len(calibration_pose) < 6:
         return False, f"Plate-layout dropoff requires calibration movement group '{group_id}'"
 
@@ -183,28 +181,28 @@ def _workpiece_footprint_mm(execution_plan) -> tuple[float, float]:
 
 def _paint_pass_metadata(execution_plan, config, executor) -> tuple[dict, ...]:
     """Capture the configured paint controls used by each production pass."""
-    jobs = list(getattr(execution_plan, "execution_jobs", []) or [])
+    jobs = list(execution_plan.execution_jobs)
     first_job = jobs[0] if jobs else {}
     try:
         first_offset = float(
             executor._resolve_pivot_offset_mm(first_job or None, execution_plan)
         )
     except (AttributeError, TypeError, ValueError):
-        first_offset = float(getattr(config, "default_paint_offset_mm", 0.0))
+        first_offset = float(config.default_paint_offset_mm)
     first_pass = {
         "pass_number": 1,
         "velocity_percent": float(
-            first_job.get("vel", getattr(config, "default_paint_velocity_percent", 10.0))
+            first_job.get("vel", config.default_paint_velocity_percent)
         ),
         "acceleration_percent": float(
-            first_job.get("acc", getattr(config, "default_paint_acceleration_percent", 10.0))
+            first_job.get("acc", config.default_paint_acceleration_percent)
         ),
         "press_offset_mm": first_offset,
     }
     passes = [first_pass]
-    workpiece = getattr(execution_plan, "workpiece", {}) or {}
+    workpiece = execution_plan.workpiece
     is_unmatched = str(workpiece.get("workpieceId", "")).strip().lower() == "captured"
-    pass_count = max(1, min(2, int(getattr(config, "unmatched_paint_pass_count", 1))))
+    pass_count = max(1, min(2, int(config.unmatched_paint_pass_count)))
     if is_unmatched and pass_count == 2:
         second = config.unmatched_second_pass
         if bool(second.use_pass_1_settings):
@@ -271,9 +269,7 @@ def try_execute_ordered_pickup_and_paint_contact(
     pickup_plan=None,
 ) -> tuple[bool, str, int] | None:
     """Execute pickup/staging and primary paint contact as one preplanned ordered chain."""
-    execute_chain = getattr(executor._robot_service, "execute_ordered_motion_chain", None)
-    if not callable(execute_chain):
-        return None
+    execute_chain = executor._robot_service.execute_ordered_motion_chain
 
     if pickup_plan is None:
         pickup_plan = executor._pickup.build_plan(prepared_workpiece)
@@ -297,7 +293,7 @@ def try_execute_ordered_pickup_and_paint_contact(
             )
 
     paint_paths: list[list[list[float]]] = []
-    paint_jobs: list[dict] = []
+    paint_jobs: list[PaintContactCommandJob] = []
     ok, msg, total_waypoints = executor._paint_contact.execute(
         prepared_workpiece,
         execute_robot=False,
@@ -305,7 +301,6 @@ def try_execute_ordered_pickup_and_paint_contact(
         collected_command_jobs=paint_jobs,
     )
     if not ok:
-        executor._edge_cleanup.cancel_early_preplanning()
         return False, msg, total_waypoints
     if not paint_paths:
         return False, "Pickup succeeded, but no paint contact path was generated", total_waypoints
@@ -322,11 +317,11 @@ def try_execute_ordered_pickup_and_paint_contact(
     post_pickup_segments = list(paint_segments)
 
     second_pass_paths: list[list[list[float]]] = []
-    second_pass_jobs: list[dict] = []
+    second_pass_jobs: list[PaintContactCommandJob] = []
     config = executor._paint_process_config()
-    workpiece = getattr(prepared_workpiece, "workpiece", {}) or {}
+    workpiece = prepared_workpiece.workpiece
     is_unmatched = str(workpiece.get("workpieceId", "")).strip().lower() == "captured"
-    pass_count = max(1, min(2, int(getattr(config, "unmatched_paint_pass_count", 1))))
+    pass_count = max(1, min(2, int(config.unmatched_paint_pass_count)))
     if is_unmatched and pass_count == 2:
         pass_2 = config.unmatched_second_pass
         use_first = bool(pass_2.use_pass_1_settings)
@@ -351,7 +346,6 @@ def try_execute_ordered_pickup_and_paint_contact(
             pivot_offset_override_mm=offset,
         )
         if not ok or not second_pass_paths:
-            executor._edge_cleanup.cancel_early_preplanning()
             return False, msg or "Second paint pass could not be planned", total_waypoints
         total_waypoints += int(second_waypoints)
         post_pickup_segments.extend(
@@ -435,7 +429,7 @@ def try_execute_ordered_pickup_and_paint_contact(
 def _should_preplan_dropoff_in_ordered_chain(executor: object) -> bool:
     """Keep plate travel/unwind in PREPARE_DROPOFF after paint completes."""
     return (
-        _dropoff_strategy(executor) != "plate_layout"
+        _dropoff_strategy(executor) is not DropoffStrategy.PLATE_LAYOUT
         and not executor._edge_cleanup.should_run_after_xz_ry()
         and not executor._edge_cleanup.should_run_after_xy_rz()
     )
@@ -443,7 +437,7 @@ def _should_preplan_dropoff_in_ordered_chain(executor: object) -> bool:
 
 def build_ordered_second_pass_segments(
     paint_paths: list[list[list[float]]],
-    paint_jobs: list[dict],
+    paint_jobs: list[PaintContactCommandJob],
     config,
 ) -> list[OrderedMotionCommand]:
     """Build the guarded unwind, re-attach, and contact sequence for pass two."""
@@ -470,8 +464,8 @@ def build_ordered_second_pass_segments(
 
 def _unmatched_second_pass_requested(executor: object, execution_plan: object) -> bool:
     config = executor._paint_process_config()
-    workpiece = getattr(execution_plan, "workpiece", {}) or {}
+    workpiece = execution_plan.workpiece
     return (
         str(workpiece.get("workpieceId", "")).strip().lower() == "captured"
-        and int(getattr(config, "unmatched_paint_pass_count", 1)) == 2
+        and int(config.unmatched_paint_pass_count) == 2
     )

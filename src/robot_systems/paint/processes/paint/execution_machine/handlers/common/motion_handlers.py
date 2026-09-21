@@ -17,20 +17,12 @@ def unwind_joint6_at_cycle_start(ctx: PaintExecutionContext) -> bool:
     """Recover J6 once per cycle before any production navigation starts."""
     if ctx.cycle_start_unwind_completed:
         return True
-    executor = getattr(ctx.production_service, "_path_executor", None)
-    robot_service = getattr(executor, "_robot_service", None)
-    unwind = getattr(robot_service, "unwind_joint6", None)
-    if not callable(unwind):
-        _logger.error("[CYCLE_START] Joint 6 unwind service is unavailable")
-        return False
+    executor = ctx.production_service._path_executor
+    robot_service = executor._robot_service
 
     config = ctx.process_config
     if config is None:
-        get_config = getattr(executor, "_paint_process_config", None)
-        if not callable(get_config):
-            _logger.error("[CYCLE_START] Paint process configuration is unavailable")
-            return False
-        config = get_config()
+        config = executor._paint_process_config()
     navigation = config.navigation_return
     _logger.info(
         "[CYCLE_START] Unwinding Joint 6 before production navigation "
@@ -40,7 +32,7 @@ def unwind_joint6_at_cycle_start(ctx: PaintExecutionContext) -> bool:
         bool(navigation.unwind_queue_if_busy),
     )
     ok = bool(
-        unwind(
+        robot_service.unwind_joint6(
             blocking=True,
             queue_if_busy=bool(navigation.unwind_queue_if_busy),
             vel=float(navigation.unwind_vel_percent),
@@ -63,11 +55,7 @@ def start_paint_motion_if_needed(ctx: PaintExecutionContext) -> None:
     ctx.paint_previous_control = executor._active_execution_control
     ctx.paint_motion_active = True
     executor._active_execution_control = ctx.control
-    set_cycle_snapshot = getattr(executor, "_set_cycle_process_config_snapshot", None)
-    if callable(set_cycle_snapshot):
-        set_cycle_snapshot(ctx.raw_process_config or ctx.process_config)
-    else:
-        executor._refresh_paint_process_config_snapshot()
+    executor._set_cycle_process_config_snapshot(ctx.raw_process_config or ctx.process_config)
     executor._apply_paint_process_contact_config()
     executor._dropoff_unwind_prepared = False
     ctx.paint_total_waypoints = 0

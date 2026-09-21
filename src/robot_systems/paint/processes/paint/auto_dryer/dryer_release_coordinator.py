@@ -78,7 +78,7 @@ class DryerReleaseCoordinator:
             return True, ""
         if not self._dryer_healthy():
             reason = str(
-                getattr(self._dryer, "last_error", None)
+                self._dryer.last_error
                 or "Dryer is enabled but not ready"
             )
             self._logger.error("[DRYER_RELEASE] Dropoff refused: %s", reason)
@@ -92,9 +92,9 @@ class DryerReleaseCoordinator:
             return True, ""
         if ready:
             state = self._dryer.get_state()
-            eject_done = bool(getattr(state, "eject_done", False))
-            ejecting = bool(getattr(state, "ejecting", False))
-            healthy = bool(getattr(state, "is_healthy", False))
+            eject_done = bool(state.eject_done)
+            ejecting = bool(state.ejecting)
+            healthy = bool(state.is_healthy)
             if healthy and eject_done and not ejecting:
                 self._logger.info("[DRYER_RELEASE] Final EJECT_DONE check passed before dropoff")
                 return True, ""
@@ -170,24 +170,16 @@ class DryerReleaseCoordinator:
         """Treat an explicit disabled state as simulation/bypass, never as failure."""
         if self._dryer is None:
             return False
-        getter = getattr(self._dryer, "is_enabled", None)
-        if not callable(getter):
-            # Legacy/test implementations without enable control remain strict.
-            return True
         try:
-            return bool(getter())
+            return bool(self._dryer.is_enabled())
         except Exception:
             self._logger.exception("[DRYER_RELEASE] Failed to read dryer enabled state")
-            # Fail closed when an enabled-state provider exists but is unreadable.
             return True
 
     def _dryer_healthy(self) -> bool:
         """Fail closed while a managed dryer is initializing or unhealthy."""
-        getter = getattr(self._dryer, "is_healthy", None)
-        if not callable(getter):
-            return True
         try:
-            return bool(getter())
+            return bool(self._dryer.is_healthy())
         except Exception:
             self._logger.exception("[DRYER_RELEASE] Failed to read dryer health state")
             return False
@@ -207,9 +199,9 @@ class DryerReleaseCoordinator:
                 if self._stopped:
                     return False
             state = states.pop(0) if states else self._dryer.get_state()
-            healthy = bool(getattr(state, "is_healthy", False))
-            moving = bool(getattr(state, "next_position_moving", False))
-            done = bool(getattr(state, "next_position_done", False))
+            healthy = bool(state.is_healthy)
+            moving = bool(state.next_position_moving)
+            done = bool(state.next_position_done)
             now = time.monotonic()
             if healthy and (moving or not done):
                 movement_observed = True
@@ -241,9 +233,9 @@ class DryerReleaseCoordinator:
                 return False
         time.sleep(self._eject_confirmation_delay_s)
         state = self._dryer.get_state()
-        healthy = bool(getattr(state, "is_healthy", False))
-        ejecting = bool(getattr(state, "ejecting", False))
-        initial_ejecting = bool(getattr(initial_state, "ejecting", False))
+        healthy = bool(state.is_healthy)
+        ejecting = bool(state.ejecting)
+        initial_ejecting = bool(initial_state.ejecting)
         self._logger.info(
             "[DRYER_RELEASE] EJECT start check healthy=%s ejecting=%s previously_ejecting=%s",
             healthy, ejecting, initial_ejecting,

@@ -19,7 +19,8 @@ from src.robot_systems.paint.paint_robot_system import (
     PaintRobotSystem,
     _build_sub_zero_dropoff_corridor,
 )
-from src.robot_systems.paint.processes.paint.config import PaintDropoffConfig
+from src.robot_systems.paint.processes.paint.config import DropoffStrategy, PaintDropoffConfig
+from src.robot_systems.paint.processes.paint.next_cycle_target import NextCycleTarget
 from src.robot_systems.paint.processes.paint.paint_process_config_service import (
     PaintProcessConfigService,
 )
@@ -32,7 +33,7 @@ from src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.
 class TestDropoffMotionCorridor(unittest.TestCase):
     def test_retract_failure_reports_that_release_already_completed(self):
         dropoff = SimpleNamespace(
-            strategy="movement_group",
+            strategy=DropoffStrategy.MOVEMENT_GROUP,
             allow_sub_zero_dropoff=True,
             sub_zero_approach_z_mm=50.0,
             sub_zero_exit_blendR_mm=10.0,
@@ -53,6 +54,8 @@ class TestDropoffMotionCorridor(unittest.TestCase):
             _motion=motion,
             _vacuum_sensor=None,
             _enable_vacuum_pump=False,
+            _is_vacuum_pump_enabled=lambda: False,
+            _on_workpiece_release_verified=None,
             _paint_process_config=lambda: SimpleNamespace(dropoff=dropoff),
         )
 
@@ -69,9 +72,10 @@ class TestDropoffMotionCorridor(unittest.TestCase):
 
     def test_sub_zero_release_retracts_then_moves_to_and_validates_next_cycle_start(self):
         dropoff = SimpleNamespace(
-            strategy="movement_group",
+            strategy=DropoffStrategy.MOVEMENT_GROUP,
             allow_sub_zero_dropoff=True,
             sub_zero_approach_z_mm=50.0,
+            sub_zero_exit_blendR_mm=10.0,
             release_align_vel_percent=20.0,
             release_align_acc_percent=15.0,
             release_align_motion_type="ptp",
@@ -92,21 +96,23 @@ class TestDropoffMotionCorridor(unittest.TestCase):
             _motion=motion,
             _vacuum_sensor=None,
             _enable_vacuum_pump=False,
+            _is_vacuum_pump_enabled=lambda: False,
+            _on_workpiece_release_verified=None,
             _paint_process_config=lambda: SimpleNamespace(dropoff=dropoff),
         )
-        next_start = {
-            "group_id": "Magazine Fixed Pickup",
-            "position": [-147.0, 52.0, 110.0, -179.9, 0.0, 0.0],
-            "vel": 60.0,
-            "acc": 40.0,
-            "type": "ptp",
-        }
-        settling_pose = list(next_start["position"])
+        next_start = NextCycleTarget(
+            group_id="Magazine Fixed Pickup",
+            position=(-147.0, 52.0, 110.0, -179.9, 0.0, 0.0),
+            velocity_percent=60.0,
+            acceleration_percent=40.0,
+            motion_type=OrderedMotionType.PTP,
+        )
+        settling_pose = list(next_start.position)
         settling_pose[0] += 3.3
         robot.get_current_position_fresh.side_effect = [
             settling_pose,
-            list(next_start["position"]),
-            list(next_start["position"]),
+            list(next_start.position),
+            list(next_start.position),
         ]
 
         with patch(
@@ -277,7 +283,7 @@ class TestDropoffMotionCorridor(unittest.TestCase):
             [300.0, 120.0, -80.0, 180.0, 0.0, 0.0],
             velocity=20.0,
             acceleration=15.0,
-            motion_type="ptp",
+            motion_type=OrderedMotionType.PTP,
             corridor_id="workpiece_drop_opening",
         )
 
@@ -306,7 +312,7 @@ class TestDropoffMotionCorridor(unittest.TestCase):
             [300.0, 120.0, 80.0, 180.0, 0.0, 0.0],
             velocity=70.0,
             acceleration=40.0,
-            motion_type="fast_lin",
+            motion_type=OrderedMotionType.FAST_LINEAR,
         )
 
         self.assertTrue(ok)
@@ -353,7 +359,7 @@ class TestDropoffMotionCorridor(unittest.TestCase):
 
     def test_failed_retract_fails_dropoff_before_any_next_phase_can_continue(self):
         dropoff = SimpleNamespace(
-            strategy="movement_group",
+            strategy=DropoffStrategy.MOVEMENT_GROUP,
             allow_sub_zero_dropoff=True,
             sub_zero_approach_z_mm=50.0,
             release_align_vel_percent=20.0,

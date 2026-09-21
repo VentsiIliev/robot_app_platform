@@ -6,7 +6,6 @@ from time import perf_counter
 import cv2
 import numpy as np
 
-from src.engine.robot.motion_sequence import OrderedMotionType
 from src.robot_systems.paint.processes.paint.execution_machine.context import PaintExecutionContext
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.common.guards import guard_control
 from src.robot_systems.paint.processes.paint.execution_machine.state import PaintExecutionState
@@ -17,7 +16,6 @@ from src.robot_systems.paint.processes.paint.magazine_load_result import NO_WORK
 from src.robot_systems.paint.processes.paint.plan import pick_largest_contour
 
 _logger = logging.getLogger(__name__)
-
 
 def handle_magazine_capture(ctx: PaintExecutionContext) -> PaintExecutionState:
     guarded = guard_control(ctx, PaintExecutionState.MAGAZINE_CAPTURE)
@@ -62,10 +60,7 @@ def handle_magazine_capture(ctx: PaintExecutionContext) -> PaintExecutionState:
         correction_kwargs = {
             "velocity": min(50.0, float(ctx.magazine_config.move_to_magazine_vel_percent)),
             "acceleration": min(20.0, float(ctx.magazine_config.move_to_magazine_acc_percent)),
-            "motion_type": OrderedMotionType.parse(
-                ctx.magazine_config.move_to_magazine_motion_type,
-                field_name="magazine_load.move_to_magazine_motion_type",
-            ).value,
+            "motion_type": ctx.magazine_config.move_to_magazine_motion_type,
             "blendR": 0.0,
         }
         if ctx.magazine_fixed_pickup_pose is not None:
@@ -101,16 +96,16 @@ def handle_magazine_capture(ctx: PaintExecutionContext) -> PaintExecutionState:
     capture_elapsed = perf_counter() - capture_started
     ctx.production_service._set_dashboard_live_view_paused(
         True,
-        image=getattr(ctx.magazine_snapshot, "frame", None),
+        image=ctx.magazine_snapshot.frame,
         reason="magazine snapshot captured",
     )
-    contour_count = len(getattr(ctx.magazine_snapshot, "contours", None) or [])
+    contour_count = len(ctx.magazine_snapshot.contours or [])
     _logger.info("[MAGAZINE_LOAD] Captured magazine snapshot contours=%d", contour_count)
-    _logger.info(
+    _logger.debug(
         "[MAGAZINE_LOAD_TIMING] capture_snapshot elapsed_s=%.3f contours=%d frame_available=%s",
         capture_elapsed,
         contour_count,
-        getattr(ctx.magazine_snapshot, "frame", None) is not None,
+        ctx.magazine_snapshot.frame is not None,
     )
 
     interrupted = guard_control(ctx, PaintExecutionState.MAGAZINE_CAPTURE)
@@ -121,7 +116,7 @@ def handle_magazine_capture(ctx: PaintExecutionContext) -> PaintExecutionState:
     if auto_discovery:
         ctx.magazine_discovery_contours = _ordered_contours_nearest_to_calibration(
             ctx,
-            getattr(ctx.magazine_snapshot, "contours", None),
+            ctx.magazine_snapshot.contours,
         )
         ctx.magazine_discovery_empty_capture = not ctx.magazine_discovery_contours
         if ctx.magazine_discovery_contours:
@@ -131,10 +126,10 @@ def handle_magazine_capture(ctx: PaintExecutionContext) -> PaintExecutionState:
         ctx.magazine_contour = ctx.magazine_discovery_active_contour
     else:
         ctx.magazine_contour = pick_largest_contour(
-            getattr(ctx.magazine_snapshot, "contours", None)
+            ctx.magazine_snapshot.contours
         )
     contour_elapsed = perf_counter() - contour_started
-    _logger.info(
+    _logger.debug(
         "[MAGAZINE_LOAD_TIMING] capture_magazine pick_largest_s=%.3f total_s=%.3f selected_points=%d",
         contour_elapsed,
         perf_counter() - started,

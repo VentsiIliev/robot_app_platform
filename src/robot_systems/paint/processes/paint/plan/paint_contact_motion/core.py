@@ -81,13 +81,7 @@ def _rotate_points_about(points, angle_deg: float, pivot) -> np.ndarray:
 
 def _save_projection_snapshots(config: PaintSimulationConfig) -> bool:
     """Return whether expensive full-shape debug snapshots should be stored."""
-    return bool(
-        getattr(
-            config,
-            "save_projection_snapshots",
-            getattr(PAINT_PROJECTION_TUNING, "save_projection_snapshots", False),
-        )
-    )
+    return bool(config.save_projection_snapshots)
 
 
 def project_paint_contact_motion_continuous(
@@ -215,7 +209,7 @@ def project_paint_contact_motion_continuous(
             float(config.closed_contour_overlap_mm),
         )
 
-    command_rotation_sign = -1.0 if float(getattr(config, "rotation_direction_sign", 1.0)) < 0.0 else 1.0
+    command_rotation_sign = -1.0 if config.rotation_direction_sign < 0.0 else 1.0
     save_snapshots = _save_projection_snapshots(config)
 
     result: list[list[float]] = []
@@ -335,9 +329,7 @@ def project_paint_contact_motion_continuous(
     # Config values used by the projection loop. The deadband is also used by
     # closed-path canonicalization; max_angular_step limits how much active-axis
     # rotation any emitted sample can represent.
-    rotation_deadband_deg = float(
-        getattr(PAINT_PROJECTION_TUNING, "rotation_deadband_deg", 0.5)
-    )
+    rotation_deadband_deg = float(PAINT_PROJECTION_TUNING.rotation_deadband_deg)
     max_angular_step = max(
         0.1,
         float(PAINT_PROJECTION_TUNING.smooth_max_angular_step_deg),

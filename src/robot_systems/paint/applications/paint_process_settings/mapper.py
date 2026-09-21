@@ -332,7 +332,6 @@ class PaintProcessSettingsMapper:
             "pickup_servo_contact_stop_confirmation_timeout_s": pickup.servo_contact_stop_confirmation_timeout_s,
             "pickup_servo_contact_preflight_read_attempts": pickup.servo_contact_preflight_read_attempts,
             "pickup_servo_contact_read_failure_limit": pickup.servo_contact_read_failure_limit,
-            "pickup_servo_contact_fallback_to_planned_descend": pickup.servo_contact_fallback_to_planned_descend,
             "pickup_servo_contact_dummy_sensor_enabled": pickup.servo_contact_dummy_sensor_enabled,
             "pickup_servo_contact_dummy_detect_after_s": pickup.servo_contact_dummy_detect_after_s,
             "pickup_approach_vel_percent": pickup.approach_vel_percent,
@@ -588,12 +587,6 @@ class PaintProcessSettingsMapper:
                 flat.get(
                     "pickup_servo_contact_read_failure_limit",
                     base.pickup_motion.servo_contact_read_failure_limit,
-                )
-            ),
-            servo_contact_fallback_to_planned_descend=bool(
-                flat.get(
-                    "pickup_servo_contact_fallback_to_planned_descend",
-                    base.pickup_motion.servo_contact_fallback_to_planned_descend,
                 )
             ),
             servo_contact_dummy_sensor_enabled=bool(

@@ -1,10 +1,40 @@
 from dataclasses import dataclass, field, fields, is_dataclass, replace
+from enum import StrEnum
 
 from src.engine.robot.path_preparation import PIXEL_TO_MM_MODE_HOMOGRAPHY_RESIDUAL, PIXEL_TO_MM_MODE_GEOMETRY_PPM_ANCHOR
+from src.engine.robot.motion_sequence import OrderedMotionType
 
-PICKUP_CONTACT_MODE_PLANNED = "planned"
-PICKUP_CONTACT_MODE_SENSOR_CONTROLLED_FAST_LIN = "sensor_controlled_fast_lin"
-PICKUP_CONTACT_MODE_HEIGHT_MEASURE = "height_measure"
+class PickupContactMode(StrEnum):
+    PLANNED = "planned"
+    SENSOR_CONTROLLED_FAST_LIN = "sensor_controlled_fast_lin"
+    HEIGHT_MEASURE = "height_measure"
+
+
+class PickupSensorExecutionMode(StrEnum):
+    PLATFORM = "sensor_controlled_fast_lin"
+    ROS_MANAGED = "ros_managed"
+
+
+class MagazinePickupMode(StrEnum):
+    VISION_PLANNED = "vision_planned"
+    VISION_SENSOR_CONTROLLED_FAST_LIN = "vision_sensor_controlled_fast_lin"
+    AUTO_DISCOVERY_SENSOR_CONTROLLED_FAST_LIN = "auto_discovery_sensor_controlled_fast_lin"
+    FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN = "fixed_group_sensor_controlled_fast_lin"
+
+
+class MagazineProcessingStrategy(StrEnum):
+    DIRECT = "direct"
+    BATCH_NESTING = "batch_nesting"
+
+
+class DropoffStrategy(StrEnum):
+    MOVEMENT_GROUP = "movement_group"
+    PLATE_LAYOUT = "plate_layout"
+
+
+PICKUP_CONTACT_MODE_PLANNED = PickupContactMode.PLANNED
+PICKUP_CONTACT_MODE_SENSOR_CONTROLLED_FAST_LIN = PickupContactMode.SENSOR_CONTROLLED_FAST_LIN
+PICKUP_CONTACT_MODE_HEIGHT_MEASURE = PickupContactMode.HEIGHT_MEASURE
 # Deprecated and intentionally unsupported: the former ``learned_height`` and
 # ``learned_height_lin`` Servo approach strategies must not be wired back into
 # runtime configuration because learned pickup heights are unsafe across batches.
@@ -14,19 +44,19 @@ PICKUP_CONTACT_MODES = (
     PICKUP_CONTACT_MODE_HEIGHT_MEASURE,
 )
 
-PICKUP_SENSOR_EXECUTION_MODE_PLATFORM = "sensor_controlled_fast_lin"
-PICKUP_SENSOR_EXECUTION_MODE_ROS_MANAGED = "ros_managed"
+PICKUP_SENSOR_EXECUTION_MODE_PLATFORM = PickupSensorExecutionMode.PLATFORM
+PICKUP_SENSOR_EXECUTION_MODE_ROS_MANAGED = PickupSensorExecutionMode.ROS_MANAGED
 PICKUP_SENSOR_EXECUTION_MODES = (
     PICKUP_SENSOR_EXECUTION_MODE_PLATFORM,
     PICKUP_SENSOR_EXECUTION_MODE_ROS_MANAGED,
 )
 
-MAGAZINE_PICKUP_MODE_VISION_PLANNED = "vision_planned"
-MAGAZINE_PICKUP_MODE_VISION_SENSOR_CONTROLLED_FAST_LIN = "vision_sensor_controlled_fast_lin"
+MAGAZINE_PICKUP_MODE_VISION_PLANNED = MagazinePickupMode.VISION_PLANNED
+MAGAZINE_PICKUP_MODE_VISION_SENSOR_CONTROLLED_FAST_LIN = MagazinePickupMode.VISION_SENSOR_CONTROLLED_FAST_LIN
 MAGAZINE_PICKUP_MODE_AUTO_DISCOVERY_SENSOR_CONTROLLED_FAST_LIN = (
-    "auto_discovery_sensor_controlled_fast_lin"
+    MagazinePickupMode.AUTO_DISCOVERY_SENSOR_CONTROLLED_FAST_LIN
 )
-MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN = "fixed_group_sensor_controlled_fast_lin"
+MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN = MagazinePickupMode.FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN
 MAGAZINE_PICKUP_MODES = (
     MAGAZINE_PICKUP_MODE_VISION_PLANNED,
     MAGAZINE_PICKUP_MODE_VISION_SENSOR_CONTROLLED_FAST_LIN,
@@ -34,33 +64,31 @@ MAGAZINE_PICKUP_MODES = (
     MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN,
 )
 
-MAGAZINE_PROCESSING_STRATEGY_DIRECT = "direct"
-MAGAZINE_PROCESSING_STRATEGY_BATCH_NESTING = "batch_nesting"
+MAGAZINE_PROCESSING_STRATEGY_DIRECT = MagazineProcessingStrategy.DIRECT
+MAGAZINE_PROCESSING_STRATEGY_BATCH_NESTING = MagazineProcessingStrategy.BATCH_NESTING
 MAGAZINE_PROCESSING_STRATEGIES = (
     MAGAZINE_PROCESSING_STRATEGY_DIRECT,
     MAGAZINE_PROCESSING_STRATEGY_BATCH_NESTING,
 )
 
-_LEGACY_PICKUP_CONTACT_MODE_SERVO_CONTACT = "servo_contact"
-_LEGACY_MAGAZINE_PICKUP_MODE_VISION_SERVO_CONTACT = "vision_servo_contact"
-_LEGACY_MAGAZINE_PICKUP_MODE_FIXED_GROUP_SERVO_CONTACT = "fixed_group_servo_contact"
-
-
-def normalize_pickup_contact_mode(value: object) -> str:
+def normalize_pickup_contact_mode(value: object) -> PickupContactMode:
     mode = str(value or PICKUP_CONTACT_MODE_PLANNED).strip().lower()
-    if mode == _LEGACY_PICKUP_CONTACT_MODE_SERVO_CONTACT:
-        return PICKUP_CONTACT_MODE_SENSOR_CONTROLLED_FAST_LIN
-    return mode
+    return PickupContactMode(mode)
 
 
-def normalize_magazine_pickup_mode(value: object) -> str:
+def normalize_magazine_pickup_mode(value: object) -> MagazinePickupMode:
     mode = str(value or MAGAZINE_PICKUP_MODE_VISION_PLANNED).strip().lower()
-    return {
-        _LEGACY_MAGAZINE_PICKUP_MODE_VISION_SERVO_CONTACT:
-            MAGAZINE_PICKUP_MODE_VISION_SENSOR_CONTROLLED_FAST_LIN,
-        _LEGACY_MAGAZINE_PICKUP_MODE_FIXED_GROUP_SERVO_CONTACT:
-            MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN,
-    }.get(mode, mode)
+    return MagazinePickupMode(mode)
+
+
+def _parse_motion_fields(instance: object, field_names: tuple[str, ...]) -> None:
+    """Convert persisted motion strings into validated runtime enum values."""
+    for field_name in field_names:
+        object.__setattr__(
+            instance,
+            field_name,
+            OrderedMotionType.parse(getattr(instance, field_name), field_name=field_name),
+        )
 
 
 # [LIVE SETTINGS] marks defaults that are already read through the paint-process
@@ -85,25 +113,25 @@ class PickupMotionConfig:
     # Move from the current robot pose to the pickup approach pose.
     approach_vel_percent: float = 60.0  # [LIVE SETTINGS]
     approach_acc_percent: float = 50.0  # [LIVE SETTINGS]
-    approach_motion_type: str = "ptp"  # [LIVE SETTINGS]
+    approach_motion_type: OrderedMotionType = OrderedMotionType.PTP  # [LIVE SETTINGS]
     approach_blendR: float = 20.0  # [LIVE SETTINGS]
 
     # Controlled final descent from approach height to pickup contact.
     descend_vel_percent: float = 60.0  # [LIVE SETTINGS]
     descend_acc_percent: float = 40.0  # [LIVE SETTINGS]
-    descend_motion_type: str = "linear"  # [LIVE SETTINGS]
+    descend_motion_type: OrderedMotionType = OrderedMotionType.LINEAR  # [LIVE SETTINGS]
     descend_blendR: float = 0.0  # [LIVE SETTINGS]
 
     # Lift away from pickup contact, then align to the paint start orientation.
     lift_align_vel_percent: float = 80.0  # [LIVE SETTINGS]
     lift_align_acc_percent: float = 40.0  # [LIVE SETTINGS]
-    lift_align_motion_type: str = "ptp"  # [LIVE SETTINGS]
+    lift_align_motion_type: OrderedMotionType = OrderedMotionType.PTP  # [LIVE SETTINGS]
     lift_align_blendR: float = 20.0  # [LIVE SETTINGS]
 
     # Change from pickup/table plane orientation to paint plane orientation.
     change_plane_vel_percent: float = 80.0  # [LIVE SETTINGS]
     change_plane_acc_percent: float = 40.0  # [LIVE SETTINGS]
-    change_plane_motion_type: str = "ptp"  # [LIVE SETTINGS]
+    change_plane_motion_type: OrderedMotionType = OrderedMotionType.PTP  # [LIVE SETTINGS]
     change_plane_blendR: float = 20.0  # [LIVE SETTINGS]
     # Combine change-plane orientation with the first pivot-contact translation.
     combine_change_plane_with_first_contact: bool = True
@@ -111,20 +139,20 @@ class PickupMotionConfig:
     # Optional intermediate staging poses between change-plane and pivot contact.
     stage_transition_vel_percent: float = 50.0  # [LIVE SETTINGS]
     stage_transition_acc_percent: float = 20.0  # [LIVE SETTINGS]
-    stage_transition_motion_type: str = "ptp"  # [LIVE SETTINGS]
+    stage_transition_motion_type: OrderedMotionType = OrderedMotionType.PTP  # [LIVE SETTINGS]
     stage_transition_blendR: float = 20.0  # [LIVE SETTINGS]
 
     # Move into the first pivot contact pose.
     first_contact_vel_percent: float = 80.0  # [LIVE SETTINGS]
     first_contact_acc_percent: float = 30.0  # [LIVE SETTINGS]
-    first_contact_motion_type: str = "ptp"  # [LIVE SETTINGS]
+    first_contact_motion_type: OrderedMotionType = OrderedMotionType.PTP  # [LIVE SETTINGS]
     first_contact_blendR: float = 0.0  # [LIVE SETTINGS]
 
     # Pickup contact strategy. Defaults preserve the fully planned
     # approach/descend/lift sequence. Valid values: planned | servo_contact | height_measure.
-    pickup_contact_mode: str = PICKUP_CONTACT_MODE_PLANNED  # [LIVE SETTINGS]
-    calibration_contact_execution_mode: str = PICKUP_SENSOR_EXECUTION_MODE_PLATFORM  # [LIVE SETTINGS]
-    magazine_contact_execution_mode: str = PICKUP_SENSOR_EXECUTION_MODE_PLATFORM  # [LIVE SETTINGS]
+    pickup_contact_mode: PickupContactMode = PICKUP_CONTACT_MODE_PLANNED  # [LIVE SETTINGS]
+    calibration_contact_execution_mode: PickupSensorExecutionMode = PICKUP_SENSOR_EXECUTION_MODE_PLATFORM  # [LIVE SETTINGS]
+    magazine_contact_execution_mode: PickupSensorExecutionMode = PICKUP_SENSOR_EXECUTION_MODE_PLATFORM  # [LIVE SETTINGS]
     servo_contact_linear_mm_s: float = 10.0  # [LIVE SETTINGS]
     servo_contact_min_z_mm: float = 0.0  # [LIVE SETTINGS]
     servo_contact_fast_lin_velocity_percent: float = 10.0  # [LIVE SETTINGS]
@@ -135,9 +163,29 @@ class PickupMotionConfig:
     servo_contact_stop_confirmation_timeout_s: float = 3.0  # [LIVE SETTINGS]
     servo_contact_preflight_read_attempts: int = 2  # [LIVE SETTINGS]
     servo_contact_read_failure_limit: int = 3  # [LIVE SETTINGS]
-    servo_contact_fallback_to_planned_descend: bool = False  # [LIVE SETTINGS]
     servo_contact_dummy_sensor_enabled: bool = False  # [LIVE SETTINGS]
     servo_contact_dummy_detect_after_s: float = 1.0  # [LIVE SETTINGS]
+
+    def __post_init__(self) -> None:
+        _parse_motion_fields(self, (
+            "approach_motion_type",
+            "descend_motion_type",
+            "lift_align_motion_type",
+            "change_plane_motion_type",
+            "stage_transition_motion_type",
+            "first_contact_motion_type",
+        ))
+        object.__setattr__(self, "pickup_contact_mode", normalize_pickup_contact_mode(self.pickup_contact_mode))
+        object.__setattr__(
+            self,
+            "calibration_contact_execution_mode",
+            PickupSensorExecutionMode(str(self.calibration_contact_execution_mode)),
+        )
+        object.__setattr__(
+            self,
+            "magazine_contact_execution_mode",
+            PickupSensorExecutionMode(str(self.magazine_contact_execution_mode)),
+        )
 
 
 @dataclass(frozen=True)
@@ -176,7 +224,7 @@ class PaintEdgeCleanupConfig:
     # XY/RZ cleanup motion after XZ/RY paint; separate from paint and unwind speeds.
     vel_percent: float = 80.0  # [LIVE SETTINGS]
     acc_percent: float = 60.0  # [LIVE SETTINGS]
-    motion_type: str = "linear"  # [LIVE SETTINGS]
+    motion_type: OrderedMotionType = OrderedMotionType.LINEAR  # [LIVE SETTINGS]
     blendR: float = 0.0  # [LIVE SETTINGS]
     # Cleanup uses the prepared contour; approach/retreat transitions use this spacing.
     spacing_mm: float = 3.0  # [LIVE SETTINGS]
@@ -188,13 +236,16 @@ class PaintEdgeCleanupConfig:
     # Additional paint-axis/base Z offset for the optional second cleanup pass.
     second_pass_pivot_z_offset_mm: float = -15.0  # [LIVE SETTINGS] 20mm below the belt !
 
+    def __post_init__(self) -> None:
+        _parse_motion_fields(self, ("motion_type",))
+
 
 @dataclass(frozen=True)
 class PaintDropoffConfig:
     """Dropoff/release motion tuning after paint and Joint 6 unwind."""
 
     # Return from pivot completion back to the pickup align pose before release.
-    strategy: str = "movement_group"
+    strategy: DropoffStrategy = DropoffStrategy.MOVEMENT_GROUP
     # Dashboard demo mode alternates the effective strategy per production cycle,
     # starting with movement_group and then plate_layout.
     alternate_drying_demo: bool = False
@@ -212,7 +263,7 @@ class PaintDropoffConfig:
     sub_zero_exit_blendR_mm: float = 10.0  # [LIVE SETTINGS]
     release_align_vel_percent: float = 60.0  # [LIVE SETTINGS]
     release_align_acc_percent: float = 40.0  # [LIVE SETTINGS]
-    release_align_motion_type: str = "ptp"  # [LIVE SETTINGS]
+    release_align_motion_type: OrderedMotionType = OrderedMotionType.PTP  # [LIVE SETTINGS]
     release_align_blendR: float = 0.0  # [LIVE SETTINGS]
     # Plate corners are full robot poses ordered BL, BR, TR, TL.  The plate
     # strategy is invalid until all four finite, consistently ordered corners
@@ -244,14 +295,18 @@ class PaintDropoffConfig:
     plate_auto_center_near_corner: bool = True  # [LIVE SETTINGS]
     plate_distribute_unwind: bool = False  # [LIVE SETTINGS]
     plate_motion_profiles: list[dict] = field(default_factory=lambda: [
-        {"key": "entry_gate", "vel_percent": 70.0, "acc_percent": 50.0, "motion_type": "ptp", "blendR": 20.0},
-        {"key": "entry_center", "vel_percent": 70.0, "acc_percent": 50.0, "motion_type": "ptp", "blendR": 20.0},
-        {"key": "center_to_dropoff", "vel_percent": 70.0, "acc_percent": 50.0, "motion_type": "ptp", "blendR": 0.0},
-        {"key": "exit_center", "vel_percent": 70.0, "acc_percent": 50.0, "motion_type": "ptp", "blendR": 20.0},
-        {"key": "exit_gate", "vel_percent": 70.0, "acc_percent": 50.0, "motion_type": "ptp", "blendR": 20.0},
-        {"key": "gate_to_next_midpoint", "vel_percent": 60.0, "acc_percent": 40.0, "motion_type": "ptp", "blendR": 20.0},
-        {"key": "gate_to_next_start", "vel_percent": 60.0, "acc_percent": 40.0, "motion_type": "ptp", "blendR": 0.0},
+        {"key": "entry_gate", "vel_percent": 70.0, "acc_percent": 50.0, "motion_type": OrderedMotionType.PTP, "blendR": 20.0},
+        {"key": "entry_center", "vel_percent": 70.0, "acc_percent": 50.0, "motion_type": OrderedMotionType.PTP, "blendR": 20.0},
+        {"key": "center_to_dropoff", "vel_percent": 70.0, "acc_percent": 50.0, "motion_type": OrderedMotionType.PTP, "blendR": 0.0},
+        {"key": "exit_center", "vel_percent": 70.0, "acc_percent": 50.0, "motion_type": OrderedMotionType.PTP, "blendR": 20.0},
+        {"key": "exit_gate", "vel_percent": 70.0, "acc_percent": 50.0, "motion_type": OrderedMotionType.PTP, "blendR": 20.0},
+        {"key": "gate_to_next_midpoint", "vel_percent": 60.0, "acc_percent": 40.0, "motion_type": OrderedMotionType.PTP, "blendR": 20.0},
+        {"key": "gate_to_next_start", "vel_percent": 60.0, "acc_percent": 40.0, "motion_type": OrderedMotionType.PTP, "blendR": 0.0},
     ])  # [LIVE SETTINGS]
+
+    def __post_init__(self) -> None:
+        _parse_motion_fields(self, ("release_align_motion_type",))
+        object.__setattr__(self, "strategy", DropoffStrategy(str(self.strategy)))
 
 
 @dataclass(frozen=True)
@@ -261,10 +316,10 @@ class PaintMagazineLoadConfig:
     enabled: bool = False  # [LIVE SETTINGS]
     recapture_after_pile_done: bool = False  # [LIVE SETTINGS]
     recapture_every_cycle: bool = False  # [LIVE SETTINGS]
-    processing_strategy: str = MAGAZINE_PROCESSING_STRATEGY_DIRECT  # [LIVE SETTINGS]
+    processing_strategy: MagazineProcessingStrategy = MAGAZINE_PROCESSING_STRATEGY_DIRECT  # [LIVE SETTINGS]
     nesting_margin_mm: float = 10.0  # [LIVE SETTINGS]
     nesting_padding_mm: float = 10.0  # [LIVE SETTINGS]
-    pickup_mode: str = MAGAZINE_PICKUP_MODE_VISION_PLANNED  # [LIVE SETTINGS]
+    pickup_mode: MagazinePickupMode = MAGAZINE_PICKUP_MODE_VISION_PLANNED  # [LIVE SETTINGS]
     fixed_pickup_group_id: str = "Magazine Fixed Pickup"  # [LIVE SETTINGS]
     # Ordered fixed pickup positions. An empty list preserves the legacy
     # single-position behavior through ``fixed_pickup_group_id``.
@@ -279,15 +334,27 @@ class PaintMagazineLoadConfig:
     calibration_group_id: str = "CALIBRATION"
     move_to_magazine_vel_percent: float = 30.0  # [LIVE SETTINGS]
     move_to_magazine_acc_percent: float = 30.0  # [LIVE SETTINGS]
-    move_to_magazine_motion_type: str = "ptp"  # [LIVE SETTINGS]
+    move_to_magazine_motion_type: OrderedMotionType = OrderedMotionType.PTP  # [LIVE SETTINGS]
     move_to_magazine_blendR: float = 0.0  # [LIVE SETTINGS]
     transfer_to_calibration_vel_percent: float = 30.0  # [LIVE SETTINGS]
     transfer_to_calibration_acc_percent: float = 30.0  # [LIVE SETTINGS]
-    transfer_to_calibration_motion_type: str = "ptp"  # [LIVE SETTINGS]
+    transfer_to_calibration_motion_type: OrderedMotionType = OrderedMotionType.PTP  # [LIVE SETTINGS]
     transfer_to_calibration_blendR: float = 0.0  # [LIVE SETTINGS]
     release_z_mm: float = 50.0  # [LIVE SETTINGS]
     camera_settle_s: float = 0.5
     release_settle_s: float = 0.5
+
+    def __post_init__(self) -> None:
+        _parse_motion_fields(self, (
+            "move_to_magazine_motion_type",
+            "transfer_to_calibration_motion_type",
+        ))
+        object.__setattr__(
+            self,
+            "processing_strategy",
+            MagazineProcessingStrategy(str(self.processing_strategy)),
+        )
+        object.__setattr__(self, "pickup_mode", normalize_magazine_pickup_mode(self.pickup_mode))
 
     def effective_fixed_pickup_group_ids(self) -> tuple[str, ...]:
         ordered: list[str] = []
@@ -301,15 +368,7 @@ class PaintMagazineLoadConfig:
                 seen.add(group_id)
         if self.fixed_pickup_sources:
             return tuple(ordered)
-        for value in self.fixed_pickup_group_ids or ():
-            group_id = str(value or "").strip()
-            if group_id and group_id not in seen:
-                ordered.append(group_id)
-                seen.add(group_id)
-        if ordered:
-            return tuple(ordered)
-        legacy_group = str(self.fixed_pickup_group_id or "").strip()
-        return (legacy_group,) if legacy_group else ()
+        return ()
 
     def effective_fixed_pickup_sources(self) -> tuple[dict, ...]:
         configured = tuple(
@@ -317,14 +376,7 @@ class PaintMagazineLoadConfig:
             for source in self.fixed_pickup_sources or ()
             if isinstance(source, dict) and bool(source.get("enabled", True))
         )
-        if configured:
-            return configured
-        if self.fixed_pickup_sources:
-            return ()
-        return tuple(
-            {"movement_group_id": group_id, "enabled": True}
-            for group_id in self.effective_fixed_pickup_group_ids()
-        )
+        return configured
 
 
 @dataclass(frozen=True)
@@ -359,8 +411,11 @@ class PaintNavigationReturnConfig:
     # Explicit navigation move to the calibration movement group pose.
     calibration_move_vel_percent: float = 30.0  # [LIVE SETTINGS]
     calibration_move_acc_percent: float = 40.0  # [LIVE SETTINGS]
-    calibration_move_motion_type: str = "ptp"  # [LIVE SETTINGS]
+    calibration_move_motion_type: OrderedMotionType = OrderedMotionType.PTP  # [LIVE SETTINGS]
     calibration_move_blendR: float = 0.0  # [LIVE SETTINGS]
+
+    def __post_init__(self) -> None:
+        _parse_motion_fields(self, ("calibration_move_motion_type",))
 
 
 @dataclass(frozen=True)
@@ -561,6 +616,7 @@ class PaintSimulationConfig:
     camera_to_tcp_y_offset: float = 0.0
     rotation_direction_sign: float = 1.0
     closed_contour_overlap_mm: float = 0.0
+    save_projection_snapshots: bool = False
 
     rules: PaintProjectionRules = field(init=False, repr=False)
     plane_spec: PaintMotionPlaneSpec = field(init=False, repr=False)

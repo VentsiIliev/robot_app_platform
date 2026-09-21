@@ -5,7 +5,7 @@ from time import perf_counter
 
 from src.robot_systems.paint.processes.paint.execution_machine.context import PaintExecutionContext
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.common.guards import guard_control
-from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_load_handler import (
+from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_control import (
     interrupted_or_error,
 )
 from src.robot_systems.paint.processes.paint.execution_machine.state import PaintExecutionState
@@ -28,7 +28,7 @@ def handle_magazine_wait_camera_settle(ctx: PaintExecutionContext) -> PaintExecu
             PaintExecutionState.MAGAZINE_WAIT_CAMERA_SETTLE,
             "Paint process stopped",
         )
-    _logger.info(
+    _logger.debug(
         "[MAGAZINE_LOAD_TIMING] wait_camera_settle configured_s=%.3f elapsed_s=%.3f",
         float(ctx.magazine_config.camera_settle_s),
         perf_counter() - started,

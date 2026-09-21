@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 import math
-import threading
 from time import monotonic, sleep
 from typing import Callable
 
@@ -10,10 +9,13 @@ import cv2
 import numpy as np
 
 from src.engine.robot.path_preparation.geometry import compute_pickup_rz_from_min_rect_long_axis
+from src.engine.robot.motion_sequence import OrderedMotionType
 from src.engine.robot.targeting.vision_pose_request import VisionPoseRequest
 from src.robot_systems.paint.processes.paint.config import PaintMagazineLoadConfig
-from src.robot_systems.paint.processes.paint.magazine_load.context import MagazineLoadContext
-from src.robot_systems.paint.processes.paint.magazine_load.machine_factory import MagazineLoadMachineFactory
+from src.robot_systems.paint.processes.paint.motion.pose_sampling import (
+    FreshPoseReadError,
+    read_fresh_pose,
+)
 from src.robot_systems.paint.processes.paint.work_area_nesting import WorkAreaNestingService
 
 _logger = logging.getLogger(__name__)
@@ -48,9 +50,6 @@ class PaintMagazineLoadService:
         self._frame_name = str(frame_name or "magazine").strip().lower()
         self._release_work_area_id = str(release_work_area_id or "paint").strip().lower()
         self._release_frame_name = str(release_frame_name or "calibration").strip().lower()
-        self._control_lock = threading.Lock()
-        self._active_context: MagazineLoadContext | None = None
-        self._machine_factory = MagazineLoadMachineFactory()
         self._work_area_nesting = WorkAreaNestingService()
 
     def clear_work_area_nesting(self) -> None:
@@ -61,59 +60,6 @@ class PaintMagazineLoadService:
 
     def cancel_work_area_nesting(self) -> None:
         self._work_area_nesting.cancel()
-
-    def load_to_calibration(
-        self,
-        config: PaintMagazineLoadConfig,
-        stop_requested: Callable[[], bool],
-    ) -> tuple[bool, str]:
-        context = MagazineLoadContext(
-            service=self,
-            config=config,
-            stop_requested=stop_requested,
-        )
-        with self._control_lock:
-            self._active_context = context
-        try:
-            machine = self._machine_factory.build(context)
-            machine.start_execution()
-            return context.result_ok, context.result_message
-        finally:
-            with self._control_lock:
-                if self._active_context is context:
-                    self._active_context = None
-
-    def pause_current_load(self) -> None:
-        with self._control_lock:
-            context = self._active_context
-        if context is None:
-            return
-        context.run_allowed.clear()
-        stop_motion = getattr(self._navigation, "stop_motion", None)
-        if callable(stop_motion):
-            try:
-                stop_motion()
-            except Exception:
-                _logger.exception("[MAGAZINE_LOAD] Failed to stop robot motion during pause")
-
-    def resume_current_load(self) -> None:
-        with self._control_lock:
-            context = self._active_context
-        if context is not None:
-            context.run_allowed.set()
-
-    def stop_current_load(self) -> None:
-        with self._control_lock:
-            context = self._active_context
-        if context is None:
-            return
-        context.stop_event.set()
-        context.run_allowed.set()
-
-    def get_control_snapshot(self) -> dict:
-        with self._control_lock:
-            context = self._active_context
-        return context.snapshot_dict() if context is not None else {}
 
     def _resolve_auto_discovery_approach_pose(
         self,
@@ -144,13 +90,13 @@ class PaintMagazineLoadService:
 
     def _move_to_group_with_pause_resume_recovery(
         self,
-        context: MagazineLoadContext,
+        context: object,
         state,
         group_name: str,
         *,
         velocity: float,
         acceleration: float,
-        motion_type: str | None = None,
+        motion_type: OrderedMotionType,
         blendR: float | None = None,
     ) -> bool:
         ok = self._navigation.move_to_group(
@@ -163,37 +109,18 @@ class PaintMagazineLoadService:
         )
         if ok:
             context.resume_retry_available = False
-            return True
-        if context.motion_cancel_requested() or not context.consume_resume_retry():
-            return ok
-
-        _logger.warning(
-            "[MAGAZINE_LOAD] Move to group '%s' failed immediately after resuming %s; "
-            "waiting for controller recovery and retrying once",
-            group_name,
-            getattr(state, "name", state),
-        )
-        if not self._wait_after_pause_resume(context):
-            return False
-        return self._navigation.move_to_group(
-            group_name,
-            wait_cancelled=context.motion_cancel_requested,
-            velocity=velocity,
-            acceleration=acceleration,
-            motion_type=motion_type,
-            blendR=blendR,
-        )
+        return ok
 
     def _move_to_pose_with_pause_resume_recovery(
         self,
-        context: MagazineLoadContext,
+        context: object,
         state,
         pose: list[float],
         group_name: str,
         *,
         velocity: float,
         acceleration: float,
-        motion_type: str | None = None,
+        motion_type: OrderedMotionType,
         blendR: float | None = None,
     ) -> bool:
         return self._navigation.move_to_position(
@@ -206,16 +133,11 @@ class PaintMagazineLoadService:
             blendR=blendR,
         )
 
-    def _wait_after_pause_resume(self, context: MagazineLoadContext) -> bool:
-        return self._wait(1.0, context.motion_cancel_requested)
-
     def _mark_magazine_capture_area_active(self) -> None:
         if self._work_area_service is None:
             return
         self._work_area_service.set_active_area_id(self._frame_name)
-        mark_verified = getattr(self._work_area_service, "mark_active_area_verified", None)
-        if callable(mark_verified):
-            mark_verified(self._frame_name)
+        self._work_area_service.mark_active_area_verified(self._frame_name)
 
     def _resolve_work_area_center_release_pose(
         self,
@@ -269,7 +191,7 @@ class PaintMagazineLoadService:
             float(release_pose[1]),
             float(release_pose[2]),
         )
-        _logger.info(
+        _logger.debug(
             "[MAGAZINE_LOAD_TIMING] release_pose center_px_s=%.3f resolver_s=%.3f registry_s=%.3f "
             "resolve_s=%.3f total_s=%.3f",
             center_elapsed,
@@ -363,7 +285,7 @@ class PaintMagazineLoadService:
             return None
         points_px = np.column_stack((arr[:, 0] * float(width), arr[:, 1] * float(height)))
         center = _contour_center_px(points_px)
-        _logger.info(
+        _logger.debug(
             "[MAGAZINE_LOAD_TIMING] release_work_area_center_px total_s=%.3f points=%d frame_size=%dx%d",
             monotonic() - started,
             len(points_px),
@@ -418,7 +340,7 @@ class PaintMagazineLoadService:
         ry = float(magazine_pose[4])
         z = float(magazine_pose[2])
         frame_obj = resolver.get_frame(self._frame_name)
-        mapper = getattr(frame_obj, "mapper", None)
+        mapper = frame_obj.mapper
         if mapper is None:
             _logger.warning(
                 "[MAGAZINE_TARGET_DIAGNOSTIC] frame=%s has no plane mapper; "
@@ -485,13 +407,11 @@ class PaintMagazineLoadService:
             frame=self._frame_name,
         )
         center_resolve_elapsed = monotonic() - center_resolve_started
-        diagnostic_calibration_xy = getattr(center_result, "calibration_xy", center_result.final_xy)
-        diagnostic_plane_xy = getattr(center_result, "plane_xy", center_result.final_xy)
-        diagnostic_tcp_delta = getattr(
-            center_result, "pickup_plane_reference_delta_xy", (0.0, 0.0)
-        )
-        diagnostic_target_delta = getattr(center_result, "target_delta_xy", (0.0, 0.0))
-        _logger.info(
+        diagnostic_calibration_xy = center_result.calibration_xy
+        diagnostic_plane_xy = center_result.plane_xy
+        diagnostic_tcp_delta = center_result.pickup_plane_reference_delta_xy
+        diagnostic_target_delta = center_result.target_delta_xy
+        _logger.debug(
             "[MAGAZINE_TARGET_DIAGNOSTIC] center_px=(%.3f, %.3f) point=%s "
             "homography_residual_xy=(%.3f, %.3f) mapped_plane_xy=(%.3f, %.3f) "
             "plane_delta_xy=(%.3f, %.3f) tcp_rotation_delta_xy=(%.3f, %.3f) "
@@ -513,7 +433,7 @@ class PaintMagazineLoadService:
             float(center_result.final_xy[0]),
             float(center_result.final_xy[1]),
             float(pickup_rz),
-            float(getattr(center_result, "reference_rz", 0.0) or 0.0),
+            float(center_result.reference_rz),
         )
         _logger.info(
             "[MAGAZINE_LOAD] simple pickup target center_px=(%.3f, %.3f) pickup_xy=(%.3f, %.3f) pickup_rz=%.3f contour_points=%d",
@@ -524,7 +444,7 @@ class PaintMagazineLoadService:
             float(pickup_rz),
             len(points_px),
         )
-        _logger.info(
+        _logger.debug(
             "[MAGAZINE_LOAD_TIMING] pickup_target points_array_s=%.3f center_px_s=%.3f resolver_s=%.3f "
             "registry_s=%.3f contour_resolve_s=%.3f contour_points=%d avg_point_resolve_ms=%.3f "
             "pickup_rz_s=%.3f center_resolve_s=%.3f total_s=%.3f",
@@ -564,14 +484,13 @@ class PaintMagazineLoadService:
     ) -> tuple[bool, str]:
         """Verify the live robot pose against the configured capture group."""
         expected = self._validated_pose(self._navigation.get_group_position(group_name))
-        robot_service = getattr(self._path_executor, "_robot_service", None)
-        getter = getattr(robot_service, "get_current_position_fresh", None)
-        if not callable(getter):
-            getter = getattr(robot_service, "get_current_position", None)
         try:
-            actual = self._validated_pose(getter()) if callable(getter) else None
-        except Exception:
-            _logger.exception("[MAGAZINE_CAPTURE_POSE] Failed to read the live robot pose")
+            actual = read_fresh_pose(
+                self._path_executor._robot_service,
+                error_message="Failed to read fresh robot pose before magazine capture",
+            )
+        except FreshPoseReadError as exc:
+            _logger.error("[MAGAZINE_CAPTURE_POSE] %s", exc)
             actual = None
         if expected is None:
             return False, f"Magazine capture group '{group_name}' has no valid configured pose"

@@ -21,9 +21,17 @@ from src.robot_systems.paint.processes.paint.magazine_load_result import (
     MAGAZINE_EMPTY,
     NO_WORKPIECE_AT_MAGAZINE,
 )
+from src.robot_systems.paint.processes.paint.motion.pose_sampling import (
+    FreshPoseReadError,
+    read_fresh_pose,
+)
+from src.robot_systems.paint.processes.paint.next_cycle_target import NextCycleTarget
 from src.robot_systems.paint.processes.paint.config import (
     MAGAZINE_PROCESSING_STRATEGY_BATCH_NESTING,
     MAGAZINE_PICKUP_MODE_AUTO_DISCOVERY_SENSOR_CONTROLLED_FAST_LIN,
+    MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN,
+    DropoffStrategy,
+    PAINT_PROCESS_CONFIG,
     scale_paint_process_accelerations,
 )
 
@@ -65,24 +73,16 @@ class PaintProductionService:
         self._prepositioned_start_group: str | None = None
 
     def pause_current_phase(self) -> None:
-        pause_load = getattr(self._magazine_load_service, "pause_current_load", None)
-        if callable(pause_load):
-            pause_load()
         with self._active_context_lock:
             context = self._active_execution_context
         if context is not None:
             context.run_allowed.clear()
         self._paint_control.request_pause()
         self._stop_active_magazine_navigation_motion()
-        pause_execution = getattr(self._path_executor, "pause_current_execution", None)
-        if callable(pause_execution):
-            pause_execution()
+        self._path_executor.pause_current_execution()
 
     def resume_current_phase(self) -> None:
         self._clear_prepositioned_start_group()
-        resume_load = getattr(self._magazine_load_service, "resume_current_load", None)
-        if callable(resume_load):
-            resume_load()
         with self._active_context_lock:
             context = self._active_execution_context
         if context is not None:
@@ -91,9 +91,6 @@ class PaintProductionService:
 
     def stop_current_phase(self) -> None:
         self._clear_prepositioned_start_group()
-        stop_load = getattr(self._magazine_load_service, "stop_current_load", None)
-        if callable(stop_load):
-            stop_load()
         with self._active_context_lock:
             context = self._active_execution_context
         if context is not None:
@@ -113,15 +110,16 @@ class PaintProductionService:
 
         process_config = process_config_result[2]
         magazine_config = process_config.magazine_load if process_config is not None else None
-        run_while_found = bool(getattr(process_config, "run_while_workpiece_found", False))
+        run_while_found = bool(
+            (process_config or PAINT_PROCESS_CONFIG).run_while_workpiece_found
+        )
 
         if self._magazine_load_service is not None and magazine_config is not None and magazine_config.enabled:
             fixed_groups = self._fixed_magazine_groups(magazine_config)
             fixed_sources = self._fixed_magazine_sources(magazine_config)
-            pickup_mode = str(getattr(magazine_config, "pickup_mode", "") or "").strip().lower()
+            pickup_mode = magazine_config.pickup_mode
             if (
-                str(getattr(magazine_config, "processing_strategy", "direct") or "direct")
-                .strip().lower() == MAGAZINE_PROCESSING_STRATEGY_BATCH_NESTING
+                magazine_config.processing_strategy == MAGAZINE_PROCESSING_STRATEGY_BATCH_NESTING
             ):
                 if pickup_mode != MAGAZINE_PICKUP_MODE_AUTO_DISCOVERY_SENSOR_CONTROLLED_FAST_LIN:
                     return False, (
@@ -134,7 +132,7 @@ class PaintProductionService:
                     should_stop,
                     fixed_sources=fixed_sources,
                 )
-            if pickup_mode == "fixed_group_sensor_controlled_fast_lin" and not fixed_sources:
+            if pickup_mode == MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN and not fixed_sources:
                 return False, "No fixed magazines are enabled"
             if (
                 run_while_found
@@ -216,7 +214,7 @@ class PaintProductionService:
                 )
                 return False, msg
             completed_cycles += 1
-            if bool(getattr(process_config, "stop_after_calibration_pickup", False)):
+            if process_config.stop_after_calibration_pickup:
                 return True, msg
             if msg == "Drop-off plate has no space for another workpiece of the same footprint":
                 return True, msg
@@ -245,14 +243,14 @@ class PaintProductionService:
         discovery_contours: list = []
         discovery_active_contour = None
         discovery_snapshot = None
-        pickup_mode = str(getattr(magazine_config, "pickup_mode", "") or "").strip().lower()
+        pickup_mode = magazine_config.pickup_mode
         auto_discovery = (
             pickup_mode == MAGAZINE_PICKUP_MODE_AUTO_DISCOVERY_SENSOR_CONTROLLED_FAST_LIN
         )
         while not should_stop():
             active_source = sources[group_index] if sources else None
             active_group = (
-                str(getattr(magazine_config, "magazine_group_id", "Magazine") or "Magazine").strip()
+                str(magazine_config.magazine_group_id).strip()
                 if auto_discovery
                 else self._magazine_source_group(active_source, magazine_config)
             )
@@ -289,17 +287,11 @@ class PaintProductionService:
                         return True, MAGAZINE_EMPTY
                     discovery_active_contour = None
                     active_magazine_config = (
-                        getattr(context, "magazine_config", magazine_config)
+                        context.magazine_config
                         if context is not None
                         else magazine_config
                     )
-                    if bool(
-                        getattr(
-                            active_magazine_config,
-                            "recapture_after_pile_done",
-                            False,
-                        )
-                    ):
+                    if active_magazine_config.recapture_after_pile_done:
                         discovery_contours = []
                         discovery_snapshot = None
                         _logger.info(
@@ -343,13 +335,11 @@ class PaintProductionService:
                 return False, msg
             completed_cycles += 1
             active_magazine_config = (
-                getattr(context, "magazine_config", magazine_config)
+                context.magazine_config
                 if context is not None
                 else magazine_config
             )
-            if auto_discovery and bool(
-                getattr(active_magazine_config, "recapture_every_cycle", False)
-            ):
+            if auto_discovery and active_magazine_config.recapture_every_cycle:
                 discovery_contours = []
                 discovery_active_contour = None
                 discovery_snapshot = None
@@ -357,7 +347,7 @@ class PaintProductionService:
                     "[MAGAZINE_LOAD] Cycle completed; clearing cached discovery "
                     "so the magazine is recaptured before the next pickup"
                 )
-            if bool(getattr(process_config, "stop_after_calibration_pickup", False)):
+            if process_config.stop_after_calibration_pickup:
                 return True, msg
             consecutive_empty_groups = 0
             if msg == "Drop-off plate has no space for another workpiece of the same footprint":
@@ -391,7 +381,7 @@ class PaintProductionService:
             staged = 0
             while not should_stop():
                 source = sources[group_index] if sources else None
-                mode = str(getattr(magazine_config, "pickup_mode", "") or "").strip().lower()
+                mode = magazine_config.pickup_mode
                 group = (
                     str(magazine_config.magazine_group_id or "Magazine").strip()
                     if mode == MAGAZINE_PICKUP_MODE_AUTO_DISCOVERY_SENSOR_CONTROLLED_FAST_LIN
@@ -420,17 +410,11 @@ class PaintProductionService:
                     if message == NO_WORKPIECE_AT_MAGAZINE:
                         discovery_active = None
                         active_magazine_config = (
-                            getattr(context, "magazine_config", magazine_config)
+                            context.magazine_config
                             if context is not None
                             else magazine_config
                         )
-                        if bool(
-                            getattr(
-                                active_magazine_config,
-                                "recapture_after_pile_done",
-                                False,
-                            )
-                        ):
+                        if active_magazine_config.recapture_after_pile_done:
                             discovery_contours = []
                             discovery_snapshot = None
                             _logger.info(
@@ -444,13 +428,11 @@ class PaintProductionService:
                     return False, message
                 staged += 1
                 active_magazine_config = (
-                    getattr(context, "magazine_config", magazine_config)
+                    context.magazine_config
                     if context is not None
                     else magazine_config
                 )
-                if bool(
-                    getattr(active_magazine_config, "recapture_every_cycle", False)
-                ):
+                if active_magazine_config.recapture_every_cycle:
                     discovery_contours = []
                     discovery_active = None
                     discovery_snapshot = None
@@ -474,7 +456,7 @@ class PaintProductionService:
             if not ok:
                 return False, message
             snapshot = self._capture_snapshot_service.capture_snapshot(source="paint_batch_staging")
-            contours = list(getattr(snapshot, "contours", None) or ())
+            contours = list(snapshot.contours or ())
             if not contours:
                 return False, "Batch nesting staged workpieces but calibration capture found none"
             _logger.info("[BATCH_NESTING] captured staged batch workpieces=%d", len(contours))
@@ -498,30 +480,26 @@ class PaintProductionService:
 
     @staticmethod
     def _fixed_magazine_groups(magazine_config) -> tuple[str, ...]:
-        mode = str(getattr(magazine_config, "pickup_mode", "") or "").strip().lower()
-        if mode != "fixed_group_sensor_controlled_fast_lin":
+        mode = magazine_config.pickup_mode
+        if mode != MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN:
             return ()
-        getter = getattr(magazine_config, "effective_fixed_pickup_group_ids", None)
-        if callable(getter):
-            return tuple(getter())
-        legacy = str(getattr(magazine_config, "fixed_pickup_group_id", "") or "").strip()
-        return (legacy,) if legacy else ()
+        return magazine_config.effective_fixed_pickup_group_ids()
 
     @staticmethod
     def _fixed_magazine_sources(magazine_config) -> tuple[dict, ...]:
-        mode = str(getattr(magazine_config, "pickup_mode", "") or "").strip().lower()
-        if mode != "fixed_group_sensor_controlled_fast_lin":
+        mode = magazine_config.pickup_mode
+        if mode != MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN:
             return ()
-        getter = getattr(magazine_config, "effective_fixed_pickup_sources", None)
-        return tuple(getter()) if callable(getter) else ()
+        return magazine_config.effective_fixed_pickup_sources()
 
     @staticmethod
     def _magazine_source_group(source: dict | None, magazine_config) -> str:
-        if isinstance(source, dict):
-            group_id = str(source.get("movement_group_id", "") or "").strip()
-            if group_id:
-                return group_id
-        return str(getattr(magazine_config, "fixed_pickup_group_id", "") or "").strip()
+        if not isinstance(source, dict) or "movement_group_id" not in source:
+            raise ValueError("Fixed magazine source requires movement_group_id")
+        group_id = str(source["movement_group_id"] or "").strip()
+        if not group_id:
+            raise ValueError("Fixed magazine source movement_group_id cannot be empty")
+        return group_id
 
     def _run_single_cycle(
         self,
@@ -542,7 +520,8 @@ class PaintProductionService:
         cached_workpiece_contour=None,
         suppress_magazine_load: bool = False,
     ) -> tuple[bool, str]:
-        raw_process_config = process_config
+        raw_process_config = process_config or PAINT_PROCESS_CONFIG
+        process_config = scale_paint_process_accelerations(raw_process_config)
         if self._paint_process_config_service is not None:
             try:
                 raw_process_config = self._paint_process_config_service.get_snapshot()
@@ -550,30 +529,23 @@ class PaintProductionService:
             except Exception:
                 _logger.exception("Failed to capture settings for paint cycle %d", cycle_index)
                 return False, "Failed to read paint process settings"
-        latest_magazine_config = getattr(process_config, "magazine_load", None)
+        latest_magazine_config = process_config.magazine_load
         if latest_magazine_config is not None and not suppress_magazine_load:
             magazine_config = latest_magazine_config
-            pickup_mode = str(
-                getattr(magazine_config, "pickup_mode", "") or ""
-            ).strip().lower()
-            if pickup_mode != "fixed_group_sensor_controlled_fast_lin":
+            pickup_mode = magazine_config.pickup_mode
+            if pickup_mode != MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN:
                 # Vision strategies always acquire from the camera observer.
                 # Do not let a fixed-source choice made from an older settings
                 # snapshot leak into this cycle.
-                magazine_group = str(
-                    getattr(magazine_config, "magazine_group_id", "Magazine")
-                    or "Magazine"
-                ).strip()
+                magazine_group = str(magazine_config.magazine_group_id).strip()
                 magazine_source = None
         cycle_strategy = self._effective_dropoff_strategy(process_config, cycle_index)
-        set_cycle_strategy = getattr(self._path_executor, "set_cycle_dropoff_strategy", None)
-        if callable(set_cycle_strategy):
-            set_cycle_strategy(cycle_strategy)
+        self._path_executor.set_cycle_dropoff_strategy(cycle_strategy)
         _logger.info(
             "[DRYING_MODE] cycle=%d effective_dropoff_strategy=%s alternating_demo=%s",
             cycle_index,
             cycle_strategy or "configured",
-            bool(getattr(getattr(process_config, "dropoff", None), "alternate_drying_demo", False)),
+            process_config.dropoff.alternate_drying_demo,
         )
         context = PaintExecutionContext(
             production_service=self,
@@ -609,8 +581,7 @@ class PaintProductionService:
             with self._active_context_lock:
                 if self._active_execution_context is context:
                     self._active_execution_context = None
-            if callable(set_cycle_strategy):
-                set_cycle_strategy(None)
+            self._path_executor.set_cycle_dropoff_strategy(None)
 
         snapshot = machine.get_snapshot()
         if snapshot.last_error is not None:
@@ -623,54 +594,46 @@ class PaintProductionService:
 
     @staticmethod
     def _effective_dropoff_strategy(process_config, cycle_index: int) -> str | None:
-        dropoff = getattr(process_config, "dropoff", None)
-        if dropoff is None:
-            return None
-        if bool(getattr(dropoff, "alternate_drying_demo", False)):
-            return "movement_group" if int(cycle_index) % 2 == 1 else "plate_layout"
-        return str(getattr(dropoff, "strategy", "movement_group") or "movement_group").strip().lower()
+        dropoff = process_config.dropoff
+        if dropoff.alternate_drying_demo:
+            return (
+                DropoffStrategy.MOVEMENT_GROUP
+                if int(cycle_index) % 2 == 1
+                else DropoffStrategy.PLATE_LAYOUT
+            )
+        return dropoff.strategy
 
-    def _next_cycle_start_target(self, ctx: PaintExecutionContext) -> dict | None:
+    def _next_cycle_start_target(self, ctx: PaintExecutionContext) -> NextCycleTarget | None:
         if not ctx.repeats_after_success:
             return None
         magazine = ctx.magazine_config
-        configured_magazine = magazine or getattr(ctx.process_config, "magazine_load", None)
-        if magazine is not None and bool(getattr(magazine, "enabled", False)):
-            mode = str(getattr(magazine, "pickup_mode", "") or "").strip().lower()
-            group_id = ctx.magazine_group or (
-                magazine.fixed_pickup_group_id
-                if mode == "fixed_group_sensor_controlled_fast_lin"
-                else magazine.magazine_group_id
-            )
+        configured_magazine = magazine or ctx.process_config.magazine_load
+        if magazine is not None and magazine.enabled:
+            group_id = ctx.magazine_group
             velocity = float(magazine.move_to_magazine_vel_percent)
             acceleration = float(magazine.move_to_magazine_acc_percent)
-            motion_type = str(magazine.move_to_magazine_motion_type)
+            motion_type = magazine.move_to_magazine_motion_type
         else:
-            group_id = str(
-                getattr(configured_magazine, "calibration_group_id", "CALIBRATION") or "CALIBRATION"
-            )
+            group_id = str(configured_magazine.calibration_group_id)
             nav = ctx.process_config.navigation_return
             velocity = float(nav.calibration_move_vel_percent)
             acceleration = float(nav.calibration_move_acc_percent)
-            motion_type = str(nav.calibration_move_motion_type)
+            motion_type = nav.calibration_move_motion_type
         group_id = str(group_id or "").strip()
-        navigation = getattr(self._magazine_load_service, "_navigation", None)
-        if navigation is None:
-            navigation = getattr(self._navigation_service, "_nav", None)
-        getter = getattr(navigation, "get_group_position", None)
+        navigation = self._magazine_load_service._navigation
         pose = ctx.magazine_fixed_pickup_pose
         if pose is None:
-            pose = getter(group_id) if callable(getter) and group_id else None
+            pose = navigation.get_group_position(group_id) if group_id else None
         if pose is None or len(pose) < 6:
             _logger.error("[NEXT_CYCLE] Cannot resolve start movement group '%s'", group_id)
             return None
-        return {
-            "group_id": group_id,
-            "position": [float(value) for value in pose[:6]],
-            "vel": velocity,
-            "acc": acceleration,
-            "type": motion_type,
-        }
+        return NextCycleTarget(
+            group_id=group_id,
+            position=tuple(float(value) for value in pose[:6]),
+            velocity_percent=velocity,
+            acceleration_percent=acceleration,
+            motion_type=motion_type,
+        )
 
     def _mark_prepositioned_start_group(self, group_id: str) -> None:
         self._prepositioned_start_group = str(group_id or "").strip() or None
@@ -690,17 +653,18 @@ class PaintProductionService:
         if not expected_group or self._prepositioned_start_group != expected_group:
             return False
         self._prepositioned_start_group = None
-        navigation = getattr(self._magazine_load_service, "_navigation", None)
-        if navigation is None:
-            navigation = getattr(self._navigation_service, "_nav", None)
-        getter = getattr(navigation, "get_group_position", None)
+        navigation = self._magazine_load_service._navigation
         expected = expected_position
         if expected is None:
-            expected = getter(expected_group) if callable(getter) else None
-        pose_getter = getattr(self._path_executor._robot_service, "get_current_position_fresh", None)
-        if not callable(pose_getter):
-            pose_getter = getattr(self._path_executor._robot_service, "get_current_position", None)
-        actual = pose_getter() if callable(pose_getter) else None
+            expected = navigation.get_group_position(expected_group)
+        try:
+            actual = read_fresh_pose(
+                self._path_executor._robot_service,
+                error_message=f"Failed to verify prepositioned group '{expected_group}'",
+            )
+        except FreshPoseReadError as exc:
+            _logger.error("[NEXT_CYCLE] %s", exc)
+            return False
         if expected is None or actual is None or len(expected) < 6 or len(actual) < 6:
             return False
         xyz_error = math.sqrt(sum((float(actual[i]) - float(expected[i])) ** 2 for i in range(3)))
@@ -721,16 +685,14 @@ class PaintProductionService:
     def _stop_active_magazine_navigation_motion(self) -> None:
         with self._active_context_lock:
             context = self._active_execution_context
-        state = getattr(context, "current_state", None)
-        if state is None or not str(getattr(state, "name", "")).startswith("MAGAZINE_"):
+        if context is None or context.current_state is None:
             return
-        navigation = getattr(self._magazine_load_service, "_navigation", None)
-        stop_motion = getattr(navigation, "stop_motion", None)
-        if callable(stop_motion):
-            try:
-                stop_motion()
-            except Exception:
-                _logger.exception("[MAGAZINE_LOAD] Failed to stop robot motion during pause")
+        if not context.current_state.name.startswith("MAGAZINE_"):
+            return
+        try:
+            self._magazine_load_service._navigation.stop_motion()
+        except Exception:
+            _logger.exception("[MAGAZINE_LOAD] Failed to stop robot motion during pause")
 
     def _freeze_brightness_after_capture(self) -> None:
         """Freeze auto-brightness after the workpiece capture so exposure stays stable while painting.
@@ -806,24 +768,20 @@ class PaintProductionService:
         navigation = self._navigation_service
         if navigation is None:
             return False, "Navigation service unavailable for calibration move"
-        move_to_calibration = getattr(navigation, "move_to_calibration_position", None)
-        if not callable(move_to_calibration):
-            return False, "Navigation service does not support calibration move"
-
-        group_id = str(getattr(magazine_config, "calibration_group_id", "CALIBRATION") or "CALIBRATION")
+        group_id = str(magazine_config.calibration_group_id)
         if self._consume_verified_prepositioned_start_group(group_id):
             self._restore_capture_view("after verifying prepositioned calibration pickup")
             return True, ""
 
         phase_start = perf_counter()
-        ok = bool(move_to_calibration(wait_cancelled=should_stop))
+        ok = bool(navigation.move_to_calibration_position(wait_cancelled=should_stop))
         self._log_phase_timing("move_to_calibration", phase_start, success=ok, cycle=1)
         if should_stop():
             return False, "Paint process stopped"
         if not ok:
             return False, f"Failed to move to calibration position '{group_id}'"
         self._restore_capture_view("after reaching calibration pickup")
-        settle_s = float(getattr(magazine_config, "release_settle_s", 0.0) or 0.0)
+        settle_s = float(magazine_config.release_settle_s)
         settle_start = perf_counter()
         if not self._wait_for_capture_settle(settle_s, should_stop):
             return False, "Paint process stopped"
@@ -855,10 +813,6 @@ class PaintProductionService:
         should_stop: Callable[[], bool],
     ) -> tuple[bool, str]:
         """Wait until resumed vision has published a genuinely fresh frame."""
-        health_details = getattr(self._vision_service, "get_health_details", None)
-        if not callable(health_details):
-            return False, "Vision service does not expose fresh-frame readiness"
-
         started = perf_counter()
         deadline = monotonic() + max(0.0, float(timeout_s))
         last_message = "No fresh camera frame available"
@@ -866,11 +820,11 @@ class PaintProductionService:
             if should_stop() or self._paint_control.should_stop():
                 return False, "Paint process stopped while waiting for a fresh camera frame"
             try:
-                details = health_details()
+                details = self._vision_service.get_health_details()
             except Exception as exc:
                 return False, f"Failed to query camera frame readiness: {exc}"
             if bool(details.get("frame_fresh", False)):
-                _logger.info(
+                _logger.debug(
                     "[CAPTURE_TIMING] fresh_frame_ready elapsed_s=%.3f",
                     perf_counter() - started,
                 )
@@ -885,21 +839,13 @@ class PaintProductionService:
         config_service = self._paint_process_config_service
         if config_service is None:
             return False
-        try:
-            return bool(getattr(config_service.get_snapshot(), "enable_path_debug_plots", False))
-        except Exception:
-            _logger.debug("Failed to read path debug plot setting", exc_info=True)
-            return False
+        return bool(config_service.get_snapshot().enable_path_debug_plots)
 
     def _pause_dashboard_live_view_after_capture(self) -> bool:
         config_service = self._paint_process_config_service
         if config_service is None:
             return True
-        try:
-            return bool(getattr(config_service.get_snapshot(), "pause_dashboard_live_view_after_capture", True))
-        except Exception:
-            _logger.debug("Failed to read dashboard live-view setting", exc_info=True)
-            return True
+        return bool(config_service.get_snapshot().pause_dashboard_live_view_after_capture)
 
     def _set_dashboard_live_view_paused(
         self,
@@ -909,20 +855,17 @@ class PaintProductionService:
         reason: str = "",
     ) -> None:
         vision = self._vision_service
-        lifecycle_method = (
-            getattr(vision, "pause_processing", None)
-            if paused
-            else getattr(vision, "resume_processing", None)
-        )
-        if callable(lifecycle_method):
-            try:
-                lifecycle_method()
-            except Exception:
-                _logger.exception(
-                    "Failed to %s vision processing: %s",
-                    "pause" if paused else "resume",
-                    reason,
-                )
+        if vision is None:
+            return
+        lifecycle_method = vision.pause_processing if paused else vision.resume_processing
+        try:
+            lifecycle_method()
+        except Exception:
+            _logger.exception(
+                "Failed to %s vision processing: %s",
+                "pause" if paused else "resume",
+                reason,
+            )
         messaging = self._messaging_service
         if messaging is None:
             return

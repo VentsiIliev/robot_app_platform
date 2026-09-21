@@ -28,7 +28,7 @@ class PickupTransferPlan:
     change_plane_pose: list[float]
     paint_pivot_pose: list[float]
     safe_travel_poses: list[list[float]] = field(default_factory=list)
-    safe_travel_waypoints: list[dict] = field(default_factory=list)
+    safe_travel_waypoints: list[ConfiguredMotionWaypoint] = field(default_factory=list)
     source_rotation_deg: float = 0.0
     projected_source_path: list[list[float]] | None = None
     projected_pivot_path: list[list[float]] | None = None
@@ -228,7 +228,7 @@ class PaintPickupTransferPlanner:
         )
 
         safe_travel_waypoints = self._resolve_safe_travel_waypoints()
-        safe_travel_poses = [list(item["position"]) for item in safe_travel_waypoints]
+        safe_travel_poses = [list(item.position) for item in safe_travel_waypoints]
 
         if bool(owner._paint_process_config().safe_travel.enabled) and not safe_travel_waypoints:
             return None
@@ -237,7 +237,7 @@ class PaintPickupTransferPlanner:
             _logger.info(
                 "[PICKUP] safe travel waypoints configured: count=%d first=%s",
                 len(safe_travel_waypoints),
-                [round(float(v), 3) for v in safe_travel_waypoints[0]["position"][:6]],
+                [round(float(v), 3) for v in safe_travel_waypoints[0].position],
             )
 
         return PickupTransferPlan(
@@ -262,7 +262,7 @@ class PaintPickupTransferPlanner:
             pickup_retract_reference_pose=list(lift_pose),
         )
 
-    def _resolve_safe_travel_waypoints(self) -> list[dict]:
+    def _resolve_safe_travel_waypoints(self) -> list[ConfiguredMotionWaypoint]:
         """Resolve optional carried-workpiece safe travel waypoints with motion tuning."""
         owner = self._owner
         owner._last_safe_travel_error = ""
@@ -271,8 +271,7 @@ class PaintPickupTransferPlanner:
             return []
         motion = owner._paint_process_config().pickup_motion
         waypoints = owner._read_configured_waypoints(
-            getattr(config, "positions", []),
-            getattr(config, "position", []),
+            config.positions,
             float(motion.stage_transition_vel_percent),
             float(motion.stage_transition_acc_percent),
         )
@@ -364,3 +363,4 @@ class PaintPickupTransferPlanner:
             )
 
         return staged_pose
+from src.robot_systems.paint.processes.paint.configured_motion_waypoint import ConfiguredMotionWaypoint

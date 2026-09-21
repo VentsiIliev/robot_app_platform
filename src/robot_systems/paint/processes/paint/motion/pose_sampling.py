@@ -18,11 +18,12 @@ def read_fresh_pose(
     error_message: str,
 ) -> list[float]:
     """Read one valid six-axis pose through the required fresh-read API."""
-    getter = getattr(robot_service, "get_current_position_fresh", None)
-    if not callable(getter):
-        raise FreshPoseReadError(f"{error_message}: get_current_position_fresh() is unavailable")
     try:
-        pose = getter()
+        pose = robot_service.get_current_position_fresh()
+    except AttributeError as exc:
+        raise FreshPoseReadError(
+            f"{error_message}: get_current_position_fresh() is unavailable"
+        ) from exc
     except Exception as exc:
         raise FreshPoseReadError(error_message) from exc
     try:

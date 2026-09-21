@@ -5,8 +5,14 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 
 from src.engine.vision.i_capture_snapshot_service import VisionCaptureSnapshot
-from src.robot_systems.paint.processes.paint.config import PaintMagazineLoadConfig, PaintProcessConfig
+from src.robot_systems.paint.processes.paint.config import (
+    PICKUP_CONTACT_MODE_PLANNED,
+    DropoffStrategy,
+    PaintMagazineLoadConfig,
+    PaintProcessConfig,
+)
 from src.robot_systems.paint.processes.paint.execution_control import PaintExecutionControl
+from src.robot_systems.paint.processes.paint.paint_contact_job import PaintContactCommandJob
 from src.robot_systems.paint.processes.paint.execution_machine import (
     PaintExecutionContext,
     PaintExecutionMachineFactory,
@@ -24,6 +30,7 @@ from src.robot_systems.paint.processes.paint.execution_machine.handlers.workflow
     handle_pickup,
 )
 from src.robot_systems.paint.processes.paint.execute.pickup_executor import (
+    PickupPlan,
     pickup_condition_is_active_after_retract,
 )
 from src.robot_systems.paint.processes.paint.magazine_load_service import PaintMagazineLoadService
@@ -152,7 +159,7 @@ class TestCalibrationPickupTestMode(unittest.TestCase):
             stop_requested=lambda: False,
             control=PaintExecutionControl(),
             process_config=PaintProcessConfig(stop_after_calibration_pickup=True),
-            execution_plan=object(),
+            execution_plan=SimpleNamespace(workpiece={"workpieceId": "saved"}),
         )
 
         with (
@@ -190,6 +197,7 @@ class TestPaintExecutionMachineScaffold(unittest.TestCase):
             production_service=MagicMock(),
             stop_requested=lambda: False,
             control=PaintExecutionControl(),
+            process_config=PaintProcessConfig(),
             magazine_config=PaintMagazineLoadConfig(enabled=False),
         )
         machine = PaintExecutionMachineFactory().build(ctx)
@@ -200,9 +208,11 @@ class TestPaintExecutionMachineScaffold(unittest.TestCase):
         self.assertEqual(PaintExecutionState.CAPTURE_WORKPIECE, machine.current_state)
         self.assertEqual(PaintExecutionState.STARTING, ctx.current_state)
 
-    def test_starting_routes_to_magazine_load_when_enabled(self):
+    def test_starting_fails_when_magazine_service_is_missing(self):
+        service = MagicMock()
+        service._magazine_load_service = None
         ctx = PaintExecutionContext(
-            production_service=MagicMock(),
+            production_service=service,
             stop_requested=lambda: False,
             control=PaintExecutionControl(),
             magazine_config=PaintMagazineLoadConfig(enabled=True),
@@ -212,7 +222,11 @@ class TestPaintExecutionMachineScaffold(unittest.TestCase):
         progressed = machine.step()
 
         self.assertTrue(progressed)
-        self.assertEqual(PaintExecutionState.MAGAZINE_LOAD, machine.current_state)
+        self.assertEqual(PaintExecutionState.ERROR, machine.current_state)
+        self.assertEqual(
+            "Magazine loading is enabled but its service is not configured",
+            ctx.result_message,
+        )
 
     def test_starting_routes_to_first_fine_magazine_state_for_real_magazine_service(self):
         service = MagicMock()
@@ -320,6 +334,7 @@ class TestPaintExecutionMachineScaffold(unittest.TestCase):
             production_service=service,
             stop_requested=lambda: False,
             control=PaintExecutionControl(),
+            process_config=PaintProcessConfig(),
             magazine_config=PaintMagazineLoadConfig(enabled=False),
         )
         machine = PaintExecutionMachineFactory().build(ctx)
@@ -363,6 +378,7 @@ class TestPaintExecutionMachineScaffold(unittest.TestCase):
 
     def test_machine_records_no_contour_as_error_result(self):
         service = MagicMock()
+        service._wait_for_fresh_capture_frame.return_value = (True, "")
         service._capture_snapshot_service.capture_snapshot.return_value = VisionCaptureSnapshot(
             frame="frame",
             contours=[],
@@ -388,6 +404,7 @@ class TestPaintExecutionMachineScaffold(unittest.TestCase):
     def test_machine_uses_phased_motion_states_for_real_executor_shape(self):
         events = []
         service = MagicMock()
+        service._wait_for_fresh_capture_frame.return_value = (True, "")
         service._capture_snapshot_service.capture_snapshot.return_value = VisionCaptureSnapshot(
             frame="frame",
             contours=[
@@ -401,6 +418,7 @@ class TestPaintExecutionMachineScaffold(unittest.TestCase):
         )
         service._path_preparation_service.build_execution_plan.return_value = SimpleNamespace(
             execution_jobs=[{"job": 1}],
+            workpiece={"workpieceId": "saved"},
         )
         service._path_executor = _FakePhasedPathExecutor(events)
         service._next_cycle_start_target.return_value = None
@@ -411,6 +429,7 @@ class TestPaintExecutionMachineScaffold(unittest.TestCase):
             production_service=service,
             stop_requested=lambda: False,
             control=PaintExecutionControl(),
+            process_config=PaintProcessConfig(),
             magazine_config=PaintMagazineLoadConfig(enabled=False),
         )
         machine = PaintExecutionMachineFactory().build(ctx)
@@ -425,10 +444,7 @@ class TestPaintExecutionMachineScaffold(unittest.TestCase):
         self.assertEqual(
             [
                 "unwind",
-                "pickup",
                 "paint_contact",
-                "Moving to dropoff pose before unwind",
-                "unwind",
                 "vacuum_off",
                 "post_return",
             ],
@@ -475,16 +491,32 @@ class _FakePhasedPathExecutor:
         self._active_execution_control = None
         self._debug_dump_dir = None
         self._dropoff_unwind_prepared = False
+        self._last_pickup_contact_mode = PICKUP_CONTACT_MODE_PLANNED
         self._configured_contact_motion_plane = "xy_z_rz"
+        self._contact_motion_config = SimpleNamespace(rotation_index=5)
         self._last_process_end_pose = [1, 2, 3, 4, 5, 6]
         self._last_pickup_plan = SimpleNamespace(align_pose=[1, 2, 3, 4, 5, 6])
         self._dropoff_position_provider = object()
-        self._robot_service = SimpleNamespace(unwind_joint6=self._unwind_joint6)
+        self._dropoff_motion_corridor_id = None
+        self._dryer_ready_for_release = None
+        self._is_vacuum_pump_enabled = lambda: False
+        self._on_workpiece_release_verified = None
+        self._plate_layout_service = None
+        self._last_prepositioned_start_group = None
+        self._robot_service = SimpleNamespace(
+            unwind_joint6=self._unwind_joint6,
+            execute_ordered_motion_chain=lambda **_kwargs: 0,
+        )
         self._motion = SimpleNamespace(
             move_pickup_phase=self._move_pickup_phase,
+            move_ordered_pickup_sequence=lambda _label, _segments: True,
+            turn_vacuum_on=lambda: (True, ""),
             turn_vacuum_off=self._turn_vacuum_off,
         )
-        self._pickup = SimpleNamespace(execute=self._pickup_execute)
+        self._pickup = SimpleNamespace(
+            build_plan=self._build_pickup_plan,
+            execute=self._pickup_execute,
+        )
         self._paint_contact = SimpleNamespace(execute=self._paint_contact_execute)
         self._edge_cleanup = SimpleNamespace(
             cancel_early_preplanning=lambda: events.append("cancel_cleanup"),
@@ -494,6 +526,9 @@ class _FakePhasedPathExecutor:
         self._post_execute_callback = self._post_return
 
     def _refresh_paint_process_config_snapshot(self) -> None:
+        pass
+
+    def _set_cycle_process_config_snapshot(self, _config) -> None:
         pass
 
     def _apply_paint_process_contact_config(self) -> None:
@@ -508,7 +543,7 @@ class _FakePhasedPathExecutor:
     def _paint_process_config(self):
         return SimpleNamespace(
             dropoff=SimpleNamespace(
-                strategy="movement_group",
+                strategy=DropoffStrategy.MOVEMENT_GROUP,
                 release_align_vel_percent=20.0,
                 release_align_acc_percent=20.0,
                 release_align_motion_type="ptp",
@@ -525,6 +560,12 @@ class _FakePhasedPathExecutor:
                 unwind_acc_percent=10.0,
                 unwind_queue_if_busy=True,
             ),
+            contact_staging=SimpleNamespace(
+                attach_vel_percent=10.0,
+                attach_acc_percent=10.0,
+            ),
+            paint_process_acceleration_scale_percent=100.0,
+            unmatched_paint_pass_count=1,
         )
 
     def _wait_for_paint_resume(self, _control) -> bool:
@@ -537,8 +578,33 @@ class _FakePhasedPathExecutor:
         self._events.append("pickup")
         return True, ""
 
-    def _paint_contact_execute(self, _plan, *, control=None) -> tuple[bool, str, int]:
+    @staticmethod
+    def _build_pickup_plan(_plan) -> PickupPlan:
+        return PickupPlan(
+            strategy_name="default",
+            motion_plan=SimpleNamespace(align_pose=[1, 2, 3, 4, 5, 6]),
+            waypoints=(),
+        )
+
+    def _paint_contact_execute(
+        self,
+        _plan,
+        *,
+        control=None,
+        execute_robot=True,
+        collected_command_paths=None,
+        collected_command_jobs=None,
+    ) -> tuple[bool, str, int]:
         self._events.append("paint_contact")
+        if collected_command_paths is not None:
+            collected_command_paths.append([[1, 2, 3, 4, 5, 6]])
+        if collected_command_jobs is not None:
+            collected_command_jobs.append(PaintContactCommandJob(
+                job_index=0,
+                pattern_type="Path",
+                velocity_percent=10.0,
+                acceleration_percent=10.0,
+            ))
         return True, "", 5
 
     def _prepare_dropoff_joint6_unwind(self) -> tuple[bool, str]:

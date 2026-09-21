@@ -51,6 +51,8 @@ class _FakeRobot:
         self.ptp_return = True
         self.fast_linear_requests = []
         self.next_task_id = 1
+        self.active_task_id = None
+        self.last_completed_task_id = None
 
     def start_servo_jog(self, *args, **kwargs):
         self.started.append((args, kwargs))
@@ -80,6 +82,11 @@ class _FakeRobot:
         self.position = list(kwargs["position"])
         task_id = self.next_task_id
         self.next_task_id += 1
+        if kwargs.get("blocking", True):
+            self.active_task_id = None
+            self.last_completed_task_id = task_id
+        else:
+            self.active_task_id = task_id
         return {
             "result": 0,
             "success": True,
@@ -90,6 +97,8 @@ class _FakeRobot:
         }
 
     def controlled_stop(self, expected_task_id):
+        self.active_task_id = None
+        self.last_completed_task_id = expected_task_id
         return {
             "result": 0,
             "success": True,
@@ -106,6 +115,14 @@ class _FakeRobot:
 
     def get_current_position_fresh(self):
         return list(self.position)
+
+    def get_execution_status(self):
+        return {
+            "is_executing": self.active_task_id is not None,
+            "state": "executing" if self.active_task_id is not None else "idle",
+            "current_task_id": self.active_task_id,
+            "last_completed_task_id": self.last_completed_task_id,
+        }
 
     def move_ptp(self, position, *args, **kwargs):
         self.ptp_moves.append((list(position), args, kwargs))
@@ -143,8 +160,22 @@ class _FakeMotion:
         return True, ""
 
     def move_ordered_pickup_sequence(self, label, segments):
-        self.sequences.append((label, segments))
+        self.sequences.append((label, serialize_ordered_motion_commands(segments)))
         return True
+
+
+def _magazine_waypoints(*items):
+    return tuple(
+        MagazineTransferWaypoint(
+            label,
+            pose,
+            velocity,
+            acceleration,
+            OrderedMotionType.parse(motion_type),
+            blend_radius,
+        )
+        for label, pose, velocity, acceleration, motion_type, blend_radius in items
+    )
 
 
 class _ConditionAfterStart:
@@ -199,6 +230,16 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
                 poll_interval_s=0.001,
             )
         )
+
+    def test_magazine_approach_rejects_missing_execution_status_api(self):
+        self.assertFalse(
+            _wait_for_execution_inactive(SimpleNamespace(), timeout_s=0.02)
+        )
+
+    def test_magazine_approach_rejects_malformed_execution_status(self):
+        robot = SimpleNamespace(get_execution_status=lambda: None)
+
+        self.assertFalse(_wait_for_execution_inactive(robot, timeout_s=0.02))
 
     def test_calibration_contact_timeout_turns_vacuum_off(self):
         robot = _FakeRobot()
@@ -265,7 +306,7 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
             _pickup_user=0,
             _paint_process_config=lambda: SimpleNamespace(pickup_motion=pickup_motion),
         )
-        waypoints = (
+        waypoints = _magazine_waypoints(
             ("approach", [0, 0, 100, 0, 0, 0], 10, 10, "ptp", 0),
             ("contact", [0, 0, 0, 0, 0, 0], 10, 10, "linear", 0),
             ("lift", [0, 0, 50, 0, 0, 0], 10, 10, "ptp", 0),
@@ -313,7 +354,7 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
             _pickup_user=0,
             _paint_process_config=lambda: SimpleNamespace(pickup_motion=pickup_motion),
         )
-        waypoints = (
+        waypoints = _magazine_waypoints(
             ("approach", [0, 0, 100, 0, 0, 0], 10, 10, "ptp", 0),
             ("contact", [0, 0, 0, 0, 0, 0], 10, 10, "linear", 0),
             ("lift", [0, 0, 50, 0, 0, 0], 10, 10, "ptp", 0),
@@ -363,7 +404,7 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
         )
         approach_pose = [1.0, 2.0, 100.0, 0.0, 0.0, 3.0]
         fixed_pose = [9.0, 8.0, 120.0, 180.0, 0.0, 0.0]
-        waypoints = (
+        waypoints = _magazine_waypoints(
             ("approach", approach_pose, 10, 10, "ptp", 0),
             ("contact", [1, 2, 0, 0, 0, 3], 10, 10, "linear", 0),
             ("lift", [1, 2, 50, 0, 0, 3], 10, 10, "ptp", 0),
@@ -408,7 +449,7 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
             _pickup_user=0,
             _paint_process_config=lambda: SimpleNamespace(pickup_motion=pickup_motion),
         )
-        waypoints = (
+        waypoints = _magazine_waypoints(
             ("approach", [1, 2, 100, 0, 0, 3], 10, 10, "ptp", 0),
             ("contact", [1, 2, 0, 0, 0, 3], 10, 10, "linear", 0),
             ("lift", [1, 2, 50, 0, 0, 3], 30, 30, "ptp", 20),
@@ -426,7 +467,7 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
         self.assertEqual(robot.ptp_moves, [])
         self.assertEqual(len(robot.prepared), 1)
         prepared_segments, prepared_start, _tool, _user, prepared_kwargs = robot.prepared[0]
-        self.assertEqual([segment["label"] for segment in prepared_segments], ["release"])
+        self.assertEqual([segment.label for segment in prepared_segments], ["release"])
         self.assertEqual([1, 2, 100, 0, 0, 3], prepared_start)
         self.assertTrue(prepared_kwargs["allow_servo_during_prepare"])
         self.assertEqual(robot.executed_prepared, ["prepared-1"])
@@ -471,7 +512,7 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
                 magazine_load=magazine_load,
             ),
         )
-        waypoints = (
+        waypoints = _magazine_waypoints(
             ("approach", [1, 2, 100, 0, 0, 3], 10, 10, "ptp", 0),
             ("contact", [1, 2, 20, 0, 0, 3], 10, 10, "linear", 0),
             ("lift", [1, 2, 100, 0, 0, 3], 30, 30, "ptp", 20),
@@ -529,7 +570,7 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
             _pickup_user=0,
             _paint_process_config=lambda: SimpleNamespace(pickup_motion=pickup_motion),
         )
-        waypoints = (
+        waypoints = _magazine_waypoints(
             ("approach", [1, 2, 100, 0, 0, 3], 10, 10, "ptp", 0),
             ("contact", [1, 2, 0, 0, 0, 3], 10, 10, "linear", 0),
             ("lift", [1, 2, 50, 0, 0, 3], 30, 30, "ptp", 20),
@@ -575,7 +616,7 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
             _pickup_user=0,
             _paint_process_config=lambda: SimpleNamespace(pickup_motion=pickup_motion),
         )
-        waypoints = (
+        waypoints = _magazine_waypoints(
             ("approach", [0, 0, 100, 0, 0, 0], 10, 10, "ptp", 0),
             ("contact", [0, 0, 0, 0, 0, 0], 10, 10, "linear", 0),
             ("lift", [0, 0, 50, 0, 0, 0], 10, 10, "ptp", 0),
@@ -657,7 +698,6 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
             servo_contact_poll_interval_s=0.01,
             servo_contact_preflight_read_attempts=2,
             servo_contact_read_failure_limit=3,
-            servo_contact_fallback_to_planned_descend=False,
             lift_align_vel_percent=30.0,
             lift_align_acc_percent=30.0,
         )
@@ -853,7 +893,7 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
         prepared_segments, prepared_start, _tool, _user, _kwargs = robot.prepared[0]
         self.assertEqual(prepared_start, [1, 2, 20.0, 180, 0, 15])
         self.assertEqual(
-            [segment["label"] for segment in prepared_segments],
+            [segment.label for segment in prepared_segments],
             ["Safe travel waypoint 1", "stage"],
         )
         self.assertEqual(
@@ -907,7 +947,7 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
 
         prepared_segments = robot.prepared[0][0]
         self.assertEqual(
-            [segment["label"] for segment in prepared_segments],
+            [segment.label for segment in prepared_segments],
             ["Safe travel waypoint 1", "Moving to staging offset before first pivot contact pose"],
         )
         self.assertEqual(prepared_segments[0]["position"], [50, 60, 150, 180, 0, 0])
@@ -1009,7 +1049,6 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
         motion = _FakeMotion()
         motion.turn_vacuum_on = lambda *, required=False: (False, "pump failed")
         pickup_motion = SimpleNamespace(
-            servo_contact_fallback_to_planned_descend=False,
         )
         owner = SimpleNamespace(
             _robot_service=robot,

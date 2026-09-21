@@ -26,7 +26,7 @@ paint_package = types.ModuleType("src.robot_systems.paint")
 paint_package.__path__ = [str(REPOSITORY_ROOT / "src/robot_systems/paint")]
 sys.modules.setdefault("src.robot_systems.paint", paint_package)
 
-from src.robot_systems.paint.processes.paint.dryer_release_coordinator import (
+from src.robot_systems.paint.processes.paint.auto_dryer.dryer_release_coordinator import (
     DryerReleaseCoordinator,
 )
 

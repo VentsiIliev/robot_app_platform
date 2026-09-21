@@ -36,7 +36,7 @@ def handle_build_execution_plan(ctx: PaintExecutionContext) -> PaintExecutionSta
 
 
 def _path_executor_supports_motion_states(path_executor: object) -> bool:
-    if getattr(path_executor, "supports_paint_motion_states", False) is not True:
+    if path_executor.supports_paint_motion_states is not True:
         return False
     required_methods = (
         "_pickup",

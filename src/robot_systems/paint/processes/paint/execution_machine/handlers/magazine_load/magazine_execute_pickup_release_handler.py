@@ -10,12 +10,13 @@ from src.engine.robot.motion_sequence import OrderedMotionType, OrderedPositionC
 from src.engine.robot.enums.axis import Direction, RobotAxis
 from src.engine.robot.procedures import (
     ServoRetractConfig,
+    ServoRetractMotionType,
     ServoUntilConditionConfig,
     ServoUntilConditionProcedure,
 )
 from src.robot_systems.paint.processes.paint.execution_machine.context import PaintExecutionContext
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.common.guards import guard_control
-from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_load_handler import (
+from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_control import (
     interrupted_or_error,
 )
 from src.robot_systems.paint.processes.paint.execution_machine.state import PaintExecutionState
@@ -308,7 +309,7 @@ def _execute_magazine_servo_contact_pickup_release(
     orientation_tolerance_deg: float = 1.0,
 ) -> tuple[bool, str]:
     pickup_motion = executor._paint_process_config().pickup_motion
-    condition = getattr(executor, "_pickup_condition", None)
+    condition = executor._pickup_condition
     if condition is None:
         _logger.error("[MAGAZINE_LOAD] Servo contact pickup requested, but no pickup condition is configured")
         return False, "Servo contact pickup condition is not configured"
@@ -316,23 +317,9 @@ def _execute_magazine_servo_contact_pickup_release(
     approach_segments = build_magazine_pickup_release_segments(transfer_waypoints[:1])
     safe_clearance_pose = list(transfer_waypoints[1].pose)
     safe_clearance_pose[2] = float(retract_reference_pose[2])
-    full_retract = bool(
-        getattr(pickup_motion, "magazine_full_retract_before_release", True)
-    )
-    short_retract_distance_mm = float(
-        getattr(pickup_motion, "magazine_short_retract_distance_mm", 10.0)
-    )
-    # Magazine retract policy belongs to the magazine config. Accept it from
-    # there when available while retaining pickup-motion fallbacks for older
-    # test doubles and integrations.
-    magazine_config = getattr(executor._paint_process_config(), "magazine_load", None)
-    if magazine_config is not None:
-        full_retract = bool(
-            getattr(magazine_config, "full_retract_before_release", full_retract)
-        )
-        short_retract_distance_mm = float(
-            getattr(magazine_config, "short_retract_distance_mm", short_retract_distance_mm)
-        )
+    magazine_config = executor._paint_process_config().magazine_load
+    full_retract = bool(magazine_config.full_retract_before_release)
+    short_retract_distance_mm = float(magazine_config.short_retract_distance_mm)
     if not full_retract and (
         not math.isfinite(short_retract_distance_mm)
         or short_retract_distance_mm <= 0.0
@@ -424,16 +411,6 @@ def _execute_magazine_servo_contact_pickup_release(
         else resolve_prepared_plan()
     )
     if prepared_plan_id is None and not release_has_fast_lin and full_retract:
-        _logger.warning(
-            "[MAGAZINE_LOAD] Concurrent release preplanning was unavailable; "
-            "retrying after pickup approach"
-        )
-        prepared_plan_id = _prepare_magazine_release(
-            executor,
-            release_segments,
-            start_pose=safe_clearance_pose,
-        )
-    if prepared_plan_id is None and not release_has_fast_lin and full_retract:
         return False, "Magazine release motion could not be prepared before servo pickup"
     if not full_retract:
         _logger.info(
@@ -478,12 +455,12 @@ def _execute_magazine_servo_contact_pickup_release(
         )
         if recovered:
             return True, ""
-        motion_error = getattr(executor._motion, "last_motion_error", None)
+        motion_error = executor._motion.last_motion_error
         return False, str(motion_error or "ordered motion failed")
 
     try:
         contact_speed_mm_s = float(pickup_motion.servo_contact_linear_mm_s)
-        minimum_contact_z_mm = float(getattr(pickup_motion, "servo_contact_min_z_mm", 0.0))
+        minimum_contact_z_mm = float(pickup_motion.servo_contact_min_z_mm)
         _logger.info(
             "[MAGAZINE_LOAD] Servo contact descent starting: speed_mm_s=%.3f timeout_s=%.3f tool=%d user=%d",
             contact_speed_mm_s,
@@ -491,14 +468,10 @@ def _execute_magazine_servo_contact_pickup_release(
             int(executor._pickup_tool),
             int(executor._pickup_user),
         )
-        control = getattr(executor, "_active_execution_control", None)
+        control = executor._active_execution_control
         result = ServoUntilConditionProcedure(executor._robot_service, condition).run(
             config=ServoUntilConditionConfig(
-                execution_mode=str(getattr(
-                    pickup_motion,
-                    "magazine_contact_execution_mode",
-                    "sensor_controlled_fast_lin",
-                )),
+                execution_mode=pickup_motion.magazine_contact_execution_mode,
                 axis=RobotAxis.Z,
                 direction=Direction.MINUS,
                 linear_mm_s=contact_speed_mm_s,
@@ -506,38 +479,26 @@ def _execute_magazine_servo_contact_pickup_release(
                 tool=int(executor._pickup_tool),
                 user=int(executor._pickup_user),
                 poll_interval_s=float(pickup_motion.servo_contact_poll_interval_s),
-                controlled_stop_duration_s=float(
-                    getattr(pickup_motion, "servo_contact_controlled_stop_duration_s", 0.20)
-                ),
-                stop_confirmation_timeout_s=float(
-                    getattr(pickup_motion, "servo_contact_stop_confirmation_timeout_s", 3.0)
-                ),
+                controlled_stop_duration_s=float(pickup_motion.servo_contact_controlled_stop_duration_s),
+                stop_confirmation_timeout_s=float(pickup_motion.servo_contact_stop_confirmation_timeout_s),
                 timeout_s=float(pickup_motion.servo_contact_timeout_s),
                 preflight_condition_read_attempts=int(pickup_motion.servo_contact_preflight_read_attempts),
                 condition_read_failure_limit=int(pickup_motion.servo_contact_read_failure_limit),
                 allow_subzero_descent=True,
                 disable_collision_checking=True,
                 minimum_z_mm=minimum_contact_z_mm,
-                approach_velocity=float(
-                    getattr(pickup_motion, "servo_contact_fast_lin_velocity_percent", 10.0)
-                ),
-                approach_acceleration=float(
-                    getattr(pickup_motion, "servo_contact_fast_lin_acceleration_percent", 30.0)
-                ),
+                approach_velocity=float(pickup_motion.servo_contact_fast_lin_velocity_percent),
+                approach_acceleration=float(pickup_motion.servo_contact_fast_lin_acceleration_percent),
             ),
             retract=ServoRetractConfig(
                 target_pose=safe_clearance_pose if full_retract else None,
                 distance_mm=None if full_retract else short_retract_distance_mm,
-                motion_type=OrderedMotionType.FAST_LINEAR.value,
+                motion_type=ServoRetractMotionType.FAST_LINEAR,
                 poll_interval_s=float(pickup_motion.servo_contact_poll_interval_s),
                 timeout_s=3.0,
                 position_tolerance_mm=2.0,
-                fast_lin_velocity_percent=float(
-                    getattr(pickup_motion, "lift_align_vel_percent", 80.0)
-                ),
-                fast_lin_acceleration_percent=float(
-                    getattr(pickup_motion, "lift_align_acc_percent", 60.0)
-                ),
+                fast_lin_velocity_percent=float(pickup_motion.lift_align_vel_percent),
+                fast_lin_acceleration_percent=float(pickup_motion.lift_align_acc_percent),
             ),
             cancel_requested=(
                 None
@@ -617,19 +578,7 @@ def _execute_magazine_servo_contact_pickup_release(
         if prepared_plan_id is not None:
             execution = executor._robot_service.execute_prepared_ordered_motion_chain(prepared_plan_id)
             if not _prepared_execution_succeeded(execution):
-                error = str(execution.get("error", "")) if isinstance(execution, dict) else ""
-                if not error.startswith("prepared chain start mismatch:"):
-                    return False, f"Magazine {release_label} prepared release execution failed"
-                _logger.warning(
-                    "[MAGAZINE_LOAD] %s; replanning release from live robot state",
-                    error,
-                )
-                discard_prepared()
-                if not executor._motion.move_ordered_pickup_sequence(
-                    f"Magazine {release_label} release after Fast LIN retract",
-                    release_segments,
-                ):
-                    return False, f"Magazine {release_label} mixed release execution failed"
+                return False, f"Magazine {release_label} prepared release execution failed"
             prepared_plan_id = None
         elif not executor._motion.move_ordered_pickup_sequence(
             f"Magazine {release_label} release after Fast LIN retract",
@@ -647,11 +596,10 @@ def _prepare_magazine_release(
     *,
     start_pose: list[float],
 ) -> str | None:
-    prepare = getattr(executor._robot_service, "prepare_ordered_motion_chain", None)
-    if not callable(prepare) or not segments:
+    if not segments:
         return None
     try:
-        result = prepare(
+        result = executor._robot_service.prepare_ordered_motion_chain(
             segments=segments,
             start_position=list(start_pose),
             tool=int(executor._pickup_tool),
@@ -671,11 +619,8 @@ def _prepare_magazine_release(
 
 
 def _discard_prepared_magazine_release(executor, plan_id: str) -> None:
-    discard = getattr(executor._robot_service, "discard_prepared_ordered_motion_chain", None)
-    if not callable(discard):
-        return
     try:
-        discard(plan_id)
+        executor._robot_service.discard_prepared_ordered_motion_chain(plan_id)
     except Exception:
         _logger.exception("[MAGAZINE_LOAD] Failed to discard prepared release plan_id=%s", plan_id)
 
@@ -808,34 +753,40 @@ def _wait_for_execution_inactive(
     required_inactive_samples: int = 2,
 ) -> bool:
     """Wait for the backend to finish a nominally blocking approach request."""
-    getter = getattr(robot_service, "get_execution_status", None)
-    if not callable(getter):
-        return True
     deadline = time.monotonic() + max(0.1, float(timeout_s))
     inactive_samples = 0
     while time.monotonic() < deadline:
         try:
-            status = getter()
+            status = robot_service.get_execution_status()
+        except AttributeError:
+            _logger.error(
+                "[MAGAZINE_LOAD] Cannot verify pickup approach: "
+                "get_execution_status() is unavailable"
+            )
+            return False
         except Exception:
             _logger.exception("[MAGAZINE_LOAD] Pickup approach status read failed")
-            status = None
-        if isinstance(status, dict):
-            state = str(status.get("state") or status.get("status") or "").strip().lower()
-            active = bool(status.get("is_executing")) or state in {
-                "running",
-                "executing",
-                "active",
-                "moving",
-                "stopping",
-            }
-            if active:
-                inactive_samples = 0
-            else:
-                inactive_samples += 1
-                if inactive_samples >= max(1, int(required_inactive_samples)):
-                    return True
-        else:
+            return False
+        if not isinstance(status, dict):
+            _logger.error(
+                "[MAGAZINE_LOAD] Cannot verify pickup approach: "
+                "execution status is not a mapping"
+            )
+            return False
+        state = str(status.get("state") or status.get("status") or "").strip().lower()
+        active = bool(status.get("is_executing")) or state in {
+            "running",
+            "executing",
+            "active",
+            "moving",
+            "stopping",
+        }
+        if active:
             inactive_samples = 0
+        else:
+            inactive_samples += 1
+            if inactive_samples >= max(1, int(required_inactive_samples)):
+                return True
         time.sleep(max(0.005, float(poll_interval_s)))
     _logger.error("[MAGAZINE_LOAD] Pickup approach execution-inactive timeout")
     return False

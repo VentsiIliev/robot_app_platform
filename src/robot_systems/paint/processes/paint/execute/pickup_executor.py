@@ -10,6 +10,7 @@ from typing import Protocol
 from src.engine.robot.enums.axis import Direction, RobotAxis
 from src.engine.robot.procedures import (
     ServoRetractConfig,
+    ServoRetractMotionType,
     ServoUntilConditionConfig,
     ServoUntilConditionProcedure,
 )
@@ -39,6 +40,8 @@ from src.robot_systems.paint.processes.paint.motion.pose_sampling import (
     read_fresh_pose,
     wait_for_stable_pose,
 )
+from src.robot_systems.paint.processes.paint.paint_contact_job import PaintContactCommandJob
+from src.robot_systems.paint.processes.paint.configured_motion_waypoint import ConfiguredMotionWaypoint
 from src.robot_systems.paint.timing import timed_block, timed_step
 
 _logger = logging.getLogger(__name__)
@@ -80,8 +83,7 @@ def pickup_condition_is_active_after_retract(
         if sample_index > 0 and interval_s > 0.0:
             time.sleep(interval_s)
         try:
-            reader = getattr(condition, "is_active", None)
-            active = reader() if callable(reader) else condition()
+            active = condition.is_active()
         except Exception:
             _logger.exception(
                 "[PICKUP] Pickup condition read failed after Fast LIN retract sample=%d/%d",
@@ -112,8 +114,22 @@ class PickupWaypoint:
     pose: list[float]
     vel_percent: float
     acc_percent: float
-    motion_type: str | None = None
+    motion_type: OrderedMotionType | None = None
     blendR: float | None = None
+
+    def __post_init__(self) -> None:
+        if self.motion_type is not None and not isinstance(
+            self.motion_type,
+            OrderedMotionType,
+        ):
+            object.__setattr__(
+                self,
+                "motion_type",
+                OrderedMotionType.parse(
+                    self.motion_type,
+                    field_name=f"pickup waypoint {self.label!r}",
+                ),
+            )
 
 
 @dataclass(frozen=True)
@@ -214,25 +230,25 @@ class DefaultPickupStrategy:
                 )
             )
 
-        safe_travel_waypoints = getattr(motion_plan, "safe_travel_waypoints", None) or [
-            {
-                "position": safe_travel_pose,
-                "vel_percent": pickup_motion.stage_transition_vel_percent,
-                "acc_percent": pickup_motion.stage_transition_acc_percent,
-                "motion_type": pickup_motion.stage_transition_motion_type,
-                "blendR": pickup_motion.stage_transition_blendR,
-            }
+        safe_travel_waypoints = motion_plan.safe_travel_waypoints or [
+            ConfiguredMotionWaypoint(
+                position=tuple(float(value) for value in safe_travel_pose),
+                velocity_percent=float(pickup_motion.stage_transition_vel_percent),
+                acceleration_percent=float(pickup_motion.stage_transition_acc_percent),
+                motion_type=pickup_motion.stage_transition_motion_type,
+                blend_radius=float(pickup_motion.stage_transition_blendR),
+            )
             for safe_travel_pose in motion_plan.safe_travel_poses
         ]
         for waypoint_index, safe_travel_waypoint in enumerate(safe_travel_waypoints, start=1):
             waypoints.append(
                 PickupWaypoint(
                     f"Safe travel waypoint {waypoint_index}",
-                    list(safe_travel_waypoint["position"]),
-                    float(safe_travel_waypoint["vel_percent"]),
-                    float(safe_travel_waypoint["acc_percent"]),
-                    str(safe_travel_waypoint.get("motion_type", "ptp")),
-                    float(safe_travel_waypoint.get("blendR", 0.0)),
+                    list(safe_travel_waypoint.position),
+                    safe_travel_waypoint.velocity_percent,
+                    safe_travel_waypoint.acceleration_percent,
+                    safe_travel_waypoint.motion_type,
+                    safe_travel_waypoint.blend_radius,
                 )
             )
 
@@ -314,7 +330,7 @@ class PaintPickupExecutor:
         """Run pickup, align, and staging according to the configured strategy."""
         started = perf_counter()
         self._last_failure_message = ""
-        _logger.info("[TIMING] pickup_to_pivot entered")
+        _logger.debug("[TIMING] pickup_to_pivot entered")
         if self._owner._robot_service is None:
             return False, "Robot service is not available"
 
@@ -324,15 +340,15 @@ class PaintPickupExecutor:
                 pickup_plan = self.build_plan(prepared_workpiece)
 
         if pickup_plan is None:
-            _logger.info("[TIMING] pickup_to_pivot success=false stage=build_poses total_elapsed_s=%.3f", elapsed_s(started))
+            _logger.debug("[TIMING] pickup_to_pivot success=false stage=build_poses total_elapsed_s=%.3f", elapsed_s(started))
             return False, (
-                getattr(self._owner, "_last_pickup_plan_error", "")
-                or getattr(self._owner, "_last_safe_travel_error", "")
+                self._owner._last_pickup_plan_error
+                or self._owner._last_safe_travel_error
                 or "Could not compute pickup-to-pivot poses"
             )
         self._owner._last_pickup_plan = pickup_plan.motion_plan
         self._owner._last_pickup_contact_mode = pickup_plan.contact_mode
-        _logger.info("[TIMING] pickup_to_pivot stage=build_poses elapsed_s=%.3f", elapsed_s(plan_started))
+        _logger.debug("[TIMING] pickup_to_pivot stage=build_poses elapsed_s=%.3f", elapsed_s(plan_started))
 
         if pickup_plan.contact_mode == PICKUP_CONTACT_MODE_SENSOR_CONTROLLED_FAST_LIN:
             ok = self._execute_servo_contact_pickup_sequence(
@@ -353,8 +369,8 @@ class PaintPickupExecutor:
             )
         if ok:
             return True, "Pickup completed and robot is positioned before the first pivot contact pose"
-        _logger.info("[TIMING] pickup_to_pivot success=false stage=ordered_pickup total_elapsed_s=%.3f", elapsed_s(started))
-        detail = getattr(self._owner._motion, "last_motion_error", None)
+        _logger.debug("[TIMING] pickup_to_pivot success=false stage=ordered_pickup total_elapsed_s=%.3f", elapsed_s(started))
+        detail = self._owner._motion.last_motion_error
         if self._last_failure_message:
             return False, self._last_failure_message
         if detail:
@@ -408,7 +424,7 @@ class PaintPickupExecutor:
             return False
 
         pickup_motion = self._owner._paint_process_config().pickup_motion
-        condition = getattr(self._owner, "_pickup_condition", None)
+        condition = self._owner._pickup_condition
         if condition is None:
             _logger.error("[PICKUP] Servo contact pickup requested, but no pickup condition is configured")
             return False
@@ -428,10 +444,7 @@ class PaintPickupExecutor:
         predicted_retract_pose = list(waypoints[contact_index].pose)
         predicted_retract_pose[2] = float(retract_reference_pose[2])
         continuation_waypoints = remaining_waypoints[1:]
-        motion_plane = str(
-            getattr(getattr(self._owner, "_contact_motion_config", None), "motion_plane", "")
-            or ""
-        ).strip().lower()
+        motion_plane = str(self._owner._contact_motion_config.motion_plane).strip().lower()
         combine_lift_with_alignment = motion_plane == "xy_z_rz"
         combine_alignment_with_safe_travel = (
             len(continuation_waypoints) >= 2
@@ -476,7 +489,7 @@ class PaintPickupExecutor:
                 list(predicted_retract_pose),
                 float(pickup_motion.lift_align_vel_percent),
                 float(pickup_motion.lift_align_acc_percent),
-                "ptp",
+                OrderedMotionType.PTP,
                 10.0,
             )
             combined_waypoints = [lift_waypoint] + continuation_waypoints
@@ -488,15 +501,14 @@ class PaintPickupExecutor:
         if not stop_after_retract:
             combined_segments.extend(prepared_continuation_segments or [])
         prepared_plan_id: str | None = None
-        prepare = getattr(self._owner._robot_service, "prepare_ordered_motion_chain", None)
         has_fast_lin = any(
             isinstance(segment, OrderedPositionCommand)
             and segment.motion_type is OrderedMotionType.FAST_LINEAR
             for segment in combined_segments
         )
-        if combined_segments and callable(prepare) and not has_fast_lin:
+        if combined_segments and not has_fast_lin:
             try:
-                prepared = prepare(
+                prepared = self._owner._robot_service.prepare_ordered_motion_chain(
                     segments=combined_segments,
                     start_position=predicted_retract_pose,
                     tool=int(self._owner._pickup_tool),
@@ -511,16 +523,17 @@ class PaintPickupExecutor:
             _logger.info(
                 "[PICKUP] Continuation contains Fast LIN; deferring mixed execution until after Fast LIN retract"
             )
+        if combined_segments and not has_fast_lin and prepared_plan_id is None:
+            _logger.error("[PICKUP] Continuation preparation did not return a plan_id")
+            return False
 
         def discard_prepared() -> None:
             if not prepared_plan_id:
                 return
-            discard = getattr(self._owner._robot_service, "discard_prepared_ordered_motion_chain", None)
-            if callable(discard):
-                try:
-                    discard(prepared_plan_id)
-                except Exception:
-                    _logger.exception("[PICKUP] Failed to discard prepared continuation plan_id=%s", prepared_plan_id)
+            try:
+                self._owner._robot_service.discard_prepared_ordered_motion_chain(prepared_plan_id)
+            except Exception:
+                _logger.exception("[PICKUP] Failed to discard prepared continuation plan_id=%s", prepared_plan_id)
 
         if pickup_plan.vacuum_on_before_moves:
             ok, _msg = self._owner._motion.turn_vacuum_on(required=True)
@@ -533,7 +546,7 @@ class PaintPickupExecutor:
             return False
 
         contact_speed_mm_s = float(pickup_motion.servo_contact_linear_mm_s)
-        minimum_contact_z_mm = float(getattr(pickup_motion, "servo_contact_min_z_mm", 0.0))
+        minimum_contact_z_mm = float(pickup_motion.servo_contact_min_z_mm)
         _logger.info(
             "[PICKUP] Servo contact descent starting: speed_mm_s=%.3f timeout_s=%.3f tool=%d user=%d",
             contact_speed_mm_s,
@@ -542,14 +555,10 @@ class PaintPickupExecutor:
             int(self._owner._pickup_user),
         )
         procedure = ServoUntilConditionProcedure(self._owner._robot_service, condition)
-        control = getattr(self._owner, "_active_execution_control", None)
+        control = self._owner._active_execution_control
         result = procedure.run(
             config=ServoUntilConditionConfig(
-                execution_mode=str(getattr(
-                    pickup_motion,
-                    "calibration_contact_execution_mode",
-                    "sensor_controlled_fast_lin",
-                )),
+                execution_mode=pickup_motion.calibration_contact_execution_mode,
                 axis=RobotAxis.Z,
                 direction=Direction.MINUS,
                 linear_mm_s=contact_speed_mm_s,
@@ -557,28 +566,20 @@ class PaintPickupExecutor:
                 tool=int(self._owner._pickup_tool),
                 user=int(self._owner._pickup_user),
                 poll_interval_s=float(pickup_motion.servo_contact_poll_interval_s),
-                controlled_stop_duration_s=float(
-                    getattr(pickup_motion, "servo_contact_controlled_stop_duration_s", 0.20)
-                ),
-                stop_confirmation_timeout_s=float(
-                    getattr(pickup_motion, "servo_contact_stop_confirmation_timeout_s", 3.0)
-                ),
+                controlled_stop_duration_s=float(pickup_motion.servo_contact_controlled_stop_duration_s),
+                stop_confirmation_timeout_s=float(pickup_motion.servo_contact_stop_confirmation_timeout_s),
                 timeout_s=float(pickup_motion.servo_contact_timeout_s),
                 preflight_condition_read_attempts=int(pickup_motion.servo_contact_preflight_read_attempts),
                 condition_read_failure_limit=int(pickup_motion.servo_contact_read_failure_limit),
                 allow_subzero_descent=True,
                 disable_collision_checking=True,
                 minimum_z_mm=minimum_contact_z_mm,
-                approach_velocity=float(
-                    getattr(pickup_motion, "servo_contact_fast_lin_velocity_percent", 10.0)
-                ),
-                approach_acceleration=float(
-                    getattr(pickup_motion, "servo_contact_fast_lin_acceleration_percent", 30.0)
-                ),
+                approach_velocity=float(pickup_motion.servo_contact_fast_lin_velocity_percent),
+                approach_acceleration=float(pickup_motion.servo_contact_fast_lin_acceleration_percent),
             ),
             retract=ServoRetractConfig(
                 target_pose=predicted_retract_pose,
-                motion_type="fast_lin",
+                motion_type=ServoRetractMotionType.FAST_LINEAR,
                 poll_interval_s=float(pickup_motion.servo_contact_poll_interval_s),
                 timeout_s=3.0,
                 position_tolerance_mm=2.0,
@@ -613,7 +614,7 @@ class PaintPickupExecutor:
                     list(approach_waypoints[-1].pose),
                     float(approach_waypoints[-1].vel_percent),
                     float(approach_waypoints[-1].acc_percent),
-                    "linear",
+                    OrderedMotionType.LINEAR,
                     0.0,
                 )
                 current_pose = self._read_fresh_pose()
@@ -691,16 +692,6 @@ class PaintPickupExecutor:
             )
             if not ok:
                 discard_prepared()
-                error = str(execution.get("error", "")) if isinstance(execution, dict) else ""
-                if error.startswith("prepared chain start mismatch:"):
-                    _logger.warning(
-                        "[PICKUP] %s; replanning continuation from live robot state",
-                        error,
-                    )
-                    ok = self._owner._motion.move_ordered_pickup_sequence(
-                        "Pickup lift and continuation after completed Fast LIN retract",
-                        combined_segments,
-                    )
         else:
             ok = self._owner._motion.move_ordered_pickup_sequence(
                 "Pickup lift and continuation after completed Fast LIN retract",
@@ -782,10 +773,10 @@ def build_paint_pickup_segments(
     for waypoint_index, waypoint in enumerate(waypoints):
         is_last_pickup_waypoint = waypoint_index == len(waypoints) - 1
         is_pickup_contact = waypoint.label == "Descending to pickup pose"
-        motion_type = OrderedMotionType.LINEAR if is_pickup_contact else OrderedMotionType.PTP
-        configured_type = str(getattr(waypoint, "motion_type", None) or "").strip().lower()
-        if configured_type:
-            motion_type = OrderedMotionType(configured_type)
+        motion_type = (
+            waypoint.motion_type
+            or (OrderedMotionType.LINEAR if is_pickup_contact else OrderedMotionType.PTP)
+        )
         default_blend_r = (
             0.0
             if (
@@ -794,7 +785,7 @@ def build_paint_pickup_segments(
             )
             else 20.0
         )
-        configured_blend_r = getattr(waypoint, "blendR", None)
+        configured_blend_r = waypoint.blendR
         blend_r = default_blend_r if configured_blend_r is None else float(configured_blend_r)
         if is_last_pickup_waypoint:
             blend_r = 0.0
@@ -840,7 +831,7 @@ def _equivalent_pickup_poses(first: list[float], second: list[float]) -> bool:
 
 def build_ordered_paint_contact_segments(
     paint_paths: list[list[list[float]]],
-    paint_jobs: list[dict],
+    paint_jobs: list[PaintContactCommandJob],
     contact_staging,
     *,
     label_prefix: str = "paint",
@@ -855,7 +846,11 @@ def build_ordered_paint_contact_segments(
     for path_index, command_path in enumerate(paint_paths):
         if not command_path:
             continue
-        job = paint_jobs[path_index] if path_index < len(paint_jobs) else {}
+        if path_index >= len(paint_jobs):
+            raise ValueError(
+                f"Missing paint-contact job settings for path {path_index + 1}"
+            )
+        job = paint_jobs[path_index]
         readiness_group = f"{label_prefix}_contact_{path_index + 1}"
         metadata = OrderedMotionMetadata(
             protected=True,
@@ -875,11 +870,11 @@ def build_ordered_paint_contact_segments(
             metadata=metadata,
         ))
         segments.append(OrderedPathCommand(
-            label=f"{label_prefix}_contact_{path_index + 1}:{job.get('pattern_type', 'Path')}",
+            label=f"{label_prefix}_contact_{path_index + 1}:{job.pattern_type}",
             path=tuple(tuple(float(value) for value in pose) for pose in command_path),
             profile=OrderedMotionProfile(
-                velocity_percent=float(job.get("vel", 10.0)),
-                acceleration_percent=float(job.get("acc", 30.0)) * float(acceleration_scale),
+                velocity_percent=job.velocity_percent,
+                acceleration_percent=job.acceleration_percent * float(acceleration_scale),
             ),
             metadata=metadata,
             limit_profile=OrderedMotionLimitProfile.PAINT_CONTACT,

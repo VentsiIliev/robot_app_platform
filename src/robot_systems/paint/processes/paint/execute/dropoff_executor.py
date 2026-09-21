@@ -5,8 +5,10 @@ from dataclasses import dataclass
 from time import perf_counter
 from typing import Protocol
 
+from src.engine.robot.motion_sequence import OrderedMotionType
 from src.engine.robot.path_preparation import WorkpieceExecutionPlan
 from src.robot_systems.paint.processes.paint.execute.diagnostics import elapsed_s
+from src.robot_systems.paint.processes.paint.config import DropoffStrategy
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handlers import (
     _resolve_dropoff_align_pose,
 )
@@ -24,7 +26,7 @@ class DropoffWaypoint:
     pose: list[float] | None
     vel_percent: float
     acc_percent: float
-    motion_type: str = "ptp"
+    motion_type: OrderedMotionType = OrderedMotionType.PTP
     blendR: float = 0.0
     release_here: bool = False
     corridor_id: str | None = None
@@ -34,14 +36,14 @@ class DropoffWaypoint:
 class DropoffPlan:
     """Resolved dropoff sequence for the current held workpiece."""
 
-    strategy_name: str
+    strategy_name: DropoffStrategy
     waypoints: tuple[DropoffWaypoint, ...]
 
 
 class PaintDropoffStrategy(Protocol):
     """Build a dropoff plan without exposing strategy specifics to the main executor."""
 
-    name: str
+    name: DropoffStrategy
 
     def build_plan(self, owner, execution_plan: WorkpieceExecutionPlan) -> DropoffPlan:
         """Return the ordered dropoff actions for the active workpiece."""
@@ -50,7 +52,7 @@ class PaintDropoffStrategy(Protocol):
 class MovementGroupDropoffStrategy:
     """Release the held workpiece at the configured dropoff movement group."""
 
-    name = "movement_group"
+    name = DropoffStrategy.MOVEMENT_GROUP
 
     def build_plan(self, owner, execution_plan: WorkpieceExecutionPlan) -> DropoffPlan:
         dropoff = owner._paint_process_config().dropoff
@@ -60,12 +62,12 @@ class MovementGroupDropoffStrategy:
             _logger.info("[DROPOFF] movement_group has no configured pose for group '%s'", group_id)
             return DropoffPlan(strategy_name=self.name, waypoints=())
         if float(pose[2]) < 0.0:
-            if not bool(getattr(dropoff, "allow_sub_zero_dropoff", False)):
+            if not dropoff.allow_sub_zero_dropoff:
                 _logger.error("[DROPOFF] Negative target rejected: Allow Sub-Zero Dropoff is disabled")
                 return DropoffPlan(strategy_name=self.name, waypoints=())
             approach_pose = list(pose)
             approach_pose[2] = float(dropoff.sub_zero_approach_z_mm)
-            corridor_id = getattr(owner, "_dropoff_motion_corridor_id", None)
+            corridor_id = owner._dropoff_motion_corridor_id
             return DropoffPlan(
                 strategy_name=self.name,
                 waypoints=(
@@ -74,7 +76,7 @@ class MovementGroupDropoffStrategy:
                         pose=approach_pose,
                         vel_percent=dropoff.release_align_vel_percent,
                         acc_percent=dropoff.release_align_acc_percent,
-                        motion_type="ptp",
+                        motion_type=OrderedMotionType.PTP,
                         blendR=0.0,
                         release_here=False,
                     ),
@@ -83,7 +85,7 @@ class MovementGroupDropoffStrategy:
                         pose=pose,
                         vel_percent=dropoff.release_align_vel_percent,
                         acc_percent=dropoff.release_align_acc_percent,
-                        motion_type="linear",
+                        motion_type=OrderedMotionType.LINEAR,
                         blendR=0.0,
                         release_here=True,
                         corridor_id=corridor_id,
@@ -93,7 +95,7 @@ class MovementGroupDropoffStrategy:
                         pose=approach_pose,
                         vel_percent=dropoff.release_align_vel_percent,
                         acc_percent=dropoff.release_align_acc_percent,
-                        motion_type="linear",
+                        motion_type=OrderedMotionType.LINEAR,
                         blendR=0.0,
                         release_here=False,
                         corridor_id=corridor_id,
@@ -108,7 +110,10 @@ class MovementGroupDropoffStrategy:
                     pose=pose,
                     vel_percent=dropoff.release_align_vel_percent,
                     acc_percent=dropoff.release_align_acc_percent,
-                    motion_type=dropoff.release_align_motion_type,
+                    motion_type=OrderedMotionType.parse(
+                        dropoff.release_align_motion_type,
+                        field_name="dropoff.release_align_motion_type",
+                    ),
                     blendR=dropoff.release_align_blendR,
                     release_here=True,
                 ),
@@ -122,14 +127,14 @@ class PaintDropoffExecutor:
     def __init__(self, owner, strategy: PaintDropoffStrategy | None = None) -> None:
         self._owner = owner
         self._strategy_override = strategy
-        self._strategies: dict[str, PaintDropoffStrategy] = {
+        self._strategies: dict[DropoffStrategy, PaintDropoffStrategy] = {
             MovementGroupDropoffStrategy.name: MovementGroupDropoffStrategy(),
         }
 
     def _resolve_strategy(self) -> PaintDropoffStrategy | None:
         if self._strategy_override is not None:
             return self._strategy_override
-        strategy_name = str(self._owner._paint_process_config().dropoff.strategy or "movement_group").strip().lower()
+        strategy_name = self._owner._paint_process_config().dropoff.strategy
         return self._strategies.get(strategy_name)
 
     @timed_step(_logger, "pre_release_dropoff")
@@ -138,7 +143,7 @@ class PaintDropoffExecutor:
         started = perf_counter()
         strategy = self._resolve_strategy()
         if strategy is None:
-            strategy_name = str(self._owner._paint_process_config().dropoff.strategy or "").strip()
+            strategy_name = self._owner._paint_process_config().dropoff.strategy
             return False, f"Unknown paint dropoff strategy '{strategy_name}'"
         plan = strategy.build_plan(self._owner, execution_plan)
         release_count = sum(1 for waypoint in plan.waypoints if waypoint.release_here)
@@ -156,9 +161,9 @@ class PaintDropoffExecutor:
             waypoint_started = perf_counter()
             if waypoint.pose is not None:
                 already_at_release_pose = (
-                    bool(getattr(self._owner, "_dropoff_unwind_prepared", False))
+                    bool(self._owner._dropoff_unwind_prepared)
                     and waypoint.release_here
-                    and poses_close(waypoint.pose, getattr(self._owner, "_last_process_end_pose", None))
+                    and poses_close(waypoint.pose, self._owner._last_process_end_pose)
                 )
                 if already_at_release_pose:
                     _logger.info(
@@ -170,11 +175,15 @@ class PaintDropoffExecutor:
                     list(waypoint.pose),
                     velocity=waypoint.vel_percent,
                     acceleration=waypoint.acc_percent,
-                    motion_type="linear" if waypoint.corridor_id else waypoint.motion_type,
+                    motion_type=(
+                        OrderedMotionType.LINEAR
+                        if waypoint.corridor_id
+                        else waypoint.motion_type
+                    ),
                     blendR=waypoint.blendR,
                     corridor_id=waypoint.corridor_id,
                 ):
-                    _logger.info(
+                    _logger.debug(
                         "[TIMING] pre_release_dropoff success=false strategy=%s waypoint=%d label=%s elapsed_s=%.3f total_elapsed_s=%.3f",
                         plan.strategy_name,
                         index,
@@ -187,7 +196,7 @@ class PaintDropoffExecutor:
             if waypoint.release_here:
                 ok, msg = self._owner._motion.turn_vacuum_off()
                 if not ok:
-                    _logger.info(
+                    _logger.debug(
                         "[TIMING] pre_release_dropoff success=false strategy=%s waypoint=%d stage=release elapsed_s=%.3f total_elapsed_s=%.3f",
                         plan.strategy_name,
                         index,

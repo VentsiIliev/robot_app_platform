@@ -27,12 +27,13 @@ def handle_paint_contact(ctx: PaintExecutionContext) -> PaintExecutionState:
 
     ok, msg, total_waypoints = executor._paint_contact.execute(ctx.execution_plan, control=ctx.control)
     ctx.paint_total_waypoints = int(total_waypoints)
+
     if not ok:
-        executor._edge_cleanup.cancel_early_preplanning()
-        _logger.info(
+        _logger.debug(
             "[TIMING] paint_process success=false stage=contact total_elapsed_s=%.3f",
             elapsed_s(ctx.paint_started_at),
         )
         fail_paint_motion(ctx, msg)
         return PaintExecutionState.ERROR
+
     return PaintExecutionState.EDGE_CLEANUP

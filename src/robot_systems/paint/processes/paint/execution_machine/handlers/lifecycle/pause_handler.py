@@ -9,7 +9,8 @@ _logger = logging.getLogger(__name__)
 
 
 def handle_paused(ctx: PaintExecutionContext) -> PaintExecutionState:
-    _logger.info("[PAINT_EXECUTION] Paused from state %s", getattr(ctx.paused_from_state, "name", None))
+    paused_name = None if ctx.paused_from_state is None else ctx.paused_from_state.name
+    _logger.info("[PAINT_EXECUTION] Paused from state %s", paused_name)
     while True:
         if ctx.should_stop():
             ctx.set_result(False, "Paint process stopped")

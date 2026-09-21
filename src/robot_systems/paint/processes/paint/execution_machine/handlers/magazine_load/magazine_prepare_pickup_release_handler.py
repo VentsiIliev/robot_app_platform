@@ -61,14 +61,14 @@ def handle_magazine_prepare_pickup_release(ctx: PaintExecutionContext) -> PaintE
 
     release_started = perf_counter()
     batch_nesting = (
-        str(getattr(ctx.magazine_config, "processing_strategy", "direct") or "direct")
-        .strip().lower() == MAGAZINE_PROCESSING_STRATEGY_BATCH_NESTING
+        ctx.magazine_config.processing_strategy
+        == MAGAZINE_PROCESSING_STRATEGY_BATCH_NESTING
     )
     if batch_nesting:
         ctx.magazine_release_pose, ctx.magazine_nesting_has_more, nesting_error = (
             load_service._resolve_nested_work_area_release_pose(
                 base_pose=base_release_pose,
-                frame=getattr(ctx.magazine_snapshot, "frame", None),
+                frame=ctx.magazine_snapshot.frame,
                 release_z_mm=float(ctx.magazine_config.release_z_mm),
                 robot_contour_xy=ctx.magazine_target.get("robot_contour_xy", ()),
                 margin_mm=float(ctx.magazine_config.nesting_margin_mm),
@@ -81,7 +81,11 @@ def handle_magazine_prepare_pickup_release(ctx: PaintExecutionContext) -> PaintE
     else:
         ctx.magazine_release_pose = load_service._resolve_work_area_center_release_pose(
             base_pose=base_release_pose,
-            frame=getattr(ctx.magazine_snapshot, "frame", None),
+            frame=(
+                None
+                if ctx.magazine_snapshot is None
+                else ctx.magazine_snapshot.frame
+            ),
             release_z_mm=float(ctx.magazine_config.release_z_mm),
         )
     release_elapsed = perf_counter() - release_started
@@ -89,7 +93,7 @@ def handle_magazine_prepare_pickup_release(ctx: PaintExecutionContext) -> PaintE
         ctx.set_result(False, f"Could not resolve {load_service._release_work_area_id} work area center release pose")
         return PaintExecutionState.ERROR
 
-    _logger.info(
+    _logger.debug(
         "[MAGAZINE_LOAD_TIMING] prepare_pickup_release magazine_pose_s=%.3f release_base_pose_s=%.3f "
         "pickup_target_s=%.3f release_pose_s=%.3f total_s=%.3f",
         magazine_pose_elapsed,

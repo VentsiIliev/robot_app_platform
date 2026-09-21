@@ -1,0 +1,9 @@
+stage,point_index,coordinate_space,a,b,z,rx,ry,rz
+rtcp_input_smoothed_mm,0,mm,0.0,0.0,0.0,0.0,0.0,0.0
+rtcp_input_smoothed_mm,1,mm,10.0,0.0,0.0,0.0,0.0,0.0
+execution_mm,0,mm,0.0,0.0,0.0,0.0,0.0,0.0
+execution_mm,1,mm,10.0,0.0,0.0,0.0,0.0,0.0
+projected_tcp_mm,0,mm,101.0,202.0,303.0,1.0,2.0,12.0
+projected_tcp_mm,1,mm,111.0,202.0,303.0,1.0,2.0,12.0
+ros_command_mm,0,mm,101.0,202.0,303.0,1.0,2.0,12.0
+ros_command_mm,1,mm,111.0,202.0,303.0,1.0,2.0,12.0

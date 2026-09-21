@@ -12,6 +12,10 @@ from src.engine.robot.motion_sequence import (
     OrderedPositionCommand,
 )
 from src.robot_systems.paint.timing import timed_step
+from src.robot_systems.paint.processes.paint.motion.pose_sampling import (
+    FreshPoseReadError,
+    read_fresh_pose,
+)
 
 _logger = logging.getLogger(__name__)
 
@@ -35,13 +39,15 @@ class PaintMotionExecutor:
         *,
         velocity: float,
         acceleration: float,
-        motion_type: str = "ptp",
+        motion_type: OrderedMotionType = OrderedMotionType.PTP,
         blendR: float = 0.0,
         corridor_id: str | None = None,
     ) -> bool:
         """Execute one carried-workpiece robot move with explicit motion limits."""
         if velocity is None or acceleration is None:
             raise ValueError(f"Pickup phase '{label}' requires explicit velocity and acceleration")
+        if not isinstance(motion_type, OrderedMotionType):
+            raise TypeError("motion_type must be an OrderedMotionType")
         owner = self._owner
         _logger.info(
             "[PICKUP] %s tool=%d user=%d pose=%s",
@@ -52,11 +58,7 @@ class PaintMotionExecutor:
         )
         while True:
             if corridor_id is not None:
-                corridor_move = getattr(owner._robot_service, "move_linear_in_corridor", None)
-                if not callable(corridor_move):
-                    _logger.error("[PICKUP] Corridor LIN unavailable corridor_id=%s", corridor_id)
-                    return False
-                ok = corridor_move(
+                ok = owner._robot_service.move_linear_in_corridor(
                     corridor_id=corridor_id,
                     position=pose,
                     tool=owner._pickup_tool,
@@ -66,7 +68,7 @@ class PaintMotionExecutor:
                     blendR=max(0.0, float(blendR)),
                     wait_to_reach=True,
                 )
-            elif str(motion_type or "ptp").strip().lower() == "fast_lin":
+            elif motion_type is OrderedMotionType.FAST_LINEAR:
                 result = owner._robot_service.move_fast_linear(
                     position=pose,
                     tool=owner._pickup_tool,
@@ -83,7 +85,7 @@ class PaintMotionExecutor:
                     and result.get("final") is True
                     and result.get("queued") is False
                 )
-            elif str(motion_type or "ptp").strip().lower() == "linear":
+            elif motion_type is OrderedMotionType.LINEAR:
                 ok = owner._robot_service.move_linear(
                     position=pose,
                     tool=owner._pickup_tool,
@@ -124,13 +126,9 @@ class PaintMotionExecutor:
             for segment in segments
         ):
             return self._move_mixed_pickup_sequence(label, segments)
-        execute_chain = getattr(owner._robot_service, "execute_ordered_motion_chain", None)
-        if not callable(execute_chain):
-            _logger.info("[PICKUP] Ordered motion chain unavailable")
-            return False
         active_segments = list(segments)
         while active_segments:
-            result = execute_chain(
+            result = owner._robot_service.execute_ordered_motion_chain(
                 segments=active_segments,
                 tool=owner._pickup_tool,
                 user=owner._pickup_user,
@@ -139,8 +137,7 @@ class PaintMotionExecutor:
             if result in (0, True, None):
                 self.last_motion_error = None
                 return True
-            error_getter = getattr(owner._robot_service, "get_last_motion_error", None)
-            self.last_motion_error = error_getter() if callable(error_getter) else None
+            self.last_motion_error = owner._robot_service.get_last_motion_error()
             if self.last_motion_error:
                 _logger.error("[PICKUP] Ordered motion chain rejected: %s", self.last_motion_error)
             if not self.resume_after_interrupted_non_contact_motion(label):
@@ -179,7 +176,7 @@ class PaintMotionExecutor:
                 list(segment.position),
                 velocity=float(segment.profile.velocity_percent),
                 acceleration=float(segment.profile.acceleration_percent),
-                motion_type="fast_lin",
+                motion_type=OrderedMotionType.FAST_LINEAR,
                 blendR=0.0,
             ):
                 return False
@@ -188,7 +185,7 @@ class PaintMotionExecutor:
     def pause_current_execution(self) -> None:
         owner = self._owner
         control = owner._active_execution_control
-        if control is not None and getattr(control, "in_protected_phase", lambda: False)():
+        if control is not None and control.in_protected_phase():
             return
         ordered_status = self.read_ordered_motion_chain_status()
         if self.ordered_motion_chain_segment_is_protected(ordered_status):
@@ -196,19 +193,15 @@ class PaintMotionExecutor:
             return
         self._ordered_chain_resume_start_index = self.ordered_motion_chain_resume_index(ordered_status)
         self._ordered_chain_interrupted_by_pause = True
-        stop_motion = getattr(owner._robot_service, "stop_motion", None)
-        if callable(stop_motion):
-            try:
-                stop_motion()
-            except Exception:
-                _logger.exception("[EXECUTE] Failed to stop robot motion during paint pause")
+        try:
+            owner._robot_service.stop_motion()
+        except Exception:
+            _logger.exception("[EXECUTE] Failed to stop robot motion during paint pause")
+            raise
 
     def read_ordered_motion_chain_status(self) -> dict | None:
-        get_status = getattr(self._owner._robot_service, "get_execution_status", None)
-        if not callable(get_status):
-            return None
         try:
-            status = get_status()
+            status = self._owner._robot_service.get_execution_status()
         except Exception:
             _logger.exception("[EXECUTE] Failed to read ordered motion status during paint pause")
             return None
@@ -242,9 +235,8 @@ class PaintMotionExecutor:
     def resume_after_interrupted_non_contact_motion(self, label: str) -> bool:
         owner = self._owner
         control = owner._active_execution_control
-        pause_requested = getattr(control, "pause_requested", None)
         interrupted_by_pause = self._ordered_chain_interrupted_by_pause
-        if (not callable(pause_requested) or not pause_requested()) and not interrupted_by_pause:
+        if (control is None or not control.pause_requested()) and not interrupted_by_pause:
             return False
         _logger.info("[EXECUTE] Paused during non-contact motion '%s'; waiting to resume", label)
         return owner._wait_for_paint_resume(control)
@@ -308,17 +300,15 @@ class PaintMotionExecutor:
         return segments[start_index:]
 
     def _read_current_robot_pose(self) -> list[float] | None:
-        get_current = getattr(self._owner._robot_service, "get_current_position", None)
-        if not callable(get_current):
-            return None
         try:
-            pose = get_current()
-        except Exception:
-            _logger.exception("[PICKUP] Failed to read current robot pose for ordered resume")
+            pose = read_fresh_pose(
+                self._owner._robot_service,
+                error_message="Failed to read fresh robot pose for ordered resume",
+            )
+        except FreshPoseReadError as exc:
+            _logger.error("[PICKUP] %s", exc)
             return None
-        if pose is None or len(pose) < 3:
-            return None
-        return list(pose)
+        return pose
 
     @staticmethod
     def _point_to_segment_distance(point: np.ndarray, start: np.ndarray, end: np.ndarray) -> float:

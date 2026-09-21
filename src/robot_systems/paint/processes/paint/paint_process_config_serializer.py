@@ -3,9 +3,6 @@ from typing import Any, Dict, Type, TypeVar
 
 from src.engine.repositories.interfaces import ISettingsSerializer
 from src.robot_systems.paint.processes.paint.config import (
-    MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN,
-    MAGAZINE_PICKUP_MODE_VISION_PLANNED,
-    MAGAZINE_PICKUP_MODE_VISION_SENSOR_CONTROLLED_FAST_LIN,
     PAINT_PROCESS_CONFIG,
     PaintDropoffConfig,
     PaintEdgeCleanupConfig,
@@ -31,6 +28,11 @@ def _section(raw: Dict[str, Any], key: str) -> Dict[str, Any]:
 
 def _build_dataclass(cls: Type[T], raw: Dict[str, Any], default: T) -> T:
     values = asdict(default)
+    unknown = sorted(set(raw) - set(values))
+    if unknown:
+        raise ValueError(
+            f"{cls.__name__} contains unsupported setting(s): {', '.join(unknown)}"
+        )
     values.update({key: value for key, value in raw.items() if key in values})
     return cls(**values)
 
@@ -50,6 +52,11 @@ class PaintProcessConfigSerializer(ISettingsSerializer[PaintProcessConfig]):
         default = self.get_default()
         values = asdict(default)
         raw = data if isinstance(data, dict) else {}
+        unknown = sorted(set(raw) - set(values))
+        if unknown:
+            raise ValueError(
+                f"PaintProcessConfig contains unsupported setting(s): {', '.join(unknown)}"
+            )
         values.update({
             key: value
             for key, value in raw.items()
@@ -91,21 +98,9 @@ class PaintProcessConfigSerializer(ISettingsSerializer[PaintProcessConfig]):
             _section(raw, "dropoff"),
             default.dropoff,
         )
-        magazine_raw = dict(_section(raw, "magazine_load"))
-        if "pickup_mode" not in magazine_raw:
-            legacy_contact = str(
-                _section(raw, "pickup_motion").get("magazine_pickup_contact_mode", "planned")
-            ).strip().lower()
-            legacy_target = str(magazine_raw.get("pickup_target_mode", "vision")).strip().lower()
-            if legacy_contact == "servo_contact" and legacy_target == "fixed_group":
-                magazine_raw["pickup_mode"] = MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN
-            elif legacy_contact == "servo_contact":
-                magazine_raw["pickup_mode"] = MAGAZINE_PICKUP_MODE_VISION_SENSOR_CONTROLLED_FAST_LIN
-            else:
-                magazine_raw["pickup_mode"] = MAGAZINE_PICKUP_MODE_VISION_PLANNED
         magazine_load = _build_dataclass(
             PaintMagazineLoadConfig,
-            magazine_raw,
+            _section(raw, "magazine_load"),
             default.magazine_load,
         )
         values["magazine_load"] = replace(

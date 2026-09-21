@@ -2,10 +2,9 @@ from __future__ import annotations
 
 import logging
 
-from src.engine.robot.motion_sequence import OrderedMotionType
 from src.robot_systems.paint.processes.paint.execution_machine.context import PaintExecutionContext
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.common.guards import guard_control
-from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_load_handler import (
+from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_control import (
     interrupted_or_error,
 )
 from src.robot_systems.paint.processes.paint.execution_machine.state import PaintExecutionState
@@ -22,8 +21,12 @@ def handle_magazine_move_to_magazine(ctx: PaintExecutionContext) -> PaintExecuti
     service = ctx.production_service
     load_service = service._magazine_load_service
     config = ctx.magazine_config
-    if load_service is None or config is None:
-        return PaintExecutionState.CAPTURE_WORKPIECE
+    if load_service is None:
+        ctx.set_result(False, "Magazine loading is enabled but its service is not configured")
+        return PaintExecutionState.ERROR
+    if config is None:
+        ctx.set_result(False, "Magazine loading entered without magazine configuration")
+        return PaintExecutionState.ERROR
 
     guarded = guard_control(ctx, PaintExecutionState.MAGAZINE_MOVE_TO_MAGAZINE)
     if guarded is not None:
@@ -111,10 +114,7 @@ def handle_magazine_move_to_magazine(ctx: PaintExecutionContext) -> PaintExecuti
     move_kwargs = dict(
         velocity=float(config.move_to_magazine_vel_percent),
         acceleration=float(config.move_to_magazine_acc_percent),
-        motion_type=OrderedMotionType.parse(
-            config.move_to_magazine_motion_type,
-            field_name="magazine_load.move_to_magazine_motion_type",
-        ).value,
+        motion_type=config.move_to_magazine_motion_type,
         blendR=float(config.move_to_magazine_blendR),
     )
     if cached_approach_pose is not None:
