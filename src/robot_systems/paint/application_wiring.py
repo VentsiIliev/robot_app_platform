@@ -409,6 +409,7 @@ def _build_paint_path_preparation_service(robot_system):
         PaintContourInterpolationConfig,
         remove_local_hairpin_reversals_xy,
         resample_contour_xy,
+        smooth_contour_xy_bounded,
     )
 
     def _pose_path_from_xy(xy_points):
@@ -475,6 +476,13 @@ def _build_paint_path_preparation_service(robot_system):
             spacing=1.0,
             closed=True,
         )
+        before_rtcp_smoothing_xy = resampled_xy.copy()
+        resampled_xy = smooth_contour_xy_bounded(
+            resampled_xy,
+            max_deviation_mm=0.50,
+            corner_threshold_deg=45.0,
+            passes=20,
+        )
         _logger.info(
             "[PATH_PREP_TIMING] stage=paint_mm_resample_contour_xy "
             "elapsed_s=%.3f input_points=%d output_points=%d",
@@ -490,9 +498,9 @@ def _build_paint_path_preparation_service(robot_system):
             len(resampled_xy),
         )
         return {
-            "method": "paint_mm_1mm_resample",
+            "method": "paint_mm_1mm_resample_bounded_smooth_0.50mm",
             "prepared_xy": resampled_xy.tolist(),
-            "curve_xy": resampled_xy.tolist(),
+            "curve_xy": before_rtcp_smoothing_xy.tolist(),
         }
 
     def _paint_contour_processor(path_pts, settings):

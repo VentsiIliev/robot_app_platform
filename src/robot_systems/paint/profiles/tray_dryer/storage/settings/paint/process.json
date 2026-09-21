@@ -215,7 +215,7 @@
     ],
     "plate_use_center_waypoint": false,
     "plate_auto_center_near_corner": false,
-    "plate_distribute_unwind": false,
+    "plate_distribute_unwind": true,
     "plate_motion_profiles": [
       {
         "vel_percent": 100.0,

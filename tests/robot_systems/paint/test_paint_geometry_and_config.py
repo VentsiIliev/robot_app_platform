@@ -5,6 +5,8 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import ANY, MagicMock
 
+import numpy as np
+
 from src.robot_systems.paint import application_wiring
 from src.robot_systems.paint.applications.paint_process_settings.mapper import PaintProcessSettingsMapper
 from src.robot_systems.paint.applications.paint_process_settings.view.paint_process_settings_schema import (
@@ -36,9 +38,38 @@ from src.robot_systems.paint.processes.paint.execute.workpiece_path_executor imp
     _camera_to_tcp_delta,
     _normalize_contact_motion_config,
 )
+from src.robot_systems.paint.processes.paint.plan.paint_contour_interpolation import (
+    smooth_contour_xy_bounded,
+)
 
 
 class TestProjectedPathSanitizer(unittest.TestCase):
+    def test_bounded_contour_smoothing_preserves_closure_corners_and_limit(self) -> None:
+        points = np.asarray([
+            [0.0, 0.0],
+            [1.0, 0.08],
+            [2.0, -0.06],
+            [3.0, 0.05],
+            [4.0, 0.0],
+            [4.0, 3.0],
+            [0.0, 3.0],
+            [0.0, 0.0],
+        ])
+
+        smoothed = smooth_contour_xy_bounded(
+            points,
+            max_deviation_mm=0.2,
+            corner_threshold_deg=45.0,
+            passes=20,
+        )
+
+        displacement = np.linalg.norm(smoothed - points, axis=1)
+        self.assertLessEqual(float(np.max(displacement)), 0.2 + 1e-12)
+        np.testing.assert_allclose(smoothed[0], smoothed[-1])
+        np.testing.assert_allclose(smoothed[4], points[4])
+        np.testing.assert_allclose(smoothed[5], points[5])
+        np.testing.assert_allclose(smoothed[6], points[6])
+
     def test_workpiece_largest_side_uses_rotated_minimum_area_rectangle(self) -> None:
         # A 100 x 20 mm rectangle rotated by 45 degrees has an axis-aligned span
         # of about 84.85 mm, but its minimum-area rectangle retains the 100 mm side.

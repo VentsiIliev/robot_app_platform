@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import csv
 import logging
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
+from pathlib import Path
+import re
 from time import perf_counter
 
 import numpy as np
@@ -25,6 +29,10 @@ _CART_PATH_DIAG_EXECUTOR = ThreadPoolExecutor(
     max_workers=1,
     thread_name_prefix="cart_path_diag",
 )
+_TRAJECTORY_EXPORT_EXECUTOR = ThreadPoolExecutor(
+    max_workers=1,
+    thread_name_prefix="platform_trajectory_export",
+)
 
 
 def elapsed_s(start: float) -> float:
@@ -36,6 +44,286 @@ def path_length_mm(path: list[list[float]]) -> float:
     if len(xyz) < 2:
         return 0.0
     return float(np.linalg.norm(np.diff(xyz, axis=0), axis=1).sum())
+
+
+def write_platform_command_path_csv(
+    *,
+    command_path: list[list[float]],
+    vel: float,
+    acc: float,
+    pattern_type: str,
+    stage: str,
+    pipeline_stages: dict[str, list[list[float]]] | None = None,
+):
+    """Queue CSV and PNG export of the exact ROS-bound Cartesian path."""
+    if not command_path:
+        return None
+    snapshot = tuple(tuple(float(value) for value in pose[:6]) for pose in command_path)
+    pipeline_snapshot = {
+        str(name): tuple(tuple(float(value) for value in point) for point in points)
+        for name, points in (pipeline_stages or {}).items()
+        if points
+    }
+    return _TRAJECTORY_EXPORT_EXECUTOR.submit(
+        _write_platform_command_path_artifacts,
+        snapshot,
+        float(vel),
+        float(acc),
+        str(pattern_type),
+        str(stage),
+        pipeline_snapshot,
+    )
+
+
+def _write_platform_command_path_artifacts(
+    command_path: tuple[tuple[float, ...], ...],
+    vel: float,
+    acc: float,
+    pattern_type: str,
+    stage: str,
+    pipeline_stages,
+) -> None:
+    try:
+        repository_root = Path(__file__).resolve().parents[6]
+        output_dir = repository_root / "docs" / "trajectory_logs"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        safe_label = re.sub(r"[^A-Za-z0-9_.-]+", "_", f"{stage}_{pattern_type}").strip("_")
+        timestamp = datetime.now().astimezone().strftime("%Y%m%d_%H%M%S_%f")
+        stem = f"platform_pose_trajectory_{safe_label}_{timestamp}"
+        output_path = output_dir / f"{stem}.csv"
+        columns = ("x_mm", "y_mm", "z_mm", "rx_deg", "ry_deg", "rz_deg")
+        with output_path.open("x", newline="", encoding="utf-8") as csv_file:
+            writer = csv.writer(csv_file)
+            writer.writerow(("point_index", *columns, "requested_velocity_percent", "requested_acceleration_percent"))
+            for point_index, pose in enumerate(command_path):
+                values = [
+                    f"{float(pose[index]):.12g}" if index < len(pose) else ""
+                    for index in range(6)
+                ]
+                writer.writerow((point_index, *values, f"{float(vel):.12g}", f"{float(acc):.12g}"))
+        plot_path = output_dir / f"{stem}.png"
+        _write_platform_pose_plot(plot_path, command_path)
+        pipeline_csv_path = output_dir / f"{stem}_pipeline.csv"
+        pipeline_plot_path = output_dir / f"{stem}_pipeline.png"
+        before_after_plot_path = output_dir / f"{stem}_contour_before_after.png"
+        _write_contour_pipeline_csv(pipeline_csv_path, pipeline_stages)
+        _write_contour_pipeline_plot(pipeline_plot_path, pipeline_stages)
+        _write_contour_before_after_plot(before_after_plot_path, pipeline_stages)
+        _logger.info(
+            "[PLATFORM_TRAJECTORY_EXPORT] wrote ROS-bound pose trajectory points=%d "
+            "csv=%s plot=%s pipeline_csv=%s pipeline_plot=%s before_after_plot=%s",
+            len(command_path),
+            output_path,
+            plot_path,
+            pipeline_csv_path,
+            pipeline_plot_path,
+            before_after_plot_path,
+        )
+    except Exception:
+        _logger.warning(
+            "[PLATFORM_TRAJECTORY_EXPORT] background export failed without blocking motion",
+            exc_info=True,
+        )
+
+
+def _write_contour_pipeline_csv(output_path: Path, pipeline_stages) -> None:
+    with output_path.open("x", newline="", encoding="utf-8") as csv_file:
+        writer = csv.writer(csv_file)
+        writer.writerow(("stage", "point_index", "coordinate_space", "a", "b", "z", "rx", "ry", "rz"))
+        for stage, points in pipeline_stages.items():
+            coordinate_space = "px" if stage.endswith("_px") else "mm"
+            for point_index, point in enumerate(points):
+                padded = tuple(point) + ("",) * max(0, 6 - len(point))
+                writer.writerow((stage, point_index, coordinate_space, *padded[:6]))
+
+
+def _write_contour_pipeline_plot(output_path: Path, pipeline_stages) -> None:
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    figure, axes = plt.subplots(2, 2, figsize=(15, 11))
+    pixel_axis, metric_axis, projected_axis, turn_axis = axes.ravel()
+    for name, points in pipeline_stages.items():
+        values = np.asarray(points, dtype=float)
+        if values.ndim != 2 or len(values) < 2 or values.shape[1] < 2:
+            continue
+        if name.endswith("_px"):
+            pixel_axis.plot(values[:, 0], values[:, 1], linewidth=1.0, label=f"{name} ({len(values)})")
+        elif name in {"transformed_mm", "prepared_mm", "execution_mm"}:
+            metric_axis.plot(values[:, 0], values[:, 1], linewidth=1.0, label=f"{name} ({len(values)})")
+        elif name in {"projected_tcp_mm", "ros_command_mm"}:
+            projected_axis.plot(values[:, 0], values[:, 1], linewidth=1.0, label=f"{name} ({len(values)})")
+
+        turns = _path_turn_angles_degrees(values[:, :2])
+        if len(turns):
+            turn_axis.plot(np.arange(1, len(turns) + 1), turns, linewidth=0.9, label=name)
+
+    pixel_axis.invert_yaxis()
+    pixel_axis.set_title("Capture and pixel-space preparation")
+    pixel_axis.set_xlabel("Image X [px]")
+    pixel_axis.set_ylabel("Image Y [px]")
+    metric_axis.set_title("Conversion and contour preparation")
+    metric_axis.set_xlabel("X [mm]")
+    metric_axis.set_ylabel("Y [mm]")
+    projected_axis.set_title("RTCP projection and final ROS-bound command")
+    projected_axis.set_xlabel("X [mm]")
+    projected_axis.set_ylabel("Y [mm]")
+    turn_axis.set_title("Local direction change introduced at each stage")
+    turn_axis.set_xlabel("Middle point index")
+    turn_axis.set_ylabel("Turn angle [deg]")
+    turn_axis.axhline(90.0, color="darkorange", linestyle="--", linewidth=0.8)
+    turn_axis.axhline(150.0, color="red", linestyle="--", linewidth=0.8)
+    for axis in (pixel_axis, metric_axis, projected_axis):
+        axis.set_aspect("equal", adjustable="datalim")
+    for axis in axes.ravel():
+        axis.grid(True, alpha=0.3)
+        if axis.lines:
+            axis.legend(loc="best", fontsize=8)
+    figure.suptitle("Contour processing audit: capture to ROS 2 command")
+    figure.tight_layout()
+    figure.savefig(output_path, dpi=150)
+    plt.close(figure)
+
+
+def _write_contour_before_after_plot(output_path: Path, pipeline_stages) -> None:
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    before = np.asarray(pipeline_stages.get("rtcp_input_before_mm", ()), dtype=float)
+    after = np.asarray(pipeline_stages.get("rtcp_input_smoothed_mm", ()), dtype=float)
+    if before.ndim != 2 or after.ndim != 2 or len(before) < 2 or len(after) < 2:
+        return
+
+    count = min(len(before), len(after))
+    displacement_mm = np.linalg.norm(after[:count, :2] - before[:count, :2], axis=1)
+    figure, (path_axis, error_axis) = plt.subplots(1, 2, figsize=(15, 6))
+    path_axis.plot(before[:, 0], before[:, 1], color="tab:blue", linewidth=1.5, label="before smoothing")
+    path_axis.plot(after[:, 0], after[:, 1], color="tab:orange", linewidth=1.2, label="after smoothing")
+    path_axis.set_aspect("equal", adjustable="datalim")
+    path_axis.set_xlabel("X [mm]")
+    path_axis.set_ylabel("Y [mm]")
+    path_axis.set_title("RTCP input contour — equal physical scale")
+    path_axis.grid(True, alpha=0.3)
+    path_axis.legend(loc="best")
+
+    error_axis.plot(np.arange(count), displacement_mm, color="tab:red", linewidth=1.0)
+    error_axis.axhline(0.50, color="black", linestyle="--", linewidth=0.9, label="0.50 mm limit")
+    error_axis.set_xlabel("Contour point index")
+    error_axis.set_ylabel("Point displacement [mm]")
+    error_axis.set_title(
+        f"Smoothing displacement (max={float(np.max(displacement_mm)):.4f} mm)"
+    )
+    error_axis.grid(True, alpha=0.3)
+    error_axis.legend(loc="best")
+    figure.suptitle("Bounded contour smoothing before RTCP projection")
+    figure.tight_layout()
+    figure.savefig(output_path, dpi=150)
+    plt.close(figure)
+
+
+def _path_turn_angles_degrees(xy: np.ndarray) -> np.ndarray:
+    if len(xy) < 3:
+        return np.asarray([], dtype=float)
+    incoming = xy[1:-1] - xy[:-2]
+    outgoing = xy[2:] - xy[1:-1]
+    denominator = np.linalg.norm(incoming, axis=1) * np.linalg.norm(outgoing, axis=1)
+    valid = denominator > 1e-12
+    cosine = np.ones(len(incoming), dtype=float)
+    cosine[valid] = np.einsum("ij,ij->i", incoming, outgoing)[valid] / denominator[valid]
+    return np.degrees(np.arccos(np.clip(cosine, -1.0, 1.0)))
+
+
+def _write_platform_pose_plot(output_path: Path, command_path) -> None:
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    poses = np.asarray(command_path, dtype=float)
+    xyz = poses[:, :3]
+    indexes = np.arange(len(poses), dtype=int)
+    step_mm = np.linalg.norm(np.diff(xyz, axis=0), axis=1)
+    distance_mm = np.concatenate(([0.0], np.cumsum(step_mm)))
+    detail_count = len(xyz)
+    if len(step_mm) >= 2:
+        typical_step_mm = float(np.median(step_mm[:-1]))
+        if float(step_mm[-1]) > max(10.0, 10.0 * typical_step_mm):
+            detail_count -= 1
+    detail_xyz = xyz[:detail_count]
+    detail_indexes = indexes[:detail_count]
+
+    figure = plt.figure(figsize=(15, 10))
+    spatial_axis = figure.add_subplot(2, 2, 1, projection="3d")
+    xy_axis = figure.add_subplot(2, 2, 2)
+    rotation_axis = figure.add_subplot(2, 2, 3)
+    step_axis = figure.add_subplot(2, 2, 4)
+
+    spatial_axis.plot(xyz[:, 0], xyz[:, 1], xyz[:, 2], color="tab:blue", linewidth=1.3)
+    spatial_axis.scatter(xyz[:, 0], xyz[:, 1], xyz[:, 2], c=indexes, cmap="viridis", s=5)
+    spatial_axis.scatter(*xyz[0], color="green", marker="o", s=55, label="start")
+    spatial_axis.scatter(*xyz[-1], color="red", marker="x", s=65, label="end")
+    spatial_axis.set_xlabel("X [mm]")
+    spatial_axis.set_ylabel("Y [mm]")
+    spatial_axis.set_zlabel("Z [mm]")
+    spatial_axis.set_title("Cartesian path (colour = execution order)")
+    spatial_axis.legend(loc="best")
+    _set_equal_3d_axes(spatial_axis, xyz)
+
+    xy_axis.plot(detail_xyz[:, 0], detail_xyz[:, 1], color="tab:blue", linewidth=1.3)
+    xy_axis.scatter(
+        detail_xyz[:, 0], detail_xyz[:, 1], c=detail_indexes, cmap="viridis", s=6
+    )
+    xy_axis.scatter(
+        detail_xyz[0, 0], detail_xyz[0, 1], color="green", marker="o", s=55, label="start"
+    )
+    xy_axis.scatter(
+        detail_xyz[-1, 0],
+        detail_xyz[-1, 1],
+        color="darkorange",
+        marker="x",
+        s=65,
+        label="contour end",
+    )
+    xy_axis.set_xlabel("X [mm]")
+    xy_axis.set_ylabel("Y [mm]")
+    detail_suffix = " (final transition omitted)" if detail_count < len(xyz) else ""
+    xy_axis.set_title(f"XY contour detail — equal physical scale{detail_suffix}")
+    xy_axis.set_aspect("equal", adjustable="datalim")
+    xy_axis.grid(True, alpha=0.3)
+    xy_axis.legend(loc="best")
+
+    for column, label in zip(range(3, 6), ("RX", "RY", "RZ")):
+        if column < poses.shape[1]:
+            rotation_axis.plot(distance_mm, poses[:, column], label=label, linewidth=1.2)
+    rotation_axis.set_xlabel("Cumulative Cartesian distance [mm]")
+    rotation_axis.set_ylabel("Commanded orientation [deg]")
+    rotation_axis.set_title("Orientation along path")
+    rotation_axis.grid(True, alpha=0.3)
+    rotation_axis.legend(loc="best", ncol=3)
+
+    step_axis.plot(indexes[1:], step_mm, color="tab:red", linewidth=1.0)
+    step_axis.set_xlabel("Destination waypoint index")
+    step_axis.set_ylabel("Cartesian step [mm]")
+    step_axis.set_title("Distance between consecutive commands")
+    step_axis.grid(True, alpha=0.3)
+
+    figure.suptitle("Exact platform Cartesian command sent to ROS 2")
+    figure.tight_layout()
+    figure.savefig(output_path, dpi=150)
+    plt.close(figure)
+
+
+def _set_equal_3d_axes(axis, xyz: np.ndarray) -> None:
+    """Give X/Y/Z the same physical scale without collapsing flat paths."""
+    minimum = np.min(xyz, axis=0)
+    maximum = np.max(xyz, axis=0)
+    center = (minimum + maximum) / 2.0
+    radius = max(float(np.max(maximum - minimum)) / 2.0, 1.0)
+    axis.set_xlim(center[0] - radius, center[0] + radius)
+    axis.set_ylim(center[1] - radius, center[1] + radius)
+    axis.set_zlim(center[2] - radius, center[2] + radius)
+    axis.set_box_aspect((1.0, 1.0, 1.0))
 
 
 def _log_cartesian_command_path_diagnostics(command_path: list[list[float]]) -> None:

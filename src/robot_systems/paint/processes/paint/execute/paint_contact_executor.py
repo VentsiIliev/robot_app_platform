@@ -14,6 +14,7 @@ from src.robot_systems.paint.processes.paint.execute.diagnostics import (
     elapsed_s,
     execute_paint_trajectory_with_optional_trace,
     path_length_mm,
+    write_platform_command_path_csv,
     write_pivot_job_debug_artifacts,
 )
 from src.robot_systems.paint.processes.paint.execute.projection_preview import (
@@ -340,6 +341,24 @@ class PaintContactExecutor:
                 first_pose,
                 last_pose,
                 path_length_mm(command_pivot_path),
+            )
+            write_platform_command_path_csv(
+                command_path=command_pivot_path,
+                vel=vel,
+                acc=acc,
+                pattern_type=pattern_type,
+                stage=f"execute_job_{job_index}",
+                pipeline_stages={
+                    "captured_px": list(job.get("captured_path_px") or []),
+                    "source_prepared_px": list(job.get("source_prepared_path_px") or []),
+                    "transformed_mm": list(job.get("transformed_path_mm") or []),
+                    "prepared_mm": list(job.get("prepared_path_mm") or []),
+                    "rtcp_input_before_mm": list(job.get("curve_path_mm") or []),
+                    "rtcp_input_smoothed_mm": [list(point) for point in spline],
+                    "execution_mm": [list(point) for point in spline],
+                    "projected_tcp_mm": [list(point) for point in pivot_path],
+                    "ros_command_mm": [list(point) for point in command_pivot_path],
+                },
             )
 
             with timed_block(_logger, "paint_contact_job_debug", label=f"{job_label}:build_diagnostics"):

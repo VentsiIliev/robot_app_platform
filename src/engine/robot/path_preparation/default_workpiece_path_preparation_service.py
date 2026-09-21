@@ -747,6 +747,15 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
                 {
                     "path": execution_path,
                     "execution_path": [list(pt) for pt in execution_path],
+                    "captured_path_px": np.asarray(
+                        source_before_bezier_px, dtype=float
+                    ).reshape(-1, 2).tolist(),
+                    "source_prepared_path_px": np.asarray(
+                        pts_px, dtype=float
+                    ).reshape(-1, 2).tolist(),
+                    "transformed_path_mm": [list(pt) for pt in path_pts],
+                    "prepared_path_mm": [list(pt) for pt in prepared_path],
+                    "curve_path_mm": [list(pt) for pt in curve_path],
                     "vel": vel,
                     "acc": acc,
                     "pattern_type": pattern_type,

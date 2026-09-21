@@ -283,6 +283,66 @@ def resample_contour_xy(
     return cleaned
 
 
+def smooth_contour_xy_bounded(
+    xy_points: np.ndarray,
+    *,
+    max_deviation_mm: float = 0.2,
+    corner_threshold_deg: float = 45.0,
+    passes: int = 20,
+) -> np.ndarray:
+    """Fair a closed contour while bounding displacement and preserving corners.
+
+    The returned contour retains one point per input point and explicit closure.
+    Every non-corner sample remains within ``max_deviation_mm`` of its original
+    position. Corner samples and their immediate neighbours are locked so a
+    deliberately sharp workpiece feature is not rounded by the RTCP input
+    preparation.
+    """
+    contour = np.asarray(xy_points, dtype=float).reshape(-1, 2)
+    if len(contour) < 5 or float(max_deviation_mm) <= 0.0:
+        return contour.copy()
+
+    is_closed = float(np.linalg.norm(contour[0] - contour[-1])) <= 1e-6
+    open_contour = contour[:-1].copy() if is_closed else contour.copy()
+    if len(open_contour) < 4:
+        return contour.copy()
+
+    previous = np.roll(open_contour, 1, axis=0)
+    following = np.roll(open_contour, -1, axis=0)
+    incoming = open_contour - previous
+    outgoing = following - open_contour
+    denominator = np.linalg.norm(incoming, axis=1) * np.linalg.norm(outgoing, axis=1)
+    valid = denominator > 1e-12
+    cosine = np.ones(len(open_contour), dtype=float)
+    cosine[valid] = np.einsum("ij,ij->i", incoming, outgoing)[valid] / denominator[valid]
+    turn_degrees = np.degrees(np.arccos(np.clip(cosine, -1.0, 1.0)))
+    locked = turn_degrees >= float(corner_threshold_deg)
+    locked |= np.roll(locked, 1) | np.roll(locked, -1)
+
+    original = open_contour.copy()
+    smoothed = open_contour.copy()
+    limit = float(max_deviation_mm)
+    for _ in range(max(0, int(passes))):
+        candidate = (
+            0.25 * np.roll(smoothed, 1, axis=0)
+            + 0.50 * smoothed
+            + 0.25 * np.roll(smoothed, -1, axis=0)
+        )
+        displacement = candidate - original
+        lengths = np.linalg.norm(displacement, axis=1)
+        over_limit = lengths > limit
+        if np.any(over_limit):
+            displacement[over_limit] *= (limit / lengths[over_limit])[:, None]
+        candidate = original + displacement
+        candidate[locked] = original[locked]
+        smoothed = candidate
+
+    if is_closed:
+        return np.vstack((smoothed, smoothed[0]))
+    smoothed[[0, -1]] = original[[0, -1]]
+    return smoothed
+
+
 def compute_min_rect_metrics(xy_points: np.ndarray) -> dict[str, float]:
     """Return OpenCV min-area rectangle metrics for XY points."""
     import cv2
