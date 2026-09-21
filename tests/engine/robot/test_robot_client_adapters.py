@@ -10,6 +10,11 @@ from src.engine.robot.drivers.client_adapters import (
     build_robot_client,
 )
 from src.engine.robot.drivers.ros2_robot import Ros2Robot
+from src.engine.robot.motion_sequence import (
+    OrderedMotionProfile,
+    OrderedMotionType,
+    OrderedPositionCommand,
+)
 
 
 class TestSensorWebSocketSession(unittest.IsolatedAsyncioTestCase):
@@ -380,6 +385,35 @@ class TestRobotClientAdapters(unittest.TestCase):
             tool=1,
             user=1,
             disable_collision_checking=True,
+        )
+
+    def test_ros2_robot_serializes_typed_ordered_commands_at_client_boundary(self):
+        robot = object.__new__(Ros2Robot)
+        robot._client = MagicMock()
+        robot._client.execute_ordered_motion_chain.return_value = 0
+        command = OrderedPositionCommand(
+            label="approach",
+            motion_type=OrderedMotionType.PTP,
+            position=(1.0, 2.0, 3.0, 4.0, 5.0, 6.0),
+            profile=OrderedMotionProfile(20.0, 30.0, 0.0),
+        )
+
+        result = robot.execute_ordered_motion_chain([command], tool=1, user=2)
+
+        self.assertEqual(result, 0)
+        robot._client.execute_ordered_motion_chain.assert_called_once_with(
+            segments=[{
+                "label": "approach",
+                "vel": 20.0,
+                "acc": 30.0,
+                "blendR": 0.0,
+                "type": "ptp",
+                "position": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
+            }],
+            tool=1,
+            user=2,
+            blocking=False,
+            trajectory_optimizer="Ruckig",
         )
 
     def test_health_check_error_logging_is_throttled_across_client_instances(self):

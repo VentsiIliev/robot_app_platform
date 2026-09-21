@@ -4,6 +4,10 @@ import types
 from types import SimpleNamespace
 
 from src.engine.robot.enums.axis import Direction, RobotAxis
+from src.engine.robot.motion_sequence import (
+    OrderedMotionType,
+    serialize_ordered_motion_commands,
+)
 
 paint_package = types.ModuleType("src.robot_systems.paint")
 paint_package.__path__ = ["/home/ilv/Desktop/robot_app_platform/src/robot_systems/paint"]
@@ -13,6 +17,7 @@ execute_package.__path__ = ["/home/ilv/Desktop/robot_app_platform/src/robot_syst
 sys.modules.setdefault("src.robot_systems.paint.processes.paint.execute", execute_package)
 
 from src.robot_systems.paint.processes.paint.execute.pickup_executor import (
+    MagazineTransferWaypoint,
     PaintPickupExecutor,
     PickupPlan,
     PickupWaypoint,
@@ -97,6 +102,9 @@ class _FakeRobot:
         return True
 
     def get_current_position(self):
+        return list(self.position)
+
+    def get_current_position_fresh(self):
         return list(self.position)
 
     def move_ptp(self, position, *args, **kwargs):
@@ -1028,20 +1036,20 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
         self.assertEqual([], robot.started)
 
     def test_single_segment_pickup_chain_forces_terminal_blend_zero(self):
-        segments = build_paint_pickup_segments([
+        segments = serialize_ordered_motion_commands(build_paint_pickup_segments([
             PickupWaypoint("approach", [0, 0, 100, 0, 0, 0], 10, 10, "ptp", 20.0),
-        ])
+        ]))
 
         self.assertEqual(len(segments), 1)
         self.assertEqual(segments[0]["blendR"], 0.0)
 
     def test_pickup_chain_removes_redundant_alignment_pose(self):
         pose = [10, 20, 30, 180, 0, 45]
-        segments = build_paint_pickup_segments([
+        segments = serialize_ordered_motion_commands(build_paint_pickup_segments([
             PickupWaypoint("lift", pose, 10, 10, "ptp", 20.0),
             PickupWaypoint("Aligning workpiece to paint axis", list(pose), 10, 10, "ptp", 12.0),
             PickupWaypoint("stage", [20, 20, 30, 180, 0, 45], 10, 10, "ptp", 0.0),
-        ])
+        ]))
 
         self.assertEqual([segment["label"] for segment in segments], ["lift", "stage"])
         self.assertEqual(segments[0]["blendR"], 12.0)
@@ -1074,9 +1082,16 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
         self.assertEqual(robot.started, [])
 
     def test_single_segment_magazine_chain_forces_terminal_blend_zero(self):
-        segments = build_magazine_pickup_release_segments((
-            ("Moving to magazine pickup approach pose", [0, 0, 100, 0, 0, 0], 10, 10, "ptp", 20.0),
-        ))
+        segments = serialize_ordered_motion_commands(build_magazine_pickup_release_segments((
+            MagazineTransferWaypoint(
+                "Moving to magazine pickup approach pose",
+                [0, 0, 100, 0, 0, 0],
+                10,
+                10,
+                OrderedMotionType.PTP,
+                20.0,
+            ),
+        )))
 
         self.assertEqual(len(segments), 1)
         self.assertEqual(segments[0]["blendR"], 0.0)

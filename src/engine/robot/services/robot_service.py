@@ -7,7 +7,7 @@ from ..interfaces.i_robot_service import IRobotService
 from ..interfaces.i_robot_state_provider import IRobotStateProvider
 from ..interfaces.i_tool_service import IToolService
 from ..enums.axis import RobotAxis, Direction
-from ..motion_sequence import MotionSequenceSegment
+from ..motion_sequence import MotionSequenceSegment, OrderedMotionInput
 
 
 class RobotService(IRobotService):
@@ -324,7 +324,7 @@ class RobotService(IRobotService):
 
     def execute_ordered_motion_chain(
         self,
-        segments: list[dict],
+        segments: list[OrderedMotionInput],
         tool: int,
         user: int,
         blocking: bool = False,
@@ -343,7 +343,7 @@ class RobotService(IRobotService):
     def get_execution_status(self):
         return self._robot.get_execution_status()
 
-    def prepare_ordered_motion_chain(self, segments, start_position, tool, user,
+    def prepare_ordered_motion_chain(self, segments: list[OrderedMotionInput], start_position, tool, user,
                                      *, allow_servo_during_prepare=False):
         return self._robot.prepare_ordered_motion_chain(
             segments, start_position, tool, user,

@@ -2,6 +2,7 @@ import unittest
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import MagicMock
+from src.engine.robot.motion_sequence import serialize_ordered_motion_commands
 
 from src.robot_systems.paint.processes.paint.config import PaintDropoffConfig
 from src.robot_systems.paint.processes.paint.config import PaintProcessConfig
@@ -394,8 +395,12 @@ class TestPlateLayoutDropoff(unittest.TestCase):
         ok, message = _execute_plate_layout_ordered_release(executor, next_cycle_start=next_start)
 
         self.assertTrue(ok, message)
-        entry = executor._motion.move_ordered_pickup_sequence.call_args_list[0].args[1]
-        exit_chain = executor._motion.move_ordered_pickup_sequence.call_args_list[1].args[1]
+        entry = serialize_ordered_motion_commands(
+            executor._motion.move_ordered_pickup_sequence.call_args_list[0].args[1]
+        )
+        exit_chain = serialize_ordered_motion_commands(
+            executor._motion.move_ordered_pickup_sequence.call_args_list[1].args[1]
+        )
         self.assertEqual([1, 2, 0.0], [item["blendR"] for item in entry])
         self.assertEqual([4, 5, 11, 12, 0.0], [item["blendR"] for item in exit_chain])
         self.assertEqual(["ptp", "ptp", "linear"], [item["type"] for item in entry])

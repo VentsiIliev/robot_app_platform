@@ -7,6 +7,14 @@ from time import perf_counter
 
 import numpy as np
 
+from src.engine.robot.motion_sequence import (
+    OrderedMotionCommand,
+    OrderedMotionProfile,
+    OrderedMotionType,
+    OrderedPathCommand,
+    OrderedPositionCommand,
+    OrderedUnwindJoint6Command,
+)
 from src.engine.robot.path_preparation import WorkpieceExecutionPlan
 from src.robot_systems.paint.processes.paint.config import PAINT_PROCESS_CONFIG
 from src.robot_systems.paint.processes.paint.execute.diagnostics import (
@@ -33,6 +41,27 @@ class _CleanupPreplan:
     total_waypoints: int
     stage_approach_pose: list[float]
     command_path: list[list[float]]
+
+
+def _position_command(
+    label: str,
+    motion_type: object,
+    position: object,
+    velocity_percent: object,
+    acceleration_percent: object,
+    blend_radius: object,
+) -> OrderedPositionCommand:
+    """Build one strictly typed cleanup/drop-off position command."""
+    return OrderedPositionCommand(
+        label=label,
+        motion_type=OrderedMotionType(str(motion_type).strip().lower()),
+        position=tuple(float(value) for value in position),
+        profile=OrderedMotionProfile(
+            velocity_percent=float(velocity_percent),
+            acceleration_percent=float(acceleration_percent),
+            blend_radius=float(blend_radius),
+        ),
+    )
 
 
 class PaintEdgeCleanupExecutor:
@@ -703,7 +732,7 @@ class PaintEdgeCleanupExecutor:
         align_pose: list[float],
         stage_approach_pose: list[float],
         command_path: list[list[float]],
-    ) -> tuple[list[dict], list[float]]:
+    ) -> tuple[list[OrderedMotionCommand], list[float]]:
         """Return ordered-chain segments for cleanup plus pre-dropoff preparation."""
         align_vel, align_acc = self._dropoff_speed()
         unwind_vel, unwind_acc = self._navigation_unwind_speed()
@@ -712,84 +741,71 @@ class PaintEdgeCleanupExecutor:
         post_cleanup_align_pose = None
         if _should_prepare_dropoff_align_before_unwind(self._owner):
             post_cleanup_align_pose = _resolve_dropoff_preparation_pose(self._owner, command_path[-1])
-        segments = [
-            {
-                "type": self._dropoff_motion_type(),
-                "label": "edge_cleanup_align",
-                "position": list(align_pose),
-                "vel": align_vel,
-                "acc": align_acc,
-                "blendR": self._dropoff_blendR(),
-            },
-            {
-                "type": "unwind_joint6",
-                "label": "edge_cleanup_unwind",
-                "vel": unwind_vel,
-                "acc": unwind_acc,
-            },
-            {
-                "type": self._cleanup_motion_type(),
-                "label": "edge_cleanup_stage",
-                "position": list(stage_approach_pose),
-                "vel": stage_vel,
-                "acc": stage_acc,
-                "blendR": self._cleanup_blendR(),
-            },
-            {
-                    "type": "path",
-                    "label": "edge_cleanup_follow_path",
-                    "path": command_path,
-                    "vel": stage_vel,
-                    "acc": stage_acc,
-                    "blendR": self._cleanup_blendR(),
-            },
+        segments: list[OrderedMotionCommand] = [
+            _position_command(
+                "edge_cleanup_align",
+                self._dropoff_motion_type(),
+                align_pose,
+                align_vel,
+                align_acc,
+                self._dropoff_blendR(),
+            ),
+            OrderedUnwindJoint6Command(
+                label="edge_cleanup_unwind",
+                velocity_percent=unwind_vel,
+                acceleration_percent=unwind_acc,
+            ),
+            _position_command(
+                "edge_cleanup_stage",
+                self._cleanup_motion_type(),
+                stage_approach_pose,
+                stage_vel,
+                stage_acc,
+                self._cleanup_blendR(),
+            ),
+            OrderedPathCommand(
+                label="edge_cleanup_follow_path",
+                path=tuple(tuple(float(value) for value in pose) for pose in command_path),
+                profile=OrderedMotionProfile(stage_vel, stage_acc, self._cleanup_blendR()),
+            ),
         ]
         if post_cleanup_align_pose is not None:
             safe_travel_waypoints = _resolve_dropoff_safe_travel_waypoints(self._owner)
             if bool(getattr(getattr(config, "dropoff_safe_travel", None), "enabled", False)) and safe_travel_waypoints:
                 for index, safe_travel_waypoint in enumerate(safe_travel_waypoints, start=1):
-                    segments.append(
-                        {
-                            "type": str(safe_travel_waypoint.get("motion_type", "linear")),
-                            "label": f"prepare_dropoff_safe_travel_{index}",
-                            "position": safe_travel_waypoint["position"],
-                            "vel": float(safe_travel_waypoint["vel_percent"]),
-                            "acc": float(safe_travel_waypoint["acc_percent"]),
-                            "blendR": float(safe_travel_waypoint.get("blendR", 0.0)),
-                        }
-                    )
-            segments.append(
-                {
-                    "type": str(config.dropoff.release_align_motion_type),
-                    "label": "prepare_dropoff_align",
-                    "position": post_cleanup_align_pose,
-                    "vel": float(config.dropoff.release_align_vel_percent),
-                    "acc": float(config.dropoff.release_align_acc_percent),
-                    "blendR": float(config.dropoff.release_align_blendR),
-                }
-            )
+                    segments.append(_position_command(
+                        f"prepare_dropoff_safe_travel_{index}",
+                        safe_travel_waypoint.get("motion_type", "linear"),
+                        safe_travel_waypoint["position"],
+                        safe_travel_waypoint["vel_percent"],
+                        safe_travel_waypoint["acc_percent"],
+                        safe_travel_waypoint.get("blendR", 0.0),
+                    ))
+            segments.append(_position_command(
+                "prepare_dropoff_align",
+                config.dropoff.release_align_motion_type,
+                post_cleanup_align_pose,
+                config.dropoff.release_align_vel_percent,
+                config.dropoff.release_align_acc_percent,
+                config.dropoff.release_align_blendR,
+            ))
         elif bool(getattr(getattr(config, "dropoff_safe_travel", None), "enabled", False)):
             safe_travel_waypoints = _resolve_dropoff_safe_travel_waypoints(self._owner)
             for index, safe_travel_waypoint in enumerate(safe_travel_waypoints, start=1):
-                segments.append(
-                    {
-                        "type": str(safe_travel_waypoint.get("motion_type", "linear")),
-                        "label": f"prepare_dropoff_safe_travel_{index}",
-                        "position": safe_travel_waypoint["position"],
-                        "vel": float(safe_travel_waypoint["vel_percent"]),
-                        "acc": float(safe_travel_waypoint["acc_percent"]),
-                        "blendR": float(safe_travel_waypoint.get("blendR", 0.0)),
-                    }
-                )
+                segments.append(_position_command(
+                    f"prepare_dropoff_safe_travel_{index}",
+                    safe_travel_waypoint.get("motion_type", "linear"),
+                    safe_travel_waypoint["position"],
+                    safe_travel_waypoint["vel_percent"],
+                    safe_travel_waypoint["acc_percent"],
+                    safe_travel_waypoint.get("blendR", 0.0),
+                ))
                 post_cleanup_align_pose = safe_travel_waypoint["position"]
-        segments.append(
-            {
-                "type": "unwind_joint6",
-                "label": "prepare_dropoff_unwind",
-                "vel": float(config.navigation_return.unwind_vel_percent),
-                "acc": float(config.navigation_return.unwind_acc_percent),
-            }
-        )
+        segments.append(OrderedUnwindJoint6Command(
+            label="prepare_dropoff_unwind",
+            velocity_percent=float(config.navigation_return.unwind_vel_percent),
+            acceleration_percent=float(config.navigation_return.unwind_acc_percent),
+        ))
         return segments, list(post_cleanup_align_pose or command_path[-1])
 
     def build_ordered_cleanup_chain_extension(
@@ -798,7 +814,7 @@ class PaintEdgeCleanupExecutor:
         *,
         started: float,
         align_pose: list[float] | None = None,
-    ) -> tuple[bool, str, int, list[dict], list[float] | None]:
+    ) -> tuple[bool, str, int, list[OrderedMotionCommand], list[float] | None]:
         """Prepare cleanup segments for a larger ordered paint-cycle chain."""
         original_config = self._owner._contact_motion_config
         original_strategy = self._owner._contact_motion_strategy

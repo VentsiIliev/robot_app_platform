@@ -1,6 +1,12 @@
 import unittest
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
+from src.engine.robot.motion_sequence import (
+    OrderedMotionProfile,
+    OrderedMotionType,
+    OrderedPositionCommand,
+    serialize_ordered_motion_commands,
+)
 
 from src.robot_systems.paint.processes.paint.execute.dropoff_executor import (
     MovementGroupDropoffStrategy,
@@ -121,7 +127,9 @@ class TestDropoffMotionCorridor(unittest.TestCase):
             labels,
         )
         motion.move_ordered_pickup_sequence.assert_called_once()
-        ordered_segments = motion.move_ordered_pickup_sequence.call_args.args[1]
+        ordered_segments = serialize_ordered_motion_commands(
+            motion.move_ordered_pickup_sequence.call_args.args[1]
+        )
         self.assertEqual("linear", ordered_segments[0]["type"])
         self.assertEqual(10.0, ordered_segments[0]["blendR"])
         self.assertEqual("ptp", ordered_segments[1]["type"])
@@ -329,16 +337,16 @@ class TestDropoffMotionCorridor(unittest.TestCase):
         )
         motion = PaintMotionExecutor(owner)
         segments = [
-            {"type": "ptp", "label": "before", "position": [0, 0, 10, 0, 0, 0], "vel": 20, "acc": 30, "blendR": 5},
-            {"type": "fast_lin", "label": "fast", "position": [1, 2, 20, 0, 0, 0], "vel": 40, "acc": 50, "blendR": 5},
-            {"type": "linear", "label": "after", "position": [2, 3, 30, 0, 0, 0], "vel": 60, "acc": 70, "blendR": 0},
+            OrderedPositionCommand("before", OrderedMotionType.PTP, (0, 0, 10, 0, 0, 0), OrderedMotionProfile(20, 30, 5)),
+            OrderedPositionCommand("fast", OrderedMotionType.FAST_LINEAR, (1, 2, 20, 0, 0, 0), OrderedMotionProfile(40, 50, 5)),
+            OrderedPositionCommand("after", OrderedMotionType.LINEAR, (2, 3, 30, 0, 0, 0), OrderedMotionProfile(60, 70, 0)),
         ]
 
         self.assertTrue(motion.move_ordered_pickup_sequence("mixed", segments))
 
         self.assertEqual(robot.execute_ordered_motion_chain.call_count, 2)
         first_chunk = robot.execute_ordered_motion_chain.call_args_list[0].kwargs["segments"]
-        self.assertEqual(first_chunk[0]["blendR"], 0.0)
+        self.assertEqual(first_chunk[0].profile.blend_radius, 0.0)
         robot.move_fast_linear.assert_called_once()
         robot.move_ptp.assert_not_called()
         robot.move_linear.assert_not_called()

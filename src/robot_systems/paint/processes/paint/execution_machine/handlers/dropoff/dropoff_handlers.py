@@ -8,6 +8,13 @@ from time import monotonic, perf_counter, sleep
 import numpy as np
 
 from src.engine.geometry.planar import unwrap_degrees
+from src.engine.robot.motion_sequence import (
+    OrderedMotionMetadata,
+    OrderedMotionProfile,
+    OrderedMotionType,
+    OrderedPositionCommand,
+    OrderedUnwindJoint6Command,
+)
 from src.robot_systems.paint.processes.paint.motion.pose_comparison import poses_close
 from src.robot_systems.paint.processes.paint.config import PAINT_PROCESS_CONFIG
 from src.robot_systems.paint.processes.paint.execute.diagnostics import elapsed_s
@@ -27,10 +34,62 @@ class DropoffReleaseWaypoint:
     pose: list[float] | None
     vel_percent: float
     acc_percent: float
-    motion_type: str = "ptp"
+    motion_type: OrderedMotionType = OrderedMotionType.PTP
     blendR: float = 0.0
     release_here: bool = False
     corridor_id: str | None = None
+
+
+def _ordered_position_command(
+    label: str,
+    pose: object,
+    velocity_percent: object,
+    acceleration_percent: object,
+    motion_type: OrderedMotionType,
+    blend_radius: object = 0.0,
+    *,
+    protected: bool = False,
+) -> OrderedPositionCommand:
+    return OrderedPositionCommand(
+        label=label,
+        motion_type=motion_type,
+        position=tuple(float(value) for value in pose),
+        profile=OrderedMotionProfile(
+            float(velocity_percent),
+            float(acceleration_percent),
+            float(blend_radius),
+        ),
+        metadata=OrderedMotionMetadata(protected=protected),
+    )
+
+
+def _parse_motion_type(value: object, *, field_name: str) -> OrderedMotionType:
+    """Validate an external/configured motion type at its input boundary."""
+    return OrderedMotionType.parse(value, field_name=field_name)
+
+
+@dataclass(frozen=True)
+class _DropoffRouteItem:
+    label: str
+    position: list[float]
+    velocity_percent: float
+    acceleration_percent: float
+    motion_type: OrderedMotionType
+    blend_radius: float
+
+
+@dataclass(frozen=True)
+class _PlateMotionProfile:
+    velocity_percent: float
+    acceleration_percent: float
+    blend_radius: float
+    motion_type: OrderedMotionType
+
+
+@dataclass
+class _PlateNextWaypoint:
+    position: list[float]
+    profile: _PlateMotionProfile
 
 
 @dataclass(frozen=True)
@@ -102,13 +161,17 @@ def execute_dropoff_preparation_for_executor(executor: object) -> tuple[bool, st
             return False, message
 
     if getattr(executor, "_last_pickup_contact_mode", None) == "sensor_controlled_fast_lin":
-        segments, final_pose = build_ordered_dropoff_preparation_segments(executor)
-        if not segments:
+        commands, final_pose = build_ordered_dropoff_preparation_segments(executor)
+        if not commands:
             return False, "Pivot paint finished, but ordered dropoff preparation could not be built"
+        segments = commands
         _logger.info(
             "[DROPOFF] Executing servo-contact dropoff preparation as one ordered chain segments=%d blendR=%s",
             len(segments),
-            [segment.get("blendR") for segment in segments],
+            [
+                getattr(getattr(segment, "profile", None), "blend_radius", None)
+                for segment in segments
+            ],
         )
         if not executor._motion.move_ordered_pickup_sequence(
             "Servo-contact ordered dropoff preparation",
@@ -131,7 +194,10 @@ def execute_dropoff_preparation_for_executor(executor: object) -> tuple[bool, st
                 safe_waypoint["position"],
                 velocity=float(safe_waypoint["vel_percent"]),
                 acceleration=float(safe_waypoint["acc_percent"]),
-                motion_type=str(safe_waypoint.get("motion_type", "ptp")),
+                motion_type=_parse_motion_type(
+                    safe_waypoint.get("motion_type", OrderedMotionType.PTP),
+                    field_name=f"dropoff safe waypoint {index}",
+                ).value,
                 blendR=float(safe_waypoint.get("blendR", 0.0)),
             ):
                 return False, "Pivot paint finished, but paint-to-dropoff safe travel move failed"
@@ -145,7 +211,10 @@ def execute_dropoff_preparation_for_executor(executor: object) -> tuple[bool, st
             align_pose,
             velocity=config.dropoff.release_align_vel_percent,
             acceleration=config.dropoff.release_align_acc_percent,
-            motion_type=config.dropoff.release_align_motion_type,
+            motion_type=_parse_motion_type(
+                config.dropoff.release_align_motion_type,
+                field_name="dropoff.release_align_motion_type",
+            ).value,
             blendR=float(config.dropoff.release_align_blendR),
         ):
             return False, "Pivot paint finished, but move to dropoff pose failed before unwind"
@@ -236,7 +305,11 @@ def execute_dropoff_release_for_executor(
                 list(waypoint.pose),
                 velocity=waypoint.vel_percent,
                 acceleration=waypoint.acc_percent,
-                motion_type="linear" if waypoint.corridor_id else waypoint.motion_type,
+                motion_type=(
+                    OrderedMotionType.LINEAR
+                    if waypoint.corridor_id
+                    else waypoint.motion_type
+                ).value,
                 blendR=waypoint.blendR,
                 corridor_id=waypoint.corridor_id,
             ):
@@ -339,26 +412,30 @@ def _execute_movement_group_ordered_exit(
             )
         ),
     )
-    segments = [
-        {
-            "type": "linear",
-            "label": retract_waypoint.label,
-            "position": list(retract_waypoint.pose),
-            "vel": float(retract_waypoint.vel_percent),
-            "acc": float(retract_waypoint.acc_percent),
-            "blendR": blend_radius,
-            "protected": True,
-        },
-        {
-            "type": str(next_cycle_start.get("type", "ptp")),
-            "label": f"Moving to next-cycle start '{next_cycle_start['group_id']}'",
-            "position": list(next_cycle_start["position"]),
-            "vel": float(next_cycle_start["vel"]),
-            "acc": float(next_cycle_start["acc"]),
-            "blendR": 0.0,
-            "protected": True,
-        },
+    commands = [
+        _ordered_position_command(
+            retract_waypoint.label,
+            retract_waypoint.pose,
+            retract_waypoint.vel_percent,
+            retract_waypoint.acc_percent,
+            OrderedMotionType.LINEAR,
+            blend_radius,
+            protected=True,
+        ),
+        _ordered_position_command(
+            f"Moving to next-cycle start '{next_cycle_start['group_id']}'",
+            next_cycle_start["position"],
+            next_cycle_start["vel"],
+            next_cycle_start["acc"],
+            _parse_motion_type(
+                next_cycle_start.get("type", OrderedMotionType.PTP),
+                field_name="next_cycle_start.type",
+            ),
+            0.0,
+            protected=True,
+        ),
     ]
+    segments = commands
     _logger.info(
         "[DROPOFF] Executing movement-group ordered exit corridor=%s blendR=%.3f segments=%d",
         corridor_id,
@@ -391,7 +468,10 @@ def _move_to_next_cycle_start(executor: object, next_cycle_start: dict) -> bool:
         list(next_cycle_start["position"]),
         velocity=float(next_cycle_start["vel"]),
         acceleration=float(next_cycle_start["acc"]),
-        motion_type=str(next_cycle_start.get("type", "ptp")),
+        motion_type=_parse_motion_type(
+            next_cycle_start.get("type", OrderedMotionType.PTP),
+            field_name="next_cycle_start.type",
+        ).value,
         blendR=0.0,
     ))
 
@@ -405,8 +485,6 @@ def _next_cycle_start_pose_reached(
     log_result: bool = True,
 ) -> bool:
     getter = getattr(executor._robot_service, "get_current_position_fresh", None)
-    if not callable(getter):
-        getter = getattr(executor._robot_service, "get_current_position", None)
     if not callable(getter):
         return False
     try:
@@ -557,7 +635,7 @@ def _build_dropoff_release_plan(executor: object) -> DropoffReleasePlan:
                         pose=pose,
                         vel_percent=dropoff.release_align_vel_percent,
                         acc_percent=dropoff.release_align_acc_percent,
-                        motion_type="linear",
+                        motion_type=OrderedMotionType.LINEAR,
                         release_here=True,
                         corridor_id=corridor_id,
                     ),
@@ -566,7 +644,7 @@ def _build_dropoff_release_plan(executor: object) -> DropoffReleasePlan:
                         pose=approach_pose,
                         vel_percent=dropoff.release_align_vel_percent,
                         acc_percent=dropoff.release_align_acc_percent,
-                        motion_type="linear",
+                        motion_type=OrderedMotionType.LINEAR,
                         corridor_id=corridor_id,
                     ),
                 ),
@@ -579,7 +657,10 @@ def _build_dropoff_release_plan(executor: object) -> DropoffReleasePlan:
                     pose=pose,
                     vel_percent=dropoff.release_align_vel_percent,
                     acc_percent=dropoff.release_align_acc_percent,
-                    motion_type=dropoff.release_align_motion_type,
+                    motion_type=_parse_motion_type(
+                        dropoff.release_align_motion_type,
+                        field_name="dropoff.release_align_motion_type",
+                    ),
                     blendR=dropoff.release_align_blendR,
                     release_here=True,
                 ),
@@ -589,7 +670,9 @@ def _build_dropoff_release_plan(executor: object) -> DropoffReleasePlan:
     return DropoffReleasePlan(strategy_name=strategy_name, waypoints=())
 
 
-def build_ordered_dropoff_preparation_segments(executor: object) -> tuple[list[dict], list[float] | None]:
+def build_ordered_dropoff_preparation_segments(
+    executor: object,
+) -> tuple[list[OrderedPositionCommand | OrderedUnwindJoint6Command], list[float] | None]:
     """
     Build the post-paint ordered dropoff preparation chain.
 
@@ -601,7 +684,7 @@ def build_ordered_dropoff_preparation_segments(executor: object) -> tuple[list[d
     - final Joint 6 unwind segment settings
     """
     config = executor._paint_process_config()
-    route_items: list[dict] = []
+    route_items: list[_DropoffRouteItem] = []
 
     safe_waypoints = _resolve_dropoff_safe_travel_waypoints(executor)
     if bool(config.dropoff_safe_travel.enabled):
@@ -609,68 +692,65 @@ def build_ordered_dropoff_preparation_segments(executor: object) -> tuple[list[d
             return [], None
 
         for index, safe_waypoint in enumerate(safe_waypoints, start=1):
-            route_items.append(
-                {
-                    "label": f"prepare_dropoff_safe_travel_{index}",
-                    "position": list(safe_waypoint["position"]),
-                    "vel": float(safe_waypoint["vel_percent"]),
-                    "acc": float(safe_waypoint["acc_percent"]),
-                    "type": str(safe_waypoint.get("motion_type", "ptp")),
-                    "blendR": float(safe_waypoint.get("blendR", 0.0)),
-                }
-            )
+            route_items.append(_DropoffRouteItem(
+                label=f"prepare_dropoff_safe_travel_{index}",
+                position=list(safe_waypoint["position"]),
+                velocity_percent=float(safe_waypoint["vel_percent"]),
+                acceleration_percent=float(safe_waypoint["acc_percent"]),
+                motion_type=_parse_motion_type(
+                    safe_waypoint.get("motion_type", OrderedMotionType.PTP),
+                    field_name=f"dropoff safe waypoint {index}",
+                ),
+                blend_radius=float(safe_waypoint.get("blendR", 0.0)),
+            ))
 
     if _should_prepare_dropoff_align_before_unwind(executor):
-        reference_pose = route_items[-1]["position"] if route_items else executor._last_process_end_pose
+        reference_pose = route_items[-1].position if route_items else executor._last_process_end_pose
         align_pose = _resolve_dropoff_preparation_pose(executor, reference_pose)
         if align_pose is None:
             return [], None
 
-        route_items.append(
-            {
-                "label": "prepare_dropoff_align",
-                "position": list(align_pose),
-                "vel": float(config.dropoff.release_align_vel_percent),
-                "acc": float(config.dropoff.release_align_acc_percent),
-                "type": str(config.dropoff.release_align_motion_type),
-                "blendR": float(config.dropoff.release_align_blendR),
-            }
-        )
+        route_items.append(_DropoffRouteItem(
+            label="prepare_dropoff_align",
+            position=list(align_pose),
+            velocity_percent=float(config.dropoff.release_align_vel_percent),
+            acceleration_percent=float(config.dropoff.release_align_acc_percent),
+            motion_type=_parse_motion_type(
+                config.dropoff.release_align_motion_type,
+                field_name="dropoff.release_align_motion_type",
+            ),
+            blend_radius=float(config.dropoff.release_align_blendR),
+        ))
 
-    segments: list[dict] = []
+    segments: list[OrderedPositionCommand | OrderedUnwindJoint6Command] = []
     if route_items:
         start_pose = list(executor._last_process_end_pose) if executor._last_process_end_pose is not None else None
         adjusted_positions = _apply_distributed_dropoff_unwind(
             executor,
-            [item["position"] for item in route_items],
+            [item.position for item in route_items],
             start_pose,
         )
 
         for index, (item, adjusted_position) in enumerate(zip(route_items, adjusted_positions)):
             is_last_route_pose = index == len(route_items) - 1
-            segments.append(
-                {
-                    "type": str(item.get("type", "ptp")),
-                    "label": item["label"],
-                    "position": list(adjusted_position),
-                    "vel": float(item["vel"]),
-                    "acc": float(item["acc"]),
-                    "blendR": float(item.get("blendR", 0.0 if is_last_route_pose else 20.0)),
-                }
-            )
+            segments.append(_ordered_position_command(
+                item.label,
+                adjusted_position,
+                item.velocity_percent,
+                item.acceleration_percent,
+                item.motion_type,
+                item.blend_radius,
+            ))
         final_pose = list(adjusted_positions[-1])
     else:
         final_pose = list(executor._last_process_end_pose) if executor._last_process_end_pose is not None else None
 
-    segments.append(
-        {
-            "type": "unwind_joint6",
-            "label": "prepare_dropoff_unwind",
-            "vel": float(config.navigation_return.unwind_vel_percent),
-            "acc": float(config.navigation_return.unwind_acc_percent),
-            "protected": True,
-        }
-    )
+    segments.append(OrderedUnwindJoint6Command(
+        label="prepare_dropoff_unwind",
+        velocity_percent=float(config.navigation_return.unwind_vel_percent),
+        acceleration_percent=float(config.navigation_return.unwind_acc_percent),
+        protected=True,
+    ))
 
     release_pose = _resolve_dropoff_align_pose(executor, final_pose)
     if (
@@ -684,17 +764,15 @@ def build_ordered_dropoff_preparation_segments(executor: object) -> tuple[list[d
         # the configured release pose; DROPOFF releases there and retracts.
         descent_pose = list(final_pose) if final_pose is not None else list(release_pose)
         descent_pose[2] = float(release_pose[2])
-        segments.append(
-            {
-                "type": "linear",
-                "label": "prepare_dropoff_descend_to_release",
-                "position": descent_pose,
-                "vel": float(config.dropoff.release_align_vel_percent),
-                "acc": float(config.dropoff.release_align_acc_percent),
-                "blendR": 0.0,
-                "protected": True,
-            }
-        )
+        segments.append(_ordered_position_command(
+            "prepare_dropoff_descend_to_release",
+            descent_pose,
+            config.dropoff.release_align_vel_percent,
+            config.dropoff.release_align_acc_percent,
+            OrderedMotionType.LINEAR,
+            0.0,
+            protected=True,
+        ))
         final_pose = list(descent_pose)
 
     return segments, final_pose
@@ -852,40 +930,52 @@ def _resolve_dropoff_preparation_pose(
     return approach_pose
 
 
-def _plate_motion_profile(dropoff: object, key: str) -> dict[str, object]:
-    fallback = {
-        "vel_percent": float(dropoff.release_align_vel_percent),
-        "acc_percent": float(dropoff.release_align_acc_percent),
-        "blendR": float(dropoff.release_align_blendR),
-        "motion_type": str(dropoff.release_align_motion_type),
-    }
+def _plate_motion_profile(dropoff: object, key: str) -> _PlateMotionProfile:
+    fallback = _PlateMotionProfile(
+        velocity_percent=float(dropoff.release_align_vel_percent),
+        acceleration_percent=float(dropoff.release_align_acc_percent),
+        blend_radius=float(dropoff.release_align_blendR),
+        motion_type=_parse_motion_type(
+            dropoff.release_align_motion_type,
+            field_name="dropoff.release_align_motion_type",
+        ),
+    )
     accepted_keys = {key}
     if key == "center_to_dropoff":
         accepted_keys.update({"descend_release", "center_to_approach"})
     for raw in list(getattr(dropoff, "plate_motion_profiles", []) or []):
         if isinstance(raw, dict) and str(raw.get("key", "")) in accepted_keys:
             try:
-                return {
-                    "vel_percent": float(raw.get("vel_percent", fallback["vel_percent"])),
-                    "acc_percent": float(raw.get("acc_percent", fallback["acc_percent"])),
-                    "blendR": max(0.0, float(raw.get("blendR", fallback["blendR"]))),
-                    "motion_type": str(raw.get("motion_type", raw.get("type", "ptp"))),
-                }
+                return _PlateMotionProfile(
+                    velocity_percent=float(raw.get("vel_percent", fallback.velocity_percent)),
+                    acceleration_percent=float(raw.get("acc_percent", fallback.acceleration_percent)),
+                    blend_radius=max(0.0, float(raw.get("blendR", fallback.blend_radius))),
+                    motion_type=_parse_motion_type(
+                        raw.get("motion_type", raw.get("type", OrderedMotionType.PTP)),
+                        field_name=f"dropoff.plate_motion_profiles[{key}]",
+                    ),
+                )
             except (TypeError, ValueError):
                 break
     return fallback
 
 
-def _plate_ordered_segment(label: str, pose: list[float], profile: dict, *, stop: bool = False) -> dict:
-    return {
-        "label": label,
-        "position": list(pose),
-        "vel": float(profile["vel_percent"]),
-        "acc": float(profile["acc_percent"]),
-        "type": str(profile.get("motion_type", "ptp")),
-        "blendR": 0.0 if stop else float(profile["blendR"]),
-        "protected": True,
-    }
+def _plate_ordered_segment(
+    label: str,
+    pose: list[float],
+    profile: _PlateMotionProfile,
+    *,
+    stop: bool = False,
+) -> OrderedPositionCommand:
+    return _ordered_position_command(
+        label,
+        pose,
+        profile.velocity_percent,
+        profile.acceleration_percent,
+        profile.motion_type,
+        0.0 if stop else profile.blend_radius,
+        protected=True,
+    )
 
 
 def _wait_for_motion_slot_idle(
@@ -1072,7 +1162,7 @@ def _execute_plate_layout_ordered_release(
     else:
         exit_gate_pose = list(gate_pose)
         _logger.info("[PLATE_LAYOUT] Exit gate not configured; reusing passage gate")
-    next_waypoints: list[dict] = []
+    next_waypoints: list[_PlateNextWaypoint] = []
     if bool(dropoff.plate_next_cycle_midpoint_enabled) and next_cycle_start is not None:
         configured_waypoints = list(
             getattr(dropoff, "plate_next_cycle_waypoints", None) or []
@@ -1080,7 +1170,6 @@ def _execute_plate_layout_ordered_release(
         if not configured_waypoints and getattr(dropoff, "plate_next_cycle_midpoint_pose", None):
             configured_waypoints = [{
                 "position": list(dropoff.plate_next_cycle_midpoint_pose),
-                **_plate_motion_profile(dropoff, "gate_to_next_midpoint"),
             }]
         if not configured_waypoints:
             return False, "Plate-layout next-cycle waypoints are enabled but none are configured"
@@ -1091,22 +1180,31 @@ def _execute_plate_layout_ordered_release(
             waypoint_pose, error = validate_plate_passage_gate(raw_pose)
             if error:
                 return False, f"Plate-layout next-cycle waypoint {index + 1}: {error}"
-            profile = dict(fallback_profile)
+            profile = fallback_profile
             if isinstance(raw_waypoint, dict):
                 try:
-                    profile.update({
-                        "vel_percent": float(raw_waypoint.get("vel_percent", profile["vel_percent"])),
-                        "acc_percent": float(raw_waypoint.get("acc_percent", profile["acc_percent"])),
-                        "motion_type": str(raw_waypoint.get(
-                            "motion_type", raw_waypoint.get("type", profile["motion_type"])
+                    profile = _PlateMotionProfile(
+                        velocity_percent=float(raw_waypoint.get(
+                            "vel_percent", profile.velocity_percent
                         )),
-                        "blendR": max(0.0, float(raw_waypoint.get(
-                            "blendR", raw_waypoint.get("blend_r", profile["blendR"])
+                        acceleration_percent=float(raw_waypoint.get(
+                            "acc_percent", profile.acceleration_percent
+                        )),
+                        motion_type=_parse_motion_type(
+                            raw_waypoint.get(
+                                "motion_type",
+                                raw_waypoint.get("type", profile.motion_type),
+                            ),
+                            field_name=f"dropoff.plate_next_cycle_waypoints[{index}]",
+                        ),
+                        blend_radius=max(0.0, float(raw_waypoint.get(
+                            "blendR",
+                            raw_waypoint.get("blend_r", profile.blend_radius),
                         ))),
-                    })
+                    )
                 except (TypeError, ValueError):
                     return False, f"Plate-layout next-cycle waypoint {index + 1}: invalid motion settings"
-            next_waypoints.append({"position": waypoint_pose, "profile": profile})
+            next_waypoints.append(_PlateNextWaypoint(waypoint_pose, profile))
     try:
         use_center_waypoint = _plate_route_uses_center(dropoff, reservation)
     except ValueError as exc:
@@ -1136,11 +1234,11 @@ def _execute_plate_layout_ordered_release(
             return False, "Plate-layout distributed unwind route could not be built"
     previous_rotation = float(route_poses["exit_gate"][5])
     for waypoint in next_waypoints:
-        waypoint["position"][5] = unwrap_degrees(
+        waypoint.position[5] = unwrap_degrees(
             previous_rotation,
-            float(waypoint["position"][5]),
+            float(waypoint.position[5]),
         )
-        previous_rotation = float(waypoint["position"][5])
+        previous_rotation = float(waypoint.position[5])
     entry_segments = [_plate_ordered_segment(
         "Plate entry: paint detach to passage gate",
         route_poses["entry_gate"],
@@ -1200,8 +1298,8 @@ def _execute_plate_layout_ordered_release(
         for index, waypoint in enumerate(next_waypoints):
             exit_segments.append(_plate_ordered_segment(
                 f"Plate exit: next-cycle waypoint {index + 1}/{len(next_waypoints)}",
-                waypoint["position"],
-                waypoint["profile"],
+                waypoint.position,
+                waypoint.profile,
             ))
         exit_segments.append(_plate_ordered_segment(
             (

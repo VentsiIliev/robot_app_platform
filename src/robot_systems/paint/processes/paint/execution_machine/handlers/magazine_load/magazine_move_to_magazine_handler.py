@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 
+from src.engine.robot.motion_sequence import OrderedMotionType
 from src.robot_systems.paint.processes.paint.execution_machine.context import PaintExecutionContext
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.common.guards import guard_control
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_load_handler import (
@@ -110,7 +111,10 @@ def handle_magazine_move_to_magazine(ctx: PaintExecutionContext) -> PaintExecuti
     move_kwargs = dict(
         velocity=float(config.move_to_magazine_vel_percent),
         acceleration=float(config.move_to_magazine_acc_percent),
-        motion_type=config.move_to_magazine_motion_type,
+        motion_type=OrderedMotionType.parse(
+            config.move_to_magazine_motion_type,
+            field_name="magazine_load.move_to_magazine_motion_type",
+        ).value,
         blendR=float(config.move_to_magazine_blendR),
     )
     if cached_approach_pose is not None:

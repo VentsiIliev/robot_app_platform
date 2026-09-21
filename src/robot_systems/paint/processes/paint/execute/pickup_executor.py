@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import math
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from time import perf_counter
 from typing import Protocol
 
@@ -14,6 +14,16 @@ from src.engine.robot.procedures import (
     ServoUntilConditionProcedure,
 )
 from src.engine.robot.path_preparation import WorkpieceExecutionPlan
+from src.engine.robot.motion_sequence import (
+    OrderedExecutionPolicy,
+    OrderedMotionCommand,
+    OrderedMotionLimitProfile,
+    OrderedMotionMetadata,
+    OrderedMotionProfile,
+    OrderedMotionType,
+    OrderedPathCommand,
+    OrderedPositionCommand,
+)
 from src.robot_systems.paint.processes.paint.config import (
     PICKUP_CONTACT_MODE_HEIGHT_MEASURE,
     PICKUP_CONTACT_MODE_PLANNED,
@@ -24,6 +34,10 @@ from src.robot_systems.paint.processes.paint.config import (
 from src.robot_systems.paint.processes.paint.execute.diagnostics import elapsed_s
 from src.robot_systems.paint.processes.paint.magazine_load_result import (
     NO_WORKPIECE_AT_CALIBRATION,
+)
+from src.robot_systems.paint.processes.paint.motion.pose_sampling import (
+    read_fresh_pose,
+    wait_for_stable_pose,
 )
 from src.robot_systems.paint.timing import timed_block, timed_step
 
@@ -100,6 +114,18 @@ class PickupWaypoint:
     acc_percent: float
     motion_type: str | None = None
     blendR: float | None = None
+
+
+@dataclass(frozen=True)
+class MagazineTransferWaypoint:
+    """One fully typed move in a magazine pickup-to-release chain."""
+
+    label: str
+    pose: list[float]
+    velocity_percent: float
+    acceleration_percent: float
+    motion_type: OrderedMotionType
+    blend_radius: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -282,7 +308,7 @@ class PaintPickupExecutor:
         prepared_workpiece: WorkpieceExecutionPlan,
         *,
         pickup_plan: PickupPlan | None = None,
-        prepared_continuation_segments: list[dict] | None = None,
+        prepared_continuation_segments: list[OrderedMotionCommand] | None = None,
         stop_after_retract: bool = False,
     ) -> tuple[bool, str]:
         """Run pickup, align, and staging according to the configured strategy."""
@@ -372,7 +398,7 @@ class PaintPickupExecutor:
         self,
         pickup_plan: PickupPlan,
         *,
-        prepared_continuation_segments: list[dict] | None = None,
+        prepared_continuation_segments: list[OrderedMotionCommand] | None = None,
         stop_after_retract: bool = False,
     ) -> bool:
         waypoints = list(pickup_plan.waypoints)
@@ -454,13 +480,18 @@ class PaintPickupExecutor:
                 10.0,
             )
             combined_waypoints = [lift_waypoint] + continuation_waypoints
-        combined_segments = [] if stop_after_retract else build_paint_pickup_segments(combined_waypoints)
+        combined_segments = (
+            []
+            if stop_after_retract
+            else build_paint_pickup_segments(combined_waypoints)
+        )
         if not stop_after_retract:
             combined_segments.extend(prepared_continuation_segments or [])
         prepared_plan_id: str | None = None
         prepare = getattr(self._owner._robot_service, "prepare_ordered_motion_chain", None)
         has_fast_lin = any(
-            str(segment.get("type", "")).strip().lower() == "fast_lin"
+            isinstance(segment, OrderedPositionCommand)
+            and segment.motion_type is OrderedMotionType.FAST_LINEAR
             for segment in combined_segments
         )
         if combined_segments and callable(prepare) and not has_fast_lin:
@@ -677,42 +708,20 @@ class PaintPickupExecutor:
             )
         return bool(ok)
 
-    def _read_fresh_pose(self) -> list[float] | None:
-        getter = getattr(self._owner._robot_service, "get_current_position_fresh", None)
-        if not callable(getter):
-            getter = getattr(self._owner._robot_service, "get_current_position", None)
-        if not callable(getter):
-            return None
-        try:
-            pose = getter()
-        except Exception:
-            _logger.exception("[PICKUP] Failed to read current pose after servo contact")
-            return None
-        if pose is None or len(pose) < 6:
-            return None
-        return [float(value) for value in pose[:6]]
+    def _read_fresh_pose(self) -> list[float]:
+        return read_fresh_pose(
+            self._owner._robot_service,
+            error_message="[PICKUP] Failed to read current pose after servo contact",
+        )
 
     def _wait_for_stable_pose(self, timeout_s: float = 1.0) -> list[float] | None:
-        deadline = time.monotonic() + timeout_s
-        previous = None
-        stable = 0
-        while time.monotonic() < deadline:
-            pose = self._read_fresh_pose()
-            if pose is not None and previous is not None:
-                xyz_delta = math.sqrt(sum((pose[i] - previous[i]) ** 2 for i in range(3)))
-                angular_delta = max(
-                    abs((pose[i] - previous[i] + 180.0) % 360.0 - 180.0)
-                    for i in range(3, 6)
-                )
-                stable = stable + 1 if xyz_delta <= 0.5 and angular_delta <= 0.2 else 0
-                if stable >= 3:
-                    return pose
-            else:
-                stable = 0
-            previous = pose
-            time.sleep(0.05)
-        _logger.error("[PICKUP] Post-retract pose stability timeout")
-        return None
+        return wait_for_stable_pose(
+            self._owner._robot_service,
+            logger=_logger,
+            read_error_message="[PICKUP] Failed to read current pose after servo contact",
+            timeout_message="[PICKUP] Post-retract pose stability timeout",
+            timeout_s=timeout_s,
+        )
 
     def _move_waypoint_sequence(self, label: str, waypoints: list[PickupWaypoint]) -> bool:
         segments = build_paint_pickup_segments(waypoints)
@@ -720,7 +729,10 @@ class PaintPickupExecutor:
             "[PICKUP] Executing custom pickup sequence labels=%s vel_acc=%s",
             " -> ".join(waypoint.label for waypoint in waypoints),
             [
-                (round(float(segment["vel"]), 3), round(float(segment["acc"]), 3))
+                (
+                    round(float(segment.profile.velocity_percent), 3),
+                    round(float(segment.profile.acceleration_percent), 3),
+                )
                 for segment in segments
             ],
         )
@@ -743,7 +755,7 @@ class PaintPickupExecutor:
         return f"Pickup succeeded, but {label} failed"
 
 
-def build_ordered_pickup_segments(pickup_plan: PickupPlan) -> list[dict]:
+def build_ordered_pickup_segments(pickup_plan: PickupPlan) -> list[OrderedPositionCommand]:
     """
     Build ordered paint pickup/staging motion segments from a pickup plan.
 
@@ -753,7 +765,9 @@ def build_ordered_pickup_segments(pickup_plan: PickupPlan) -> list[dict]:
     return build_paint_pickup_segments(pickup_plan.waypoints)
 
 
-def build_paint_pickup_segments(waypoints: tuple[PickupWaypoint, ...] | list[PickupWaypoint]) -> list[dict]:
+def build_paint_pickup_segments(
+    waypoints: tuple[PickupWaypoint, ...] | list[PickupWaypoint],
+) -> list[OrderedPositionCommand]:
     """
     Build paint pickup/staging motion segments.
 
@@ -764,14 +778,14 @@ def build_paint_pickup_segments(waypoints: tuple[PickupWaypoint, ...] | list[Pic
     - pickup route `blendR`
     - which waypoints must stop before continuing
     """
-    segments: list[dict] = []
+    segments: list[OrderedPositionCommand] = []
     for waypoint_index, waypoint in enumerate(waypoints):
         is_last_pickup_waypoint = waypoint_index == len(waypoints) - 1
         is_pickup_contact = waypoint.label == "Descending to pickup pose"
-        move_type = "linear" if is_pickup_contact else "ptp"
+        motion_type = OrderedMotionType.LINEAR if is_pickup_contact else OrderedMotionType.PTP
         configured_type = str(getattr(waypoint, "motion_type", None) or "").strip().lower()
-        if configured_type in {"ptp", "linear", "fast_lin"}:
-            move_type = configured_type
+        if configured_type:
+            motion_type = OrderedMotionType(configured_type)
         default_blend_r = (
             0.0
             if (
@@ -784,21 +798,29 @@ def build_paint_pickup_segments(waypoints: tuple[PickupWaypoint, ...] | list[Pic
         blend_r = default_blend_r if configured_blend_r is None else float(configured_blend_r)
         if is_last_pickup_waypoint:
             blend_r = 0.0
-        segment = {
-            "type": move_type,
-            "label": waypoint.label,
-            "position": list(waypoint.pose),
-            "vel": float(waypoint.vel_percent),
-            "acc": float(waypoint.acc_percent),
-            "blendR": max(0.0, blend_r),
-        }
-        if segments and _equivalent_pickup_poses(segments[-1]["position"], segment["position"]):
+        segment = OrderedPositionCommand(
+            label=waypoint.label,
+            motion_type=motion_type,
+            position=tuple(float(value) for value in waypoint.pose),
+            profile=OrderedMotionProfile(
+                velocity_percent=float(waypoint.vel_percent),
+                acceleration_percent=float(waypoint.acc_percent),
+                blend_radius=max(0.0, blend_r),
+            ),
+        )
+        if segments and _equivalent_pickup_poses(segments[-1].position, segment.position):
             _logger.info(
                 "[PICKUP] Removing redundant no-op waypoint %r at the same pose as %r",
-                segment["label"],
-                segments[-1]["label"],
+                segment.label,
+                segments[-1].label,
             )
-            segments[-1]["blendR"] = segment["blendR"]
+            segments[-1] = replace(
+                segments[-1],
+                profile=replace(
+                    segments[-1].profile,
+                    blend_radius=segment.profile.blend_radius,
+                ),
+            )
             continue
         segments.append(segment)
     return segments
@@ -823,73 +845,69 @@ def build_ordered_paint_contact_segments(
     *,
     label_prefix: str = "paint",
     acceleration_scale: float = 1.0,
-) -> list[dict]:
+) -> list[OrderedMotionCommand]:
     """
     Build ordered paint-contact path segments.
 
     This is the place to adjust ordered paint-contact path command shape.
     """
-    segments: list[dict] = []
+    segments: list[OrderedMotionCommand] = []
     for path_index, command_path in enumerate(paint_paths):
         if not command_path:
             continue
         job = paint_jobs[path_index] if path_index < len(paint_jobs) else {}
         readiness_group = f"{label_prefix}_contact_{path_index + 1}"
-        segments.append(
-            {
-                "type": "linear",
-                "label": f"{label_prefix}_attach_{path_index + 1}",
-                "position": list(command_path[0]),
-                "vel": float(contact_staging.attach_vel_percent),
-                "acc": float(contact_staging.attach_acc_percent),
-                "blendR": 0.0,
-                "protected": True,
-                "readiness_group": readiness_group,
-                "execution_group": readiness_group,
-                "execution_policy": "concatenate",
-            }
+        metadata = OrderedMotionMetadata(
+            protected=True,
+            readiness_group=readiness_group,
+            execution_group=readiness_group,
+            execution_policy=OrderedExecutionPolicy.CONCATENATE,
         )
-        segments.append(
-            {
-                "type": "path",
-                "label": f"{label_prefix}_contact_{path_index + 1}:{job.get('pattern_type', 'Path')}",
-                "path": command_path,
-                "vel": float(job.get("vel", 10.0)),
-                "acc": float(job.get("acc", 30.0)) * float(acceleration_scale),
-                "protected": True,
-                "limit_profile": "paint_contact",
-                "readiness_group": readiness_group,
-                "execution_group": readiness_group,
-                "execution_policy": "concatenate",
-            }
-        )
+        segments.append(OrderedPositionCommand(
+            label=f"{label_prefix}_attach_{path_index + 1}",
+            motion_type=OrderedMotionType.LINEAR,
+            position=tuple(float(value) for value in command_path[0]),
+            profile=OrderedMotionProfile(
+                velocity_percent=float(contact_staging.attach_vel_percent),
+                acceleration_percent=float(contact_staging.attach_acc_percent),
+                blend_radius=0.0,
+            ),
+            metadata=metadata,
+        ))
+        segments.append(OrderedPathCommand(
+            label=f"{label_prefix}_contact_{path_index + 1}:{job.get('pattern_type', 'Path')}",
+            path=tuple(tuple(float(value) for value in pose) for pose in command_path),
+            profile=OrderedMotionProfile(
+                velocity_percent=float(job.get("vel", 10.0)),
+                acceleration_percent=float(job.get("acc", 30.0)) * float(acceleration_scale),
+            ),
+            metadata=metadata,
+            limit_profile=OrderedMotionLimitProfile.PAINT_CONTACT,
+        ))
     return segments
 
 
 def build_magazine_pickup_release_segments(
-    transfer_waypoints: tuple[tuple, ...],
-) -> list[dict]:
+    transfer_waypoints: tuple[MagazineTransferWaypoint, ...],
+) -> list[OrderedPositionCommand]:
     """
     Build ordered magazine pickup-to-release segments.
 
     This is the place to adjust magazine transfer `blendR`.
     """
-    segments: list[dict] = []
+    segments: list[OrderedPositionCommand] = []
     for index, waypoint in enumerate(transfer_waypoints):
-        label, pose, velocity, acceleration, move_type = waypoint[:5]
-        blend_r = float(waypoint[5]) if len(waypoint) >= 6 else 0.0
-        if len(waypoint) < 6 and label == "Lifting magazine workpiece" and index + 1 < len(transfer_waypoints):
-            blend_r = 20.0
+        blend_r = float(waypoint.blend_radius)
         if index == len(transfer_waypoints) - 1:
             blend_r = 0.0
-        segments.append(
-            {
-                "type": move_type,
-                "label": label,
-                "position": list(pose),
-                "vel": float(velocity),
-                "acc": float(acceleration),
-                "blendR": blend_r,
-            }
-        )
+        segments.append(OrderedPositionCommand(
+            label=waypoint.label,
+            motion_type=waypoint.motion_type,
+            position=tuple(float(value) for value in waypoint.pose),
+            profile=OrderedMotionProfile(
+                velocity_percent=float(waypoint.velocity_percent),
+                acceleration_percent=float(waypoint.acceleration_percent),
+                blend_radius=blend_r,
+            ),
+        ))
     return segments

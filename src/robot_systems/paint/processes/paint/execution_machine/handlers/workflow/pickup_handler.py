@@ -4,6 +4,10 @@ import logging
 
 import numpy as np
 
+from src.engine.robot.motion_sequence import (
+    OrderedMotionCommand,
+    OrderedUnwindJoint6Command,
+)
 from src.robot_systems.paint.processes.paint.execute.diagnostics import elapsed_s
 from src.robot_systems.paint.processes.paint.execute.pickup_executor import (
     build_ordered_paint_contact_segments,
@@ -307,13 +311,13 @@ def try_execute_ordered_pickup_and_paint_contact(
         return False, "Pickup succeeded, but no paint contact path was generated", total_waypoints
 
     paint_segments = build_ordered_paint_contact_segments(
-        paint_paths,
-        paint_jobs,
-        executor._paint_process_config().contact_staging,
-        acceleration_scale=(
-            executor._paint_process_config().paint_process_acceleration_scale_percent
-            / 100.0
-        ),
+            paint_paths,
+            paint_jobs,
+            executor._paint_process_config().contact_staging,
+            acceleration_scale=(
+                executor._paint_process_config().paint_process_acceleration_scale_percent
+                / 100.0
+            ),
     )
     post_pickup_segments = list(paint_segments)
 
@@ -369,14 +373,14 @@ def try_execute_ordered_pickup_and_paint_contact(
                 "Pivot paint finished, but paint-to-dropoff safe travel waypoints are not configured",
                 total_waypoints,
             )
-        dropoff_segments, dropoff_final_pose = build_ordered_dropoff_preparation_segments(executor)
-        if not dropoff_segments:
+        dropoff_commands, dropoff_final_pose = build_ordered_dropoff_preparation_segments(executor)
+        if not dropoff_commands:
             return (
                 False,
                 "Pivot paint finished, but no dropoff pose is available for safe pre-dropoff unwind alignment",
                 total_waypoints,
             )
-        post_pickup_segments.extend(dropoff_segments)
+        post_pickup_segments.extend(dropoff_commands)
         dropoff_prepared_in_chain = True
         final_pose = dropoff_final_pose or final_pose
 
@@ -404,7 +408,7 @@ def try_execute_ordered_pickup_and_paint_contact(
             executor._last_process_end_pose = list(final_pose)
         return ok, msg, total_waypoints
 
-    segments: list[dict] = build_ordered_pickup_segments(pickup_plan)
+    segments: list[OrderedMotionCommand] = build_ordered_pickup_segments(pickup_plan)
     segments.extend(post_pickup_segments)
 
     if pickup_plan.vacuum_on_before_moves:
@@ -441,26 +445,25 @@ def build_ordered_second_pass_segments(
     paint_paths: list[list[list[float]]],
     paint_jobs: list[dict],
     config,
-) -> list[dict]:
+) -> list[OrderedMotionCommand]:
     """Build the guarded unwind, re-attach, and contact sequence for pass two."""
     return [
-        {
-            "type": "unwind_joint6",
-            "label": "paint_pass_2_unwind",
-            "vel": float(config.navigation_return.unwind_vel_percent),
-            "acc": float(config.navigation_return.unwind_acc_percent),
-            "protected": True,
-        },
+        OrderedUnwindJoint6Command(
+            label="paint_pass_2_unwind",
+            velocity_percent=float(config.navigation_return.unwind_vel_percent),
+            acceleration_percent=float(config.navigation_return.unwind_acc_percent),
+            protected=True,
+        ),
         *build_ordered_paint_contact_segments(
-            paint_paths,
-            paint_jobs,
-            config.contact_staging,
-            label_prefix="paint_pass_2",
-            acceleration_scale=(
-                1.0
-                if not bool(config.unmatched_second_pass.use_pass_1_settings)
-                else config.paint_process_acceleration_scale_percent / 100.0
-            ),
+                paint_paths,
+                paint_jobs,
+                config.contact_staging,
+                label_prefix="paint_pass_2",
+                acceleration_scale=(
+                    1.0
+                    if not bool(config.unmatched_second_pass.use_pass_1_settings)
+                    else config.paint_process_acceleration_scale_percent / 100.0
+                ),
         ),
     ]
 

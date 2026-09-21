@@ -4,7 +4,11 @@ from typing import List
 
 from src.engine.robot.enums.axis import RobotAxis, Direction
 from src.engine.robot.interfaces.i_robot import IRobot
-from src.engine.robot.motion_sequence import MotionSequenceSegment
+from src.engine.robot.motion_sequence import (
+    MotionSequenceSegment,
+    OrderedMotionInput,
+    serialize_ordered_motion_inputs,
+)
 from src.engine.robot.drivers.client_adapters import build_robot_client
 
 logger = logging.getLogger(__name__)
@@ -402,7 +406,7 @@ class Ros2Robot(IRobot):
 
     def execute_ordered_motion_chain(
         self,
-        segments: list[dict],
+        segments: list[OrderedMotionInput],
         tool: int,
         user: int,
         blocking: bool = False,
@@ -415,7 +419,7 @@ class Ros2Robot(IRobot):
             blocking,
         )
         result = self._client.execute_ordered_motion_chain(
-            segments=segments,
+            segments=serialize_ordered_motion_inputs(segments),
             tool=tool,
             user=user,
             blocking=blocking,
@@ -435,10 +439,10 @@ class Ros2Robot(IRobot):
         logger.info("reset_all_errors ← ret=%s", ret)
         return ret
 
-    def prepare_ordered_motion_chain(self, segments, start_position, tool, user,
+    def prepare_ordered_motion_chain(self, segments: list[OrderedMotionInput], start_position, tool, user,
                                      *, allow_servo_during_prepare=False):
         return self._client.prepare_ordered_motion_chain(
-            segments, start_position, tool, user,
+            serialize_ordered_motion_inputs(segments), start_position, tool, user,
             allow_servo_during_prepare=allow_servo_during_prepare,
         )
 

@@ -3,6 +3,7 @@ from typing import Optional
 from src.engine.core.i_health_checkable import IHealthCheckable
 from .i_motion_service import IMotionService
 from .i_robot_lifecycle import IRobotLifecycle
+from ..motion_sequence import OrderedMotionInput
 
 
 class IRobotService(IMotionService, IRobotLifecycle, IHealthCheckable, ABC):
@@ -36,14 +37,14 @@ class IRobotService(IMotionService, IRobotLifecycle, IHealthCheckable, ABC):
 
     def execute_ordered_motion_chain(
         self,
-        segments: list[dict],
+        segments: list[OrderedMotionInput],
         tool: int,
         user: int,
         blocking: bool = False,
     ):
         return -1
 
-    def prepare_ordered_motion_chain(self, segments, start_position, tool, user, *,
+    def prepare_ordered_motion_chain(self, segments: list[OrderedMotionInput], start_position, tool, user, *,
                                      allow_servo_during_prepare=False):
         return None
 

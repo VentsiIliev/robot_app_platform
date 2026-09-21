@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 
 from src.engine.geometry.planar import axis_equivalent_shift_degrees
+from src.engine.robot.motion_sequence import serialize_ordered_motion_commands
 from src.engine.robot.path_preparation import WorkpieceExecutionPlan
 from src.robot_systems.paint.processes.paint.config import (
     PAINT_PROCESS_CONFIG,
@@ -248,7 +249,7 @@ class TestNormalizePivotConfig(unittest.TestCase):
             ),
         ]
 
-        segments = build_paint_pickup_segments(waypoints)
+        segments = serialize_ordered_motion_commands(build_paint_pickup_segments(waypoints))
 
         self.assertEqual(
             ["ptp", "linear", "ptp", "ptp", "ptp", "ptp"],
@@ -1467,7 +1468,8 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         executor._configured_contact_motion_plane = "xy_z_rz"
         executor._refresh_paint_process_config_snapshot()
 
-        segments, final_pose = build_ordered_dropoff_preparation_segments(executor)
+        commands, final_pose = build_ordered_dropoff_preparation_segments(executor)
+        segments = serialize_ordered_motion_commands(commands)
 
         self.assertEqual(50.0, segments[0]["position"][2])
         self.assertEqual(

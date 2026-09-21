@@ -6,6 +6,7 @@ import time
 from concurrent.futures import Future, ThreadPoolExecutor
 
 from src.engine.geometry.planar import unwrap_degrees
+from src.engine.robot.motion_sequence import OrderedMotionType, OrderedPositionCommand
 from src.engine.robot.enums.axis import Direction, RobotAxis
 from src.engine.robot.procedures import (
     ServoRetractConfig,
@@ -27,14 +28,23 @@ from src.robot_systems.paint.processes.paint.config import (
     PICKUP_CONTACT_MODE_SENSOR_CONTROLLED_FAST_LIN,
 )
 from src.robot_systems.paint.processes.paint.execute.pickup_executor import (
+    MagazineTransferWaypoint,
     build_magazine_pickup_release_segments,
     pickup_condition_is_active_after_retract,
     pickup_pose_is_close,
 )
 from src.robot_systems.paint.processes.paint.magazine_load_result import NO_WORKPIECE_AT_MAGAZINE
+from src.robot_systems.paint.processes.paint.motion.pose_sampling import (
+    read_fresh_pose,
+    wait_for_stable_pose,
+)
 from src.robot_systems.paint.timing import timed_step
 
 _logger = logging.getLogger(__name__)
+
+
+def _configured_motion_type(value: object, *, field_name: str) -> OrderedMotionType:
+    return OrderedMotionType.parse(value, field_name=field_name)
 
 
 def calculate_workpiece_dropoff_pose(
@@ -172,28 +182,31 @@ def execute_magazine_pickup_release(
     )
 
     transfer_waypoints = (
-        (
-            "Moving to magazine pickup approach pose",
-            approach_pose,
-            pickup_motion.approach_vel_percent,
-            pickup_motion.approach_acc_percent,
-            pickup_motion.approach_motion_type,
+        MagazineTransferWaypoint(
+            "Moving to magazine pickup approach pose", approach_pose,
+            pickup_motion.approach_vel_percent, pickup_motion.approach_acc_percent,
+            _configured_motion_type(
+                pickup_motion.approach_motion_type,
+                field_name="pickup_motion.approach_motion_type",
+            ),
             pickup_motion.approach_blendR,
         ),
-        (
-            "Descending to magazine pickup pose",
-            pickup_pose,
-            pickup_motion.descend_vel_percent,
-            pickup_motion.descend_acc_percent,
-            pickup_motion.descend_motion_type,
+        MagazineTransferWaypoint(
+            "Descending to magazine pickup pose", pickup_pose,
+            pickup_motion.descend_vel_percent, pickup_motion.descend_acc_percent,
+            _configured_motion_type(
+                pickup_motion.descend_motion_type,
+                field_name="pickup_motion.descend_motion_type",
+            ),
             pickup_motion.descend_blendR,
         ),
-        (
-            "Lifting magazine workpiece",
-            lift_pose,
-            pickup_motion.lift_align_vel_percent,
-            pickup_motion.lift_align_acc_percent,
-            pickup_motion.lift_align_motion_type,
+        MagazineTransferWaypoint(
+            "Lifting magazine workpiece", lift_pose,
+            pickup_motion.lift_align_vel_percent, pickup_motion.lift_align_acc_percent,
+            _configured_motion_type(
+                pickup_motion.lift_align_motion_type,
+                field_name="pickup_motion.lift_align_motion_type",
+            ),
             pickup_motion.lift_align_blendR,
         ),
     )
@@ -201,12 +214,12 @@ def execute_magazine_pickup_release(
     acceleration = float(magazine_config.transfer_to_calibration_acc_percent)
     release_move_label = f"Moving picked workpiece to {release_label} release pose"
     transfer_waypoints = transfer_waypoints + (
-        (
-            release_move_label,
-            list(release_pose),
-            velocity,
-            acceleration,
-            magazine_config.transfer_to_calibration_motion_type,
+        MagazineTransferWaypoint(
+            release_move_label, list(release_pose), velocity, acceleration,
+            _configured_motion_type(
+                magazine_config.transfer_to_calibration_motion_type,
+                field_name="magazine_load.transfer_to_calibration_motion_type",
+            ),
             magazine_config.transfer_to_calibration_blendR,
         ),
     )
@@ -301,7 +314,7 @@ def _execute_magazine_servo_contact_pickup_release(
         return False, "Servo contact pickup condition is not configured"
 
     approach_segments = build_magazine_pickup_release_segments(transfer_waypoints[:1])
-    safe_clearance_pose = list(transfer_waypoints[1][1])
+    safe_clearance_pose = list(transfer_waypoints[1].pose)
     safe_clearance_pose[2] = float(retract_reference_pose[2])
     full_retract = bool(
         getattr(pickup_motion, "magazine_full_retract_before_release", True)
@@ -328,7 +341,8 @@ def _execute_magazine_servo_contact_pickup_release(
 
     release_segments = build_magazine_pickup_release_segments(transfer_waypoints[3:])
     release_has_fast_lin = any(
-        str(segment.get("type", "")).strip().lower() == "fast_lin"
+        isinstance(segment, OrderedPositionCommand)
+        and segment.motion_type is OrderedMotionType.FAST_LINEAR
         for segment in release_segments
     )
     preparation_pool: ThreadPoolExecutor | None = None
@@ -442,18 +456,16 @@ def _execute_magazine_servo_contact_pickup_release(
     def return_to_fixed_pose(reason: str) -> tuple[bool, str]:
         recovery_waypoint = transfer_waypoints[0]
         recovery_pose = list(retract_reference_pose)
-        recovery_segments = build_magazine_pickup_release_segments(
-            (
-                (
-                    f"Returning to fixed magazine pose {reason}",
-                    recovery_pose,
-                    recovery_waypoint[2],
-                    recovery_waypoint[3],
-                    "linear",
-                    0.0,
-                ),
-            )
-        )
+        recovery_segments = build_magazine_pickup_release_segments((
+            MagazineTransferWaypoint(
+                label=f"Returning to fixed magazine pose {reason}",
+                pose=recovery_pose,
+                velocity_percent=recovery_waypoint.velocity_percent,
+                acceleration_percent=recovery_waypoint.acceleration_percent,
+                motion_type=OrderedMotionType.LINEAR,
+                blend_radius=0.0,
+            ),
+        ))
         current_pose = _read_fresh_pose(executor._robot_service)
         if pickup_pose_is_close(current_pose, recovery_pose):
             _logger.info(
@@ -516,7 +528,7 @@ def _execute_magazine_servo_contact_pickup_release(
             retract=ServoRetractConfig(
                 target_pose=safe_clearance_pose if full_retract else None,
                 distance_mm=None if full_retract else short_retract_distance_mm,
-                motion_type="fast_lin",
+                motion_type=OrderedMotionType.FAST_LINEAR.value,
                 poll_interval_s=float(pickup_motion.servo_contact_poll_interval_s),
                 timeout_s=3.0,
                 position_tolerance_mm=2.0,
@@ -676,20 +688,11 @@ def _prepared_execution_succeeded(result: object) -> bool:
     )
 
 
-def _read_fresh_pose(robot_service) -> list[float] | None:
-    getter = getattr(robot_service, "get_current_position_fresh", None)
-    if not callable(getter):
-        getter = getattr(robot_service, "get_current_position", None)
-    if not callable(getter):
-        return None
-    try:
-        pose = getter()
-    except Exception:
-        _logger.exception("[MAGAZINE_LOAD] Failed to read current pose after servo contact")
-        return None
-    if pose is None or len(pose) < 6:
-        return None
-    return [float(value) for value in pose[:6]]
+def _read_fresh_pose(robot_service) -> list[float]:
+    return read_fresh_pose(
+        robot_service,
+        error_message="[MAGAZINE_LOAD] Failed to read current pose after servo contact",
+    )
 
 
 def _verify_fixed_pickup_start_pose(
@@ -781,42 +784,20 @@ def _wait_for_stable_pose(
     angular_tolerance_deg: float = 0.2,
 ) -> list[float] | None:
     """Confirm the Servo stop has physically settled before planning from it."""
-    deadline = time.monotonic() + max(0.1, float(timeout_s))
-    previous = None
-    stable_samples = 0
-    while time.monotonic() < deadline:
-        pose = _read_fresh_pose(robot_service)
-        if pose is None:
-            stable_samples = 0
-            previous = None
-        elif previous is not None:
-            xyz_delta = math.sqrt(sum(
-                (pose[index] - previous[index]) ** 2 for index in range(3)
-            ))
-            angular_delta = max(
-                abs((pose[index] - previous[index] + 180.0) % 360.0 - 180.0)
-                for index in range(3, 6)
-            )
-            if xyz_delta <= xyz_tolerance_mm and angular_delta <= angular_tolerance_deg:
-                stable_samples += 1
-                if stable_samples >= max(1, int(required_stable_samples)):
-                    _logger.info(
-                        "[MAGAZINE_LOAD] Robot pose stable: xyz_delta_mm=%.3f "
-                        "angular_delta_deg=%.3f samples=%d pose=%s",
-                        xyz_delta,
-                        angular_delta,
-                        stable_samples,
-                        [round(value, 3) for value in pose],
-                    )
-                    return pose
-            else:
-                stable_samples = 0
-            previous = pose
-        else:
-            previous = pose
-        time.sleep(max(0.01, float(sample_interval_s)))
-    _logger.error("[MAGAZINE_LOAD] Post-retract pose stability timeout")
-    return None
+    return wait_for_stable_pose(
+        robot_service,
+        logger=_logger,
+        read_error_message="[MAGAZINE_LOAD] Failed to read current pose after servo contact",
+        timeout_message="[MAGAZINE_LOAD] Post-retract pose stability timeout",
+        timeout_s=timeout_s,
+        minimum_timeout_s=0.1,
+        sample_interval_s=sample_interval_s,
+        minimum_sample_interval_s=0.01,
+        required_stable_samples=required_stable_samples,
+        xyz_tolerance_mm=xyz_tolerance_mm,
+        angular_tolerance_deg=angular_tolerance_deg,
+        stable_log_prefix="[MAGAZINE_LOAD]",
+    )
 
 
 def _wait_for_execution_inactive(

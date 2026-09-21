@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from src.engine.robot.motion_sequence import OrderedMotionType
 from src.robot_systems.paint.processes.paint.execution_machine.context import PaintExecutionContext
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.common.guards import guard_control
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_load_handler import (
@@ -21,7 +22,10 @@ def handle_magazine_move_to_calibration(ctx: PaintExecutionContext) -> PaintExec
         ctx.calibration_group,
         velocity=float(config.transfer_to_calibration_vel_percent),
         acceleration=float(config.transfer_to_calibration_acc_percent),
-        motion_type=config.transfer_to_calibration_motion_type,
+        motion_type=OrderedMotionType.parse(
+            config.transfer_to_calibration_motion_type,
+            field_name="magazine_load.transfer_to_calibration_motion_type",
+        ).value,
         blendR=float(config.transfer_to_calibration_blendR),
     )
     if not ok:

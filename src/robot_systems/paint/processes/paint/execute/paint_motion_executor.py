@@ -1,9 +1,16 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import replace
 
 import numpy as np
 
+from src.engine.robot.motion_sequence import (
+    OrderedMotionCommand,
+    OrderedMotionType,
+    OrderedPathCommand,
+    OrderedPositionCommand,
+)
 from src.robot_systems.paint.timing import timed_step
 
 _logger = logging.getLogger(__name__)
@@ -101,7 +108,7 @@ class PaintMotionExecutor:
                 return False
 
     @timed_step(_logger, "pickup_phase", label_arg="label")
-    def move_ordered_pickup_sequence(self, label: str, segments: list[dict]) -> bool:
+    def move_ordered_pickup_sequence(self, label: str, segments: list[OrderedMotionCommand]) -> bool:
         """Execute a pickup sequence as ordered robot motion segments."""
         owner = self._owner
         _logger.info(
@@ -111,7 +118,11 @@ class PaintMotionExecutor:
             owner._pickup_user,
             len(segments),
         )
-        if any(str(segment.get("type", "")).strip().lower() == "fast_lin" for segment in segments):
+        if any(
+            isinstance(segment, OrderedPositionCommand)
+            and segment.motion_type is OrderedMotionType.FAST_LINEAR
+            for segment in segments
+        ):
             return self._move_mixed_pickup_sequence(label, segments)
         execute_chain = getattr(owner._robot_service, "execute_ordered_motion_chain", None)
         if not callable(execute_chain):
@@ -137,35 +148,37 @@ class PaintMotionExecutor:
             active_segments = self.trim_ordered_pickup_segments_from_current_pose(active_segments)
         return True
 
-    def _move_mixed_pickup_sequence(self, label: str, segments: list[dict]) -> bool:
+    def _move_mixed_pickup_sequence(self, label: str, segments: list[OrderedMotionCommand]) -> bool:
         """Execute ordered-compatible chunks around explicit Fast LIN moves."""
-        ordered_chunk: list[dict] = []
+        ordered_chunk: list[OrderedMotionCommand] = []
 
         def flush_ordered_chunk() -> bool:
             if not ordered_chunk:
                 return True
-            chunk = [dict(segment) for segment in ordered_chunk]
-            chunk[-1]["blendR"] = 0.0
+            chunk = list(ordered_chunk)
+            terminal = chunk[-1]
+            if isinstance(terminal, (OrderedPositionCommand, OrderedPathCommand)):
+                chunk[-1] = replace(
+                    terminal,
+                    profile=replace(terminal.profile, blend_radius=0.0),
+                )
             ordered_chunk.clear()
             return self.move_ordered_pickup_sequence(f"{label} (ordered chunk)", chunk)
 
         for segment in segments:
-            segment_type = str(segment.get("type", "")).strip().lower()
-            if segment_type != "fast_lin":
+            if not (
+                isinstance(segment, OrderedPositionCommand)
+                and segment.motion_type is OrderedMotionType.FAST_LINEAR
+            ):
                 ordered_chunk.append(segment)
                 continue
             if not flush_ordered_chunk():
                 return False
-            position = segment.get("position")
-            if not isinstance(position, (list, tuple)) or len(position) < 6:
-                self.last_motion_error = "Fast LIN segment has no valid six-axis position"
-                _logger.error("[PICKUP] %s: %s", label, self.last_motion_error)
-                return False
             if not self.move_pickup_phase(
-                str(segment.get("label") or label),
-                list(position[:6]),
-                velocity=float(segment.get("vel", 30.0)),
-                acceleration=float(segment.get("acc", 30.0)),
+                segment.label or label,
+                list(segment.position),
+                velocity=float(segment.profile.velocity_percent),
+                acceleration=float(segment.profile.acceleration_percent),
                 motion_type="fast_lin",
                 blendR=0.0,
             ):
@@ -244,7 +257,10 @@ class PaintMotionExecutor:
     def mark_ordered_chain_interrupted_by_pause(self, interrupted: bool) -> None:
         self._ordered_chain_interrupted_by_pause = bool(interrupted)
 
-    def trim_ordered_pickup_segments_from_current_pose(self, segments: list[dict]) -> list[dict]:
+    def trim_ordered_pickup_segments_from_current_pose(
+        self,
+        segments: list[OrderedMotionCommand],
+    ) -> list[OrderedMotionCommand]:
         """Skip already-passed pickup waypoints after pause/resume."""
         if not segments:
             return []
@@ -256,12 +272,10 @@ class PaintMotionExecutor:
 
         target_positions = []
         for segment in segments:
-            if segment.get("type") == "path":
-                path = segment.get("path") or []
-                if path:
-                    target_positions.append(list(path[-1]))
-            elif "position" in segment:
-                target_positions.append(list(segment["position"]))
+            if isinstance(segment, OrderedPathCommand):
+                target_positions.append(list(segment.path[-1]))
+            elif isinstance(segment, OrderedPositionCommand):
+                target_positions.append(list(segment.position))
         if not target_positions:
             return segments
 

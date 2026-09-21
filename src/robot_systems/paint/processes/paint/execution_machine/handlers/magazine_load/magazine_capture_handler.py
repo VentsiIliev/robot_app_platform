@@ -6,6 +6,7 @@ from time import perf_counter
 import cv2
 import numpy as np
 
+from src.engine.robot.motion_sequence import OrderedMotionType
 from src.robot_systems.paint.processes.paint.execution_machine.context import PaintExecutionContext
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.common.guards import guard_control
 from src.robot_systems.paint.processes.paint.execution_machine.state import PaintExecutionState
@@ -61,7 +62,10 @@ def handle_magazine_capture(ctx: PaintExecutionContext) -> PaintExecutionState:
         correction_kwargs = {
             "velocity": min(50.0, float(ctx.magazine_config.move_to_magazine_vel_percent)),
             "acceleration": min(20.0, float(ctx.magazine_config.move_to_magazine_acc_percent)),
-            "motion_type": ctx.magazine_config.move_to_magazine_motion_type,
+            "motion_type": OrderedMotionType.parse(
+                ctx.magazine_config.move_to_magazine_motion_type,
+                field_name="magazine_load.move_to_magazine_motion_type",
+            ).value,
             "blendR": 0.0,
         }
         if ctx.magazine_fixed_pickup_pose is not None:

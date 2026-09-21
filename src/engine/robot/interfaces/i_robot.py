@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from typing import List
 
 from ..enums.axis import RobotAxis, Direction
-from ..motion_sequence import MotionSequenceSegment
+from ..motion_sequence import MotionSequenceSegment, OrderedMotionInput
 
 
 class IRobot(ABC):
@@ -150,7 +150,7 @@ class IRobot(ABC):
 
     def execute_ordered_motion_chain(
         self,
-        segments: list[dict],
+        segments: list[OrderedMotionInput],
         tool: int,
         user: int,
         blocking: bool = False,
@@ -158,7 +158,7 @@ class IRobot(ABC):
         """Optional ordered motion chain with mixed segment types."""
         return -1
 
-    def prepare_ordered_motion_chain(self, segments: list[dict], start_position: list[float],
+    def prepare_ordered_motion_chain(self, segments: list[OrderedMotionInput], start_position: list[float],
                                      tool: int, user: int, *,
                                      allow_servo_during_prepare: bool = False) -> dict | None:
         return None
