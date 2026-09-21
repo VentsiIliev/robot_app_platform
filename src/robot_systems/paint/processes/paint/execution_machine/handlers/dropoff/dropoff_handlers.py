@@ -8,6 +8,7 @@ from time import monotonic, perf_counter, sleep
 import numpy as np
 
 from src.engine.geometry.planar import unwrap_degrees
+from src.robot_systems.paint.processes.paint.motion.pose_comparison import poses_close
 from src.robot_systems.paint.processes.paint.config import PAINT_PROCESS_CONFIG
 from src.robot_systems.paint.processes.paint.execute.diagnostics import elapsed_s
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.common.motion_handlers import (
@@ -202,7 +203,7 @@ def execute_dropoff_release_for_executor(
     ordered_release_pose_completed = (
         bool(getattr(executor, "_dropoff_unwind_prepared", False))
         and release_waypoint.pose is not None
-        and _poses_close(release_waypoint.pose, getattr(executor, "_last_process_end_pose", None))
+        and poses_close(release_waypoint.pose, getattr(executor, "_last_process_end_pose", None))
     )
     release_completed = False
     ordered_exit_waypoint: DropoffReleaseWaypoint | None = None
@@ -1264,12 +1265,3 @@ def _dropoff_align_pose_near_reference(
     ):
         pose[5] = unwrap_degrees(float(reference[5]), float(pose[5]))
     return pose
-
-
-def _poses_close(left: list[float] | None, right: list[float] | None, tolerance: float = 1e-3) -> bool:
-    if left is None or right is None or len(left) < 6 or len(right) < 6:
-        return False
-    if not all(abs(float(a) - float(b)) <= tolerance for a, b in zip(left[:5], right[:5])):
-        return False
-    equivalent_rz = unwrap_degrees(float(right[5]), float(left[5]))
-    return abs(equivalent_rz - float(right[5])) <= tolerance

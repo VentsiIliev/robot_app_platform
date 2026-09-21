@@ -58,6 +58,7 @@ from src.robot_systems.paint.processes.paint.execute.projection_preview import (
     project_pivot_motion_snapshots_for_editor,
     project_pivot_paths_for_editor,
 )
+from src.robot_systems.paint.processes.paint.motion.path_geometry import shift_path_rotation
 from src.robot_systems.paint.timing import timed_block, timed_step
 
 _logger = logging.getLogger(__name__)
@@ -72,33 +73,6 @@ def _camera_to_tcp_delta(
     cur_x, cur_y = rotate_xy(x_offset, y_offset, current_rz)
     ref_x, ref_y = rotate_xy(x_offset, y_offset, reference_rz)
     return cur_x - ref_x, cur_y - ref_y
-
-
-def _shift_path_rotation(path: list[list[float]], rotation_index: int, shift_degrees: float) -> list[list[float]]:
-    """Apply a constant shift to one rotation component across a projected path.
-
-    Example:
-        _shift_path_rotation(
-            [[0, 0, 0, 180, 0, -160], [1, 0, 0, 180, 0, -120]],
-            rotation_index=5,
-            shift_degrees=180,
-        )
-        -> [[0, 0, 0, 180, 0, 20], [1, 0, 0, 180, 0, 60]]
-    """
-    if not path:
-        return []
-
-    shift = float(shift_degrees)
-    shifted = [list(pose) for pose in path]
-
-    if abs(shift) <= 1e-9:
-        return shifted
-
-    for pose in shifted:
-        if len(pose) > rotation_index:
-            pose[rotation_index] = float(pose[rotation_index]) + shift
-
-    return shifted
 
 
 def _paint_axis_staging_offset_pose(
@@ -993,7 +967,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             rotation_shift = staged_rotation - raw_start_rotation
         else:
             rotation_shift = 0.0
-        return _shift_path_rotation(path, rotation_index, rotation_shift)
+        return shift_path_rotation(path, rotation_index, rotation_shift)
 
     def _paint_contact_command_path(
         self,

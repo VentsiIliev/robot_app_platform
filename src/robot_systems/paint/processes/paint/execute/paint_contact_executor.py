@@ -21,26 +21,10 @@ from src.robot_systems.paint.processes.paint.execute.projection_preview import (
     pivot_source_path,
     projection_tool_anchor_xy,
 )
+from src.robot_systems.paint.processes.paint.motion.path_geometry import shift_path_rotation
 from src.robot_systems.paint.timing import timed_block, timed_step
 
 _logger = logging.getLogger(__name__)
-
-
-def _shift_path_rotation(path: list[list[float]], rotation_index: int, shift_degrees: float) -> list[list[float]]:
-    """Apply a constant shift to one rotation component across a projected path."""
-    if not path:
-        return []
-
-    shift = float(shift_degrees)
-    shifted = [list(pose) for pose in path]
-
-    if abs(shift) <= 1e-9:
-        return shifted
-
-    for pose in shifted:
-        if len(pose) > rotation_index:
-            pose[rotation_index] = float(pose[rotation_index]) + shift
-    return shifted
 
 
 def _remove_projected_local_reversals(
@@ -291,7 +275,7 @@ class PaintContactExecutor:
                 rotation_shift = axis_equivalent_shift_degrees(staged_rotation, raw_start_rotation)
                 if abs(rotation_shift) > 1e-9:
                     with timed_block(_logger, "paint_contact_job_prepare", label=f"{job_label}:shift_xy_rz_rotation"):
-                        pivot_path = _shift_path_rotation(pivot_path, rotation_index, rotation_shift)
+                        pivot_path = shift_path_rotation(pivot_path, rotation_index, rotation_shift)
                     _logger.info(
                         "[PAINT_CONTACT] Applied xy/rz axis-equivalent path shift: staged_rz=%.3f raw_start_rz=%.3f shift=%.3f selected_start_rz=%.3f",
                         staged_rotation,
@@ -311,7 +295,7 @@ class PaintContactExecutor:
                 rotation_shift = staged_ry - raw_start_ry
                 if abs(rotation_shift) > 1e-9:
                     with timed_block(_logger, "paint_contact_job_prepare", label=f"{job_label}:shift_xz_ry_rotation"):
-                        pivot_path = _shift_path_rotation(pivot_path, rotation_index, rotation_shift)
+                        pivot_path = shift_path_rotation(pivot_path, rotation_index, rotation_shift)
                     _logger.info(
                         "[PAINT_CONTACT] Applied xz/ry staging RY alignment shift: staged_ry=%.3f raw_start_ry=%.3f shift=%.3f selected_start_ry=%.3f",
                         staged_ry,

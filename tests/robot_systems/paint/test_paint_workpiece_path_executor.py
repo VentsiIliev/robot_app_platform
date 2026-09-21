@@ -29,14 +29,14 @@ from src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.
 from src.robot_systems.paint.processes.paint.execute.paint_debug_artifacts import (
     build_executed_snapshot_series,
 )
-from src.robot_systems.paint.processes.paint.execute.dropoff_executor import _poses_close
+from src.robot_systems.paint.processes.paint.motion.pose_comparison import poses_close
+from src.robot_systems.paint.processes.paint.motion.path_geometry import shift_path_rotation
 from src.robot_systems.paint.processes.paint.execute.pickup_executor import build_paint_pickup_segments
 from src.robot_systems.paint.processes.paint.execute.workpiece_path_executor import (
     PaintWorkpiecePathExecutor,
     PickupTransferPlan,
     _normalize_contact_motion_config,
     _paint_axis_staging_offset_pose,
-    _shift_path_rotation,
 )
 
 
@@ -263,7 +263,7 @@ class TestNormalizePivotConfig(unittest.TestCase):
 class TestPaintPathRotationHelpers(unittest.TestCase):
     def test_axis_equivalent_shift_preserves_path_relative_rotation(self):
         shift = axis_equivalent_shift_degrees(17.834, -161.278)
-        shifted = _shift_path_rotation(
+        shifted = shift_path_rotation(
             [
                 [0.0, 0.0, 0.0, 0.0, 0.0, -161.278],
                 [1.0, 0.0, 0.0, 0.0, 0.0, -110.736],
@@ -1563,13 +1563,13 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
 
     def test_dropoff_pose_close_treats_wrapped_xy_rz_as_same_release_pose(self):
         self.assertTrue(
-            _poses_close(
+            poses_close(
                 [10.0, 20.0, 100.0, 180.0, 0.0, 0.0],
                 [10.0, 20.0, 100.0, 180.0, 0.0, 360.0],
             )
         )
         self.assertFalse(
-            _poses_close(
+            poses_close(
                 [10.0, 20.0, 100.0, 180.0, 0.0, 180.0],
                 [10.0, 20.0, 100.0, 180.0, 0.0, 360.0],
             )
