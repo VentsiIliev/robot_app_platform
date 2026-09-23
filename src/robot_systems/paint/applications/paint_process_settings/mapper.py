@@ -332,6 +332,8 @@ class PaintProcessSettingsMapper:
             "pickup_servo_contact_stop_confirmation_timeout_s": pickup.servo_contact_stop_confirmation_timeout_s,
             "pickup_servo_contact_preflight_read_attempts": pickup.servo_contact_preflight_read_attempts,
             "pickup_servo_contact_read_failure_limit": pickup.servo_contact_read_failure_limit,
+            "pickup_magazine_post_retract_confirmation_samples": pickup.magazine_post_retract_confirmation_samples,
+            "pickup_magazine_post_retract_confirmation_interval_s": pickup.magazine_post_retract_confirmation_interval_s,
             "pickup_servo_contact_dummy_sensor_enabled": pickup.servo_contact_dummy_sensor_enabled,
             "pickup_servo_contact_dummy_detect_after_s": pickup.servo_contact_dummy_detect_after_s,
             "pickup_approach_vel_percent": pickup.approach_vel_percent,
@@ -390,6 +392,9 @@ class PaintProcessSettingsMapper:
             "dropoff_plate_robot_user": dropoff.plate_robot_user,
             "dropoff_plate_passage_gate": PaintProcessSettingsMapper._pose_to_waypoint_rows(
                 dropoff.plate_passage_gate_pose, 70.0, 50.0
+            ),
+            "dropoff_plate_use_entry_gate_as_detach_pose": (
+                dropoff.plate_use_entry_gate_as_detach_pose
             ),
             "dropoff_plate_exit_gate": PaintProcessSettingsMapper._pose_to_waypoint_rows(
                 dropoff.plate_exit_gate_pose, 70.0, 50.0
@@ -589,6 +594,18 @@ class PaintProcessSettingsMapper:
                     base.pickup_motion.servo_contact_read_failure_limit,
                 )
             ),
+            magazine_post_retract_confirmation_samples=int(
+                flat.get(
+                    "pickup_magazine_post_retract_confirmation_samples",
+                    base.pickup_motion.magazine_post_retract_confirmation_samples,
+                )
+            ),
+            magazine_post_retract_confirmation_interval_s=float(
+                flat.get(
+                    "pickup_magazine_post_retract_confirmation_interval_s",
+                    base.pickup_motion.magazine_post_retract_confirmation_interval_s,
+                )
+            ),
             servo_contact_dummy_sensor_enabled=bool(
                 flat.get(
                     "pickup_servo_contact_dummy_sensor_enabled",
@@ -762,6 +779,10 @@ class PaintProcessSettingsMapper:
             plate_passage_gate_pose=PaintProcessSettingsMapper._single_pose_from_value(
                 flat.get("dropoff_plate_passage_gate", ""), base.dropoff.plate_passage_gate_pose
             ),
+            plate_use_entry_gate_as_detach_pose=bool(flat.get(
+                "dropoff_plate_use_entry_gate_as_detach_pose",
+                base.dropoff.plate_use_entry_gate_as_detach_pose,
+            )),
             plate_exit_gate_pose=PaintProcessSettingsMapper._single_pose_from_value(
                 flat.get("dropoff_plate_exit_gate", ""), base.dropoff.plate_exit_gate_pose
             ),

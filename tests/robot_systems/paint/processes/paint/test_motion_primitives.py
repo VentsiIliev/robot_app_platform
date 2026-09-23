@@ -2,7 +2,16 @@ import unittest
 from unittest.mock import MagicMock
 from types import SimpleNamespace
 
-from src.engine.robot.motion_sequence import OrderedPathCommand, OrderedPositionCommand
+from src.engine.robot.motion_sequence import (
+    OrderedMotionProfile,
+    OrderedMotionType,
+    OrderedPathCommand,
+    OrderedPositionCommand,
+    OrderedUnwindJoint6Command,
+)
+from src.robot_systems.paint.processes.paint.execute.paint_motion_executor import (
+    PaintMotionExecutor,
+)
 from src.robot_systems.paint.processes.paint.motion import (
     FreshPoseReadError,
     poses_close,
@@ -148,6 +157,42 @@ class TestPoseSampling(unittest.TestCase):
 
         self.assertIsNone(pose)
         logger.error.assert_called_once_with("timeout")
+
+
+class TestOrderedMotionResume(unittest.TestCase):
+    @staticmethod
+    def _position(label: str, x: float) -> OrderedPositionCommand:
+        return OrderedPositionCommand(
+            label=label,
+            motion_type=OrderedMotionType.LINEAR,
+            position=(x, 0.0, 0.0, 0.0, 0.0, 0.0),
+            profile=OrderedMotionProfile(10.0, 10.0),
+        )
+
+    def test_backend_resume_index_is_applied_to_original_command_list(self):
+        robot = MagicMock()
+        motion = PaintMotionExecutor(SimpleNamespace(_robot_service=robot))
+        commands = [
+            OrderedUnwindJoint6Command("unwind", 10.0, 10.0),
+            self._position("first", 0.0),
+            self._position("second", 10.0),
+        ]
+        motion._ordered_chain_resume_start_index = 2
+
+        remaining = motion.trim_ordered_pickup_segments_from_current_pose(commands)
+
+        self.assertEqual(["second"], [command.label for command in remaining])
+        robot.get_current_position_fresh.assert_not_called()
+
+    def test_geometric_fallback_near_final_target_is_bounds_safe(self):
+        robot = MagicMock()
+        robot.get_current_position_fresh.return_value = [10.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        motion = PaintMotionExecutor(SimpleNamespace(_robot_service=robot))
+        commands = [self._position("first", 0.0), self._position("second", 10.0)]
+
+        remaining = motion.trim_ordered_pickup_segments_from_current_pose(commands)
+
+        self.assertEqual(["second"], [command.label for command in remaining])
 
 
 class TestOrderedPaintContactCommands(unittest.TestCase):

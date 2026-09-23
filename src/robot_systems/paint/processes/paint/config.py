@@ -73,22 +73,18 @@ MAGAZINE_PROCESSING_STRATEGIES = (
 
 def normalize_pickup_contact_mode(value: object) -> PickupContactMode:
     mode = str(value or PICKUP_CONTACT_MODE_PLANNED).strip().lower()
+    if mode == "servo_contact":
+        mode = PickupContactMode.SENSOR_CONTROLLED_FAST_LIN.value
     return PickupContactMode(mode)
 
 
 def normalize_magazine_pickup_mode(value: object) -> MagazinePickupMode:
     mode = str(value or MAGAZINE_PICKUP_MODE_VISION_PLANNED).strip().lower()
+    mode = {
+        "vision_servo_contact": MagazinePickupMode.VISION_SENSOR_CONTROLLED_FAST_LIN.value,
+        "fixed_group_servo_contact": MagazinePickupMode.FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN.value,
+    }.get(mode, mode)
     return MagazinePickupMode(mode)
-
-
-def _parse_motion_fields(instance: object, field_names: tuple[str, ...]) -> None:
-    """Convert persisted motion strings into validated runtime enum values."""
-    for field_name in field_names:
-        object.__setattr__(
-            instance,
-            field_name,
-            OrderedMotionType.parse(getattr(instance, field_name), field_name=field_name),
-        )
 
 
 # [LIVE SETTINGS] marks defaults that are already read through the paint-process
@@ -163,18 +159,45 @@ class PickupMotionConfig:
     servo_contact_stop_confirmation_timeout_s: float = 3.0  # [LIVE SETTINGS]
     servo_contact_preflight_read_attempts: int = 2  # [LIVE SETTINGS]
     servo_contact_read_failure_limit: int = 3  # [LIVE SETTINGS]
+    magazine_post_retract_confirmation_samples: int = 2  # [LIVE SETTINGS]
+    magazine_post_retract_confirmation_interval_s: float = 0.05  # [LIVE SETTINGS]
     servo_contact_dummy_sensor_enabled: bool = False  # [LIVE SETTINGS]
     servo_contact_dummy_detect_after_s: float = 1.0  # [LIVE SETTINGS]
 
     def __post_init__(self) -> None:
-        _parse_motion_fields(self, (
+        object.__setattr__(
+            self,
             "approach_motion_type",
+            OrderedMotionType.parse(self.approach_motion_type, field_name="approach_motion_type"),
+        )
+        object.__setattr__(
+            self,
             "descend_motion_type",
+            OrderedMotionType.parse(self.descend_motion_type, field_name="descend_motion_type"),
+        )
+        object.__setattr__(
+            self,
             "lift_align_motion_type",
+            OrderedMotionType.parse(self.lift_align_motion_type, field_name="lift_align_motion_type"),
+        )
+        object.__setattr__(
+            self,
             "change_plane_motion_type",
+            OrderedMotionType.parse(self.change_plane_motion_type, field_name="change_plane_motion_type"),
+        )
+        object.__setattr__(
+            self,
             "stage_transition_motion_type",
+            OrderedMotionType.parse(
+                self.stage_transition_motion_type,
+                field_name="stage_transition_motion_type",
+            ),
+        )
+        object.__setattr__(
+            self,
             "first_contact_motion_type",
-        ))
+            OrderedMotionType.parse(self.first_contact_motion_type, field_name="first_contact_motion_type"),
+        )
         object.__setattr__(self, "pickup_contact_mode", normalize_pickup_contact_mode(self.pickup_contact_mode))
         object.__setattr__(
             self,
@@ -200,7 +223,6 @@ class PaintContactStagingConfig:
     detach_z_offset_mm: float = 0.0  # [LIVE SETTINGS]
     detach_paint_axis_offset_mm: float = 0.0  # [LIVE SETTINGS]
     detach_perpendicular_axis_offset_mm: float = 0.0  # [LIVE SETTINGS]
-
 
 @dataclass(frozen=True)
 class UnmatchedSecondPassConfig:
@@ -237,7 +259,11 @@ class PaintEdgeCleanupConfig:
     second_pass_pivot_z_offset_mm: float = -15.0  # [LIVE SETTINGS] 20mm below the belt !
 
     def __post_init__(self) -> None:
-        _parse_motion_fields(self, ("motion_type",))
+        object.__setattr__(
+            self,
+            "motion_type",
+            OrderedMotionType.parse(self.motion_type, field_name="edge_cleanup.motion_type"),
+        )
 
 
 @dataclass(frozen=True)
@@ -280,6 +306,7 @@ class PaintDropoffConfig:
     plate_robot_tool: int = -1  # Captured Robot Settings frame metadata.
     plate_robot_user: int = -1
     plate_passage_gate_pose: list[float] = field(default_factory=list)  # [LIVE SETTINGS]
+    plate_use_entry_gate_as_detach_pose: bool = False  # [LIVE SETTINGS]
     # Optional exit-only gate. An empty pose preserves the legacy behavior by
     # reusing plate_passage_gate_pose for both entry and exit.
     plate_exit_gate_pose: list[float] = field(default_factory=list)  # [LIVE SETTINGS]
@@ -305,7 +332,14 @@ class PaintDropoffConfig:
     ])  # [LIVE SETTINGS]
 
     def __post_init__(self) -> None:
-        _parse_motion_fields(self, ("release_align_motion_type",))
+        object.__setattr__(
+            self,
+            "release_align_motion_type",
+            OrderedMotionType.parse(
+                self.release_align_motion_type,
+                field_name="dropoff.release_align_motion_type",
+            ),
+        )
         object.__setattr__(self, "strategy", DropoffStrategy(str(self.strategy)))
 
 
@@ -345,10 +379,22 @@ class PaintMagazineLoadConfig:
     release_settle_s: float = 0.5
 
     def __post_init__(self) -> None:
-        _parse_motion_fields(self, (
+        object.__setattr__(
+            self,
             "move_to_magazine_motion_type",
+            OrderedMotionType.parse(
+                self.move_to_magazine_motion_type,
+                field_name="magazine_load.move_to_magazine_motion_type",
+            ),
+        )
+        object.__setattr__(
+            self,
             "transfer_to_calibration_motion_type",
-        ))
+            OrderedMotionType.parse(
+                self.transfer_to_calibration_motion_type,
+                field_name="magazine_load.transfer_to_calibration_motion_type",
+            ),
+        )
         object.__setattr__(
             self,
             "processing_strategy",
@@ -368,7 +414,15 @@ class PaintMagazineLoadConfig:
                 seen.add(group_id)
         if self.fixed_pickup_sources:
             return tuple(ordered)
-        return ()
+        for value in self.fixed_pickup_group_ids or ():
+            group_id = str(value or "").strip()
+            if group_id and group_id not in seen:
+                ordered.append(group_id)
+                seen.add(group_id)
+        if ordered:
+            return tuple(ordered)
+        legacy_group = str(self.fixed_pickup_group_id or "").strip()
+        return (legacy_group,) if legacy_group else ()
 
     def effective_fixed_pickup_sources(self) -> tuple[dict, ...]:
         configured = tuple(
@@ -376,7 +430,14 @@ class PaintMagazineLoadConfig:
             for source in self.fixed_pickup_sources or ()
             if isinstance(source, dict) and bool(source.get("enabled", True))
         )
-        return configured
+        if configured:
+            return configured
+        if self.fixed_pickup_sources:
+            return ()
+        return tuple(
+            {"movement_group_id": group_id, "enabled": True}
+            for group_id in self.effective_fixed_pickup_group_ids()
+        )
 
 
 @dataclass(frozen=True)
@@ -415,7 +476,14 @@ class PaintNavigationReturnConfig:
     calibration_move_blendR: float = 0.0  # [LIVE SETTINGS]
 
     def __post_init__(self) -> None:
-        _parse_motion_fields(self, ("calibration_move_motion_type",))
+        object.__setattr__(
+            self,
+            "calibration_move_motion_type",
+            OrderedMotionType.parse(
+                self.calibration_move_motion_type,
+                field_name="navigation_return.calibration_move_motion_type",
+            ),
+        )
 
 
 @dataclass(frozen=True)

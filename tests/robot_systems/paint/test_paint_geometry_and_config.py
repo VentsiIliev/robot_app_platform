@@ -19,6 +19,7 @@ from src.robot_systems.paint.applications.paint_motion_plane_setup.domain.plane_
 from src.robot_systems.paint.processes.paint.config import (
     PAINT_PROCESS_CONFIG,
     PaintContactStagingConfig,
+    PaintDropoffConfig,
     PaintEdgeCleanupConfig,
     PaintMagazineLoadConfig,
     PaintProcessConfig,
@@ -110,6 +111,66 @@ class TestProjectedPathSanitizer(unittest.TestCase):
 
 
 class TestPaintProcessConfig(unittest.TestCase):
+    def test_plate_entry_gate_can_be_used_as_final_paint_detach_pose(self) -> None:
+        config = PaintProcessConfig(dropoff=PaintDropoffConfig(
+            strategy="plate_layout",
+            plate_use_entry_gate_as_detach_pose=True,
+            plate_passage_gate_pose=[1, 2, 3, 180, 0, 15],
+        ))
+        owner = SimpleNamespace(_paint_process_config=lambda: config)
+        executor = PaintContactExecutor(owner)
+
+        self.assertEqual(
+            [1.0, 2.0, 3.0, 180.0, 0.0, 15.0],
+            executor._plate_entry_detach_pose(
+                is_final_job=True, paint_start_rz=0.0, paint_end_rz=0.0
+            ),
+        )
+        self.assertIsNone(executor._plate_entry_detach_pose(
+            is_final_job=False, paint_start_rz=0.0, paint_end_rz=0.0
+        ))
+
+    def test_plate_entry_gate_detach_defaults_to_disabled(self) -> None:
+        owner = SimpleNamespace(_paint_process_config=PaintProcessConfig)
+
+        self.assertIsNone(
+            PaintContactExecutor(owner)._plate_entry_detach_pose(
+                is_final_job=True, paint_start_rz=0.0, paint_end_rz=0.0
+            )
+        )
+
+    def test_plate_entry_gate_detach_carries_first_distributed_unwind_quarter(self) -> None:
+        config = PaintProcessConfig(dropoff=PaintDropoffConfig(
+            strategy="plate_layout",
+            plate_use_entry_gate_as_detach_pose=True,
+            plate_distribute_unwind=True,
+            plate_passage_gate_pose=[1, 2, 3, 180, 0, 0],
+        ))
+        owner = SimpleNamespace(_paint_process_config=lambda: config)
+
+        pose = PaintContactExecutor(owner)._plate_entry_detach_pose(
+            is_final_job=True,
+            paint_start_rz=0.0,
+            paint_end_rz=360.0,
+        )
+
+        self.assertEqual(270.0, pose[5])
+
+    def test_serializer_migrates_obsolete_sensor_pickup_settings(self):
+        serializer = PaintProcessConfigSerializer()
+        persisted = serializer.to_dict(serializer.get_default())
+        persisted["pickup_motion"]["servo_contact_fallback_to_planned_descend"] = True
+        persisted["pickup_motion"]["pickup_contact_mode"] = "servo_contact"
+        persisted["magazine_load"]["pickup_mode"] = "fixed_group_servo_contact"
+
+        restored = serializer.from_dict(persisted)
+
+        self.assertEqual("sensor_controlled_fast_lin", restored.pickup_motion.pickup_contact_mode)
+        self.assertEqual(
+            "fixed_group_sensor_controlled_fast_lin",
+            restored.magazine_load.pickup_mode,
+        )
+
     def test_sub_zero_dropoff_corridor_settings_roundtrip_and_are_exposed(self) -> None:
         base = PaintProcessConfig()
         flat = PaintProcessSettingsMapper.to_flat_dict(base)

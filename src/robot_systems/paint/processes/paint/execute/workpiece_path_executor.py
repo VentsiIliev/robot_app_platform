@@ -318,8 +318,10 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         self._pickup_transfer_planner = PaintPickupTransferPlanner(self)
         self._active_contact_base_z_offset_mm: float = 0.0
         self._last_process_start_rz: float | None = None
+        self._last_paint_contact_end_rz: float | None = None
         self._last_process_end_pose: list[float] | None = None
         self._dropoff_unwind_prepared: bool = False
+        self._plate_entry_completed_in_paint_chain: bool = False
         self._last_pickup_contact_mode: str | None = None
         self._last_safe_travel_error: str = ""
         self._paint_process_config_snapshot: PaintProcessConfig = PAINT_PROCESS_CONFIG
@@ -723,18 +725,21 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         additional_paint_axis_offset_mm: float = 0.0,
     ) -> list[float]:
         staging = self._paint_process_config().contact_staging
-        prefix = "detach" if detach else "attach"
-        paint_axis_offset_mm = float(getattr(staging, f"{prefix}_paint_axis_offset_mm"))
         if detach:
+            z_offset_mm = float(staging.detach_z_offset_mm)
+            paint_axis_offset_mm = float(staging.detach_paint_axis_offset_mm)
+            perpendicular_axis_offset_mm = float(staging.detach_perpendicular_axis_offset_mm)
             paint_axis_offset_mm += max(0.0, float(additional_paint_axis_offset_mm))
+        else:
+            z_offset_mm = float(staging.attach_z_offset_mm)
+            paint_axis_offset_mm = float(staging.attach_paint_axis_offset_mm)
+            perpendicular_axis_offset_mm = float(staging.attach_perpendicular_axis_offset_mm)
         return _paint_axis_staging_offset_pose(
             contact_pose,
             self._contact_motion_config,
-            z_offset_mm=float(getattr(staging, f"{prefix}_z_offset_mm")),
+            z_offset_mm=z_offset_mm,
             paint_axis_offset_mm=paint_axis_offset_mm,
-            perpendicular_axis_offset_mm=float(
-                getattr(staging, f"{prefix}_perpendicular_axis_offset_mm")
-            ),
+            perpendicular_axis_offset_mm=perpendicular_axis_offset_mm,
         )
 
     def _resolve_pickup_base_position(self) -> Optional[list[float]]:

@@ -73,6 +73,8 @@
     "servo_contact_stop_confirmation_timeout_s": 3.0,
     "servo_contact_preflight_read_attempts": 2,
     "servo_contact_read_failure_limit": 3,
+    "magazine_post_retract_confirmation_samples": 2,
+    "magazine_post_retract_confirmation_interval_s": 0.05,
     "servo_contact_dummy_sensor_enabled": false,
     "servo_contact_dummy_detect_after_s": 1.0
   },
@@ -167,6 +169,7 @@
       -0.001,
       -0.01
     ],
+    "plate_use_entry_gate_as_detach_pose": false,
     "plate_exit_gate_pose": [
       -364.116,
       130.218,

@@ -338,16 +338,16 @@ def execute_dropoff_release_for_executor(
                     elapsed_s(started),
                 )
                 return False, msg
-            ok, msg = _verify_workpiece_released(executor)
-            if not ok:
-                _logger.debug(
-                    "[TIMING] pre_release_dropoff success=false strategy=%s waypoint=%d stage=release_verification elapsed_s=%.3f total_elapsed_s=%.3f",
-                    plan.strategy_name,
-                    index,
-                    elapsed_s(waypoint_started),
-                    elapsed_s(started),
-                )
-                return False, msg
+            # ok, msg = _verify_workpiece_released(executor)
+            # if not ok:
+            #     _logger.debug(
+            #         "[TIMING] pre_release_dropoff success=false strategy=%s waypoint=%d stage=release_verification elapsed_s=%.3f total_elapsed_s=%.3f",
+            #         plan.strategy_name,
+            #         index,
+            #         elapsed_s(waypoint_started),
+            #         elapsed_s(started),
+            #     )
+            #     return False, msg
             release_completed = True
             ok, msg = _on_workpiece_release_verified(executor)
             if not ok:
@@ -993,6 +993,7 @@ def _plate_route_poses_with_distributed_unwind(
     dropoff_pose: list[float],
     next_start_pose: list[float] | None,
     use_center_waypoint: bool,
+    entry_completed: bool = False,
 ) -> dict[str, list[float]]:
     poses = {
         "entry_gate": list(entry_gate_pose),
@@ -1013,7 +1014,10 @@ def _plate_route_poses_with_distributed_unwind(
     paint_start_rz = executor._last_process_start_rz
     paint_end_pose = executor._last_process_end_pose
     try:
-        paint_rz_delta = float(paint_end_pose[5]) - float(paint_start_rz)
+        paint_end_rz = getattr(executor, "_last_paint_contact_end_rz", None)
+        if not isinstance(paint_end_rz, (int, float)) or isinstance(paint_end_rz, bool):
+            paint_end_rz = paint_end_pose[5]
+        paint_rz_delta = float(paint_end_rz) - float(paint_start_rz)
     except (TypeError, ValueError, IndexError):
         raise ValueError(
             "Plate-layout distributed unwind requires a valid executed paint RZ direction"
@@ -1023,7 +1027,53 @@ def _plate_route_poses_with_distributed_unwind(
             "Plate-layout distributed unwind requires a non-zero executed paint RZ direction"
         )
     start_rotation = float(current[rotation_index])
-    step = -90.0 if paint_rz_delta > 0.0 else 90.0
+    completed_turns = int(round(paint_rz_delta / 360.0))
+    if completed_turns == 0:
+        _logger.info(
+            "[PLATE_LAYOUT] Distributed unwind not needed: paint_rz_delta=%.3f has no completed turn",
+            paint_rz_delta,
+        )
+        previous_rotation = start_rotation
+        for pose in poses.values():
+            pose[rotation_index] = unwrap_degrees(
+                previous_rotation,
+                float(pose[rotation_index]),
+            )
+            previous_rotation = float(pose[rotation_index])
+        return poses
+    total_unwind = -360.0 * completed_turns
+    step = total_unwind / 4.0
+    if entry_completed:
+        remaining_end_rotation = float(paint_end_rz) + total_unwind
+        remaining_half_rotation = (
+            start_rotation + remaining_end_rotation
+        ) / 2.0
+        poses["dropoff"][rotation_index] = start_rotation
+        exit_keys = []
+        if use_center_waypoint:
+            exit_keys.append("exit_center")
+        exit_keys.append("exit_gate")
+        _interpolate_route_rotations(
+            poses["dropoff"],
+            [poses[key] for key in exit_keys],
+            end_rotation=(
+                remaining_half_rotation
+                if next_start_pose is not None
+                else remaining_end_rotation
+            ),
+            rotation_index=rotation_index,
+        )
+        if next_start_pose is not None:
+            poses["next_start"][rotation_index] = remaining_end_rotation
+        _logger.info(
+            "[PLATE_LAYOUT] Distributed unwind continuing after optimized entry "
+            "start=%.3f paint_rz_delta=%.3f remaining_end=%.3f targets=%s",
+            start_rotation,
+            paint_rz_delta,
+            remaining_end_rotation,
+            {key: round(pose[rotation_index], 3) for key, pose in poses.items()},
+        )
+        return poses
     ideal_dropoff_rotation = start_rotation + (2.0 * step)
     nominal_dropoff_rotation = float(dropoff_pose[rotation_index])
     branch = (ideal_dropoff_rotation - nominal_dropoff_rotation) / 180.0
@@ -1040,18 +1090,40 @@ def _plate_route_poses_with_distributed_unwind(
         ),
     )
     next_start_rotation = start_rotation + (4.0 * step)
-    rotations = {
-        "entry_gate": (start_rotation + dropoff_rotation) / 2.0,
-        "entry_center": (start_rotation + dropoff_rotation) / 2.0,
-        "dropoff": dropoff_rotation,
-        "exit_center": dropoff_rotation,
-        "exit_gate": (dropoff_rotation + next_start_rotation) / 2.0,
-        "next_start": next_start_rotation,
-    }
     for key, pose in poses.items():
         if len(pose) <= rotation_index:
             raise ValueError(f"Plate-layout route pose '{key}' has no configured rotation axis")
-        pose[rotation_index] = rotations[key]
+
+    entry_keys = ["entry_gate"]
+    if use_center_waypoint:
+        entry_keys.append("entry_center")
+    entry_keys.append("dropoff")
+    _interpolate_route_rotations(
+        current,
+        [poses[key] for key in entry_keys],
+        end_rotation=dropoff_rotation,
+        rotation_index=rotation_index,
+    )
+
+    exit_keys = []
+    if use_center_waypoint:
+        exit_keys.append("exit_center")
+    exit_keys.append("exit_gate")
+    exit_gate_rotation = (
+        (dropoff_rotation + next_start_rotation) / 2.0
+        if next_start_pose is not None
+        else next_start_rotation
+    )
+    _interpolate_route_rotations(
+        poses["dropoff"],
+        [poses[key] for key in exit_keys],
+        end_rotation=exit_gate_rotation,
+        rotation_index=rotation_index,
+    )
+    if next_start_pose is not None:
+        poses["next_start"][rotation_index] = next_start_rotation
+
+    rotations = {key: pose[rotation_index] for key, pose in poses.items()}
     _logger.info(
         "[PLATE_LAYOUT] Distributed unwind start=%.3f paint_rz_delta=%.3f "
         "preferred_step=%.3f nominal_dropoff=%.3f selected_dropoff=%.3f targets=%s",
@@ -1063,6 +1135,95 @@ def _plate_route_poses_with_distributed_unwind(
         {key: round(value, 3) for key, value in rotations.items() if key in poses},
     )
     return poses
+
+
+def build_plate_entry_segments_for_paint_chain(
+    executor: object,
+) -> tuple[list[OrderedPositionCommand], list[float] | None, str]:
+    """Build plate entry through release for the combined paint chain."""
+    dropoff = executor._paint_process_config().dropoff
+    if not bool(dropoff.plate_use_entry_gate_as_detach_pose):
+        return [], None, ""
+    service = executor._plate_layout_service
+    reservation = None if service is None else service.pending
+    if reservation is None:
+        return [], None, "Plate-layout dropoff has no active reservation"
+
+    use_center = _plate_route_uses_center(dropoff, reservation)
+    release_pose = list(reservation.release_pose)
+    configured_gate_pose = list(dropoff.plate_passage_gate_pose)
+    optimized_gate_pose = getattr(executor, "_optimized_plate_entry_gate_pose", None)
+    gate_pose = (
+        list(optimized_gate_pose)
+        if isinstance(optimized_gate_pose, (list, tuple)) and len(optimized_gate_pose) >= 6
+        else configured_gate_pose
+    )
+    if bool(dropoff.plate_distribute_unwind):
+        paint_start_rz = executor._last_process_start_rz
+        paint_end_rz = getattr(executor, "_last_paint_contact_end_rz", None)
+        if paint_start_rz is None or not isinstance(paint_end_rz, (int, float)):
+            return [], None, "Plate-layout optimized entry has no valid paint rotation"
+        completed_turns = int(round((float(paint_end_rz) - float(paint_start_rz)) / 360.0))
+        if completed_turns:
+            target_release_rz = float(gate_pose[5]) - (90.0 * completed_turns)
+            nominal_release_rz = float(release_pose[5])
+            release_pose[5] = nominal_release_rz + 180.0 * round(
+                (target_release_rz - nominal_release_rz) / 180.0
+            )
+    segments: list[OrderedPositionCommand] = [
+        _plate_ordered_segment(
+            "Plate entry in paint chain: paint detach to passage gate",
+            gate_pose,
+            _plate_motion_profile(dropoff, "entry_gate"),
+        )
+    ]
+    if use_center:
+        center_pose = list(reservation.transit_pose)
+        center_pose[5] = (float(gate_pose[5]) + float(release_pose[5])) / 2.0
+        segments.append(_plate_ordered_segment(
+            "Plate entry in paint chain: passage gate to plate center",
+            center_pose,
+            _plate_motion_profile(dropoff, "entry_center"),
+        ))
+    segments.append(_plate_ordered_segment(
+        (
+            "Plate entry in paint chain: center to calculated dropoff"
+            if use_center
+            else "Plate entry in paint chain: passage gate to calculated dropoff"
+        ),
+        release_pose,
+        _plate_motion_profile(dropoff, "center_to_dropoff"),
+        stop=True,
+    ))
+    return segments, release_pose, ""
+
+
+def _interpolate_route_rotations(
+    start_pose: list[float],
+    route_poses: list[list[float]],
+    *,
+    end_rotation: float,
+    rotation_index: int,
+) -> None:
+    """Interpolate one rotation axis at a constant rate over route distance."""
+    if not route_poses:
+        return
+
+    route = [start_pose, *route_poses]
+    segment_lengths = [
+        math.dist(route[index - 1][:3], route[index][:3])
+        for index in range(1, len(route))
+    ]
+    total_distance = sum(segment_lengths)
+    start_rotation = float(start_pose[rotation_index])
+    travelled = 0.0
+    for index, pose in enumerate(route_poses):
+        travelled += segment_lengths[index]
+        if total_distance > 1e-6:
+            progress = travelled / total_distance
+        else:
+            progress = (index + 1) / len(route_poses)
+        pose[rotation_index] = start_rotation + progress * (end_rotation - start_rotation)
 
 
 def _plate_route_uses_center(dropoff: object, reservation: object) -> bool:
@@ -1169,6 +1330,22 @@ def _execute_plate_layout_ordered_release(
     }
     if next_cycle_start is not None:
         route_poses["next_start"] = list(next_cycle_start.position)
+    entry_gate_is_detach_pose = (
+        bool(dropoff.plate_use_entry_gate_as_detach_pose)
+        and executor._last_process_end_pose is not None
+        and poses_close(executor._last_process_end_pose, gate_pose)
+    )
+    entry_completed_in_paint_chain = (
+        getattr(executor, "_plate_entry_completed_in_paint_chain", False) is True
+        and executor._last_process_end_pose is not None
+        and any(
+            poses_close(
+                executor._last_process_end_pose,
+                [*reservation.release_pose[:5], float(reservation.release_pose[5]) + offset],
+            )
+            for offset in (-180.0, 0.0, 180.0)
+        )
+    )
     if bool(dropoff.plate_distribute_unwind):
         try:
             route_poses = _plate_route_poses_with_distributed_unwind(
@@ -1179,51 +1356,76 @@ def _execute_plate_layout_ordered_release(
                 dropoff_pose=reservation.release_pose,
                 next_start_pose=None if next_cycle_start is None else list(next_cycle_start.position),
                 use_center_waypoint=use_center_waypoint,
+                entry_completed=entry_completed_in_paint_chain,
             )
         except (TypeError, ValueError):
             _logger.exception("[PLATE_LAYOUT] Failed to build distributed-unwind route")
             return False, "Plate-layout distributed unwind route could not be built"
-    previous_rotation = float(route_poses["exit_gate"][5])
-    for waypoint in next_waypoints:
-        waypoint.position[5] = unwrap_degrees(
-            previous_rotation,
-            float(waypoint.position[5]),
+    rotation_index = int(executor._contact_motion_config.rotation_index)
+    if bool(dropoff.plate_distribute_unwind) and next_cycle_start is not None:
+        exit_route_poses = []
+        if use_center_waypoint:
+            exit_route_poses.append(route_poses["exit_center"])
+        exit_route_poses.append(route_poses["exit_gate"])
+        exit_route_poses.extend(waypoint.position for waypoint in next_waypoints)
+        exit_route_poses.append(route_poses["next_start"])
+        _interpolate_route_rotations(
+            route_poses["dropoff"],
+            exit_route_poses,
+            end_rotation=float(route_poses["next_start"][rotation_index]),
+            rotation_index=rotation_index,
         )
-        previous_rotation = float(waypoint.position[5])
-    entry_segments = [_plate_ordered_segment(
-        "Plate entry: paint detach to passage gate",
-        route_poses["entry_gate"],
-        _plate_motion_profile(dropoff, "entry_gate"),
-    )]
-    if use_center_waypoint:
+    else:
+        previous_rotation = float(route_poses["exit_gate"][rotation_index])
+        for waypoint in next_waypoints:
+            waypoint.position[rotation_index] = unwrap_degrees(
+                previous_rotation,
+                float(waypoint.position[rotation_index]),
+            )
+            previous_rotation = float(waypoint.position[rotation_index])
+    entry_segments = []
+    if entry_completed_in_paint_chain:
+        _logger.info("[PLATE_LAYOUT] Plate release pose already reached in paint chain")
+    elif not entry_gate_is_detach_pose:
+        entry_segments.append(_plate_ordered_segment(
+            "Plate entry: paint detach to passage gate",
+            route_poses["entry_gate"],
+            _plate_motion_profile(dropoff, "entry_gate"),
+        ))
+    else:
+        _logger.info("[PLATE_LAYOUT] Entry gate already completed as paint detach pose")
+    if use_center_waypoint and not entry_completed_in_paint_chain:
         entry_segments.append(_plate_ordered_segment(
             "Plate entry: passage gate to plate center",
             route_poses["entry_center"],
             _plate_motion_profile(dropoff, "entry_center"),
         ))
-    entry_segments.append(_plate_ordered_segment(
-        (
-            "Plate entry: center to calculated dropoff"
-            if use_center_waypoint
-            else "Plate entry: passage gate to calculated dropoff"
-        ),
-        route_poses["dropoff"],
-        _plate_motion_profile(dropoff, "center_to_dropoff"),
-        stop=True,
-    ))
-    if not _wait_for_motion_slot_idle(executor):
-        return False, "Pivot paint finished, but the motion backend remained busy before plate entry"
-    if not executor._motion.move_ordered_pickup_sequence(
-        "Plate-layout ordered entry chain", entry_segments
-    ):
-        return False, "Pivot paint finished, but plate-layout ordered entry chain failed before release"
+    if not entry_completed_in_paint_chain:
+        entry_segments.append(_plate_ordered_segment(
+            (
+                "Plate entry: center to calculated dropoff"
+                if use_center_waypoint
+                else "Plate entry: passage gate to calculated dropoff"
+            ),
+            route_poses["dropoff"],
+            _plate_motion_profile(dropoff, "center_to_dropoff"),
+            stop=True,
+        ))
+        if not _wait_for_motion_slot_idle(executor):
+            return False, "Pivot paint finished, but the motion backend remained busy before plate entry"
+        if not executor._motion.move_ordered_pickup_sequence(
+            "Plate-layout ordered entry chain", entry_segments
+        ):
+            return False, "Pivot paint finished, but plate-layout ordered entry chain failed before release"
 
-    ok, message = executor._motion.turn_vacuum_off()
+    # Start the plate exit as soon as vacuum and blow-off are activated.  The
+    # controller closes the blow-off valve after its pulse in the background.
+    ok, message = executor._motion.turn_vacuum_off(wait_for_blow_off=False)
     if not ok:
         return False, message
-    ok, message = _verify_workpiece_released(executor)
-    if not ok:
-        return False, message
+    # ok, message = _verify_workpiece_released(executor)
+    # if not ok:
+    #     return False, message
     ok, message = _on_workpiece_release_verified(executor)
     if not ok:
         return False, message

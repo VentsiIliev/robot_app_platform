@@ -855,17 +855,16 @@ class PaintProductionService:
         reason: str = "",
     ) -> None:
         vision = self._vision_service
-        if vision is None:
-            return
-        lifecycle_method = vision.pause_processing if paused else vision.resume_processing
-        try:
-            lifecycle_method()
-        except Exception:
-            _logger.exception(
-                "Failed to %s vision processing: %s",
-                "pause" if paused else "resume",
-                reason,
-            )
+        if vision is not None:
+            lifecycle_method = vision.pause_processing if paused else vision.resume_processing
+            try:
+                lifecycle_method()
+            except Exception:
+                _logger.exception(
+                    "Failed to %s vision processing: %s",
+                    "pause" if paused else "resume",
+                    reason,
+                )
         messaging = self._messaging_service
         if messaging is None:
             return

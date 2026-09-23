@@ -8,7 +8,7 @@ import numpy as np
 
 from src.engine.geometry.planar import axis_equivalent_shift_degrees
 from src.engine.robot.path_preparation import WorkpieceExecutionPlan
-from src.robot_systems.paint.processes.paint.config import PaintSimulationConfig
+from src.robot_systems.paint.processes.paint.config import DropoffStrategy, PaintSimulationConfig
 from src.robot_systems.paint.processes.paint.execute.diagnostics import (
     diagnostics_with_command_rotation,
     elapsed_s,
@@ -162,6 +162,8 @@ class PaintContactExecutor:
         with timed_block(_logger, "paint_contact_prepare", label="refresh_runtime_config"):
             owner._refresh_runtime_config()
         owner._last_process_start_rz = None
+        owner._last_paint_contact_end_rz = None
+        owner._optimized_plate_entry_gate_pose = None
         owner._last_process_end_pose = None
         workpiece_width_mm, workpiece_height_mm = _workpiece_min_rect_size_mm(execution_plan)
         detach_clearance_mm = max(workpiece_width_mm, workpiece_height_mm)
@@ -299,13 +301,36 @@ class PaintContactExecutor:
             with timed_block(_logger, "paint_contact_job_prepare", label=f"{job_label}:build_command_path"):
                 command_pivot_path = owner._paint_contact_command_path(pivot_path)
                 command_pivot_path = _remove_projected_local_reversals(command_pivot_path)
+                paint_contact_end_rz = (
+                    float(command_pivot_path[-1][5])
+                    if command_pivot_path and len(command_pivot_path[-1]) >= 6
+                    else None
+                )
                 if retreat_fn is not None:
                     command_pivot_path = retreat_fn(command_pivot_path)
                 elif append_retreat:
-                    command_pivot_path = self._append_retreat_opposite_to_staging(
-                        command_pivot_path,
-                        additional_paint_axis_offset_mm=detach_clearance_mm,
+                    plate_entry_detach = self._plate_entry_detach_pose(
+                        is_final_job=job_index == len(execution_plan.execution_jobs),
+                        paint_start_rz=(
+                            float(owner._last_process_start_rz)
+                            if owner._last_process_start_rz is not None
+                            else float(command_pivot_path[0][5])
+                        ),
+                        paint_end_rz=paint_contact_end_rz,
                     )
+                    if plate_entry_detach is not None:
+                        owner._optimized_plate_entry_gate_pose = list(plate_entry_detach)
+                        _logger.info(
+                            "[PAINT_CONTACT] Reserved plate entry gate as blended post-paint pose: pose=%s",
+                            [round(float(value), 3) for value in plate_entry_detach],
+                        )
+                    else:
+                        command_pivot_path = self._append_retreat_opposite_to_staging(
+                            command_pivot_path,
+                            additional_paint_axis_offset_mm=detach_clearance_mm,
+                        )
+            if job_index == len(execution_plan.execution_jobs):
+                owner._last_paint_contact_end_rz = paint_contact_end_rz
             if owner._last_process_start_rz is None and command_pivot_path:
                 owner._last_process_start_rz = float(command_pivot_path[0][5]) if len(command_pivot_path[0]) >= 6 else 0.0
 
@@ -450,6 +475,33 @@ class PaintContactExecutor:
             elapsed_s(started),
         )
         return True, "", total_waypoints
+
+    def _plate_entry_detach_pose(
+        self,
+        *,
+        is_final_job: bool,
+        paint_start_rz: float,
+        paint_end_rz: float | None,
+    ) -> list[float] | None:
+        if not is_final_job:
+            return None
+        dropoff = self._owner._paint_process_config().dropoff
+        if (
+            dropoff.strategy is not DropoffStrategy.PLATE_LAYOUT
+            or not bool(dropoff.plate_use_entry_gate_as_detach_pose)
+        ):
+            return None
+        try:
+            pose = [float(value) for value in dropoff.plate_passage_gate_pose]
+        except (TypeError, ValueError):
+            return None
+        if len(pose) != 6 or not all(np.isfinite(value) for value in pose):
+            return None
+        if bool(dropoff.plate_distribute_unwind) and paint_end_rz is not None:
+            completed_turns = int(round((float(paint_end_rz) - paint_start_rz) / 360.0))
+            if completed_turns:
+                pose[5] = float(paint_end_rz) - (90.0 * completed_turns)
+        return pose
 
     def _append_retreat_opposite_to_staging(
         self,

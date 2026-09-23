@@ -451,6 +451,13 @@ class PaintPickupExecutor:
             and continuation_waypoints[0].label == "Aligning workpiece to paint axis"
             and continuation_waypoints[1].label.startswith("Safe travel waypoint ")
         )
+        combine_alignment_with_paint_staging = (
+            motion_plane == "xy_z_rz"
+            and len(continuation_waypoints) >= 2
+            and continuation_waypoints[0].label == "Aligning workpiece to paint axis"
+            and continuation_waypoints[1].label
+            == "Moving to staging offset before first pivot contact pose"
+        )
         if combine_alignment_with_safe_travel:
             align = continuation_waypoints[0]
             safe = continuation_waypoints[1]
@@ -467,6 +474,12 @@ class PaintPickupExecutor:
                 ),
                 *continuation_waypoints[2:],
             ]
+        elif combine_alignment_with_paint_staging:
+            # Fast LIN retract already provides table clearance. The paint
+            # staging pose carries the aligned RZ, so interpolate that
+            # alignment during the elevated transfer instead of stopping for
+            # a separate in-place rotation above the calibration pickup.
+            continuation_waypoints = continuation_waypoints[1:]
         if continuation_waypoints:
             first = continuation_waypoints[0]
             first_pose = list(first.pose)
@@ -478,7 +491,11 @@ class PaintPickupExecutor:
                 # Only synthetic/non-safe handoff moves retain the hard stop.
                 first.blendR if first.label.startswith("Safe travel waypoint ") else 0.0,
             )
-        if combine_lift_with_alignment or combine_alignment_with_safe_travel:
+        if (
+            combine_lift_with_alignment
+            or combine_alignment_with_safe_travel
+            or combine_alignment_with_paint_staging
+        ):
             # The retract has already established vertical clearance. When a
             # safe-travel waypoint exists, move there directly while applying
             # the alignment orientation; do not revisit the calibration XY.

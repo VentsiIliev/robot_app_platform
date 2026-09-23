@@ -51,6 +51,11 @@ record while the process is stopped; the allocator then reuses any compatible
 free area. Access is lock-protected because robot execution and dashboard refresh
 run on different threads.
 
+At a plate-layout release, vacuum OFF and blow-off ON are written before the
+exit chain is submitted, but the configured blow-off pulse finishes in the
+background. This overlaps the pulse with plate-exit motion. Other drop-off and
+device-control paths retain the blocking pump-off behavior.
+
 Each reservation also captures the execution plan's normalized XY outlines.
 The dashboard draws those outlines at the reserved tray location, while the
 minimum-area rectangle remains the allocator's conservative collision footprint

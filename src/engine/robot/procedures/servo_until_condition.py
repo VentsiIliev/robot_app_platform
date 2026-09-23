@@ -842,25 +842,44 @@ class ServoUntilConditionProcedure:
                 continue
 
             contact_pose = self._read_current_pose()
+            terminal_observed_ns = time.monotonic_ns()
             _logger.info(
                 "[SERVO_UNTIL_CONDITION] ROS-managed operation completed operation_id=%s state=%s reason=%s",
                 operation_id, state, status.get("reason"),
             )
             _logger.info(
                 "[CONDITIONAL_SERVO_TIMING] operation_id=%s sensor_transport_ms=%s "
-                "trigger_to_stop_command_ms=%s stop_command_to_stationary_ms=%s",
+                "descent_to_trigger_ms=%s trigger_to_stop_command_ms=%s "
+                "stop_command_to_stationary_ms=%s stationary_to_observed_ms=%s",
                 operation_id,
                 status.get("sensor_transport_latency_ms"),
+                self._elapsed_ms(status.get("started_monotonic_ns"), status.get("trigger_monotonic_ns")),
                 self._elapsed_ms(status.get("trigger_monotonic_ns"), status.get("stop_command_completed_monotonic_ns")),
                 self._elapsed_ms(status.get("stop_command_completed_monotonic_ns"), status.get("stopped_monotonic_ns")),
+                self._elapsed_ms(status.get("stopped_monotonic_ns"), terminal_observed_ns),
             )
             if state == "condition_met":
                 if retract is not None:
+                    retract_started_ns = time.monotonic_ns()
                     retract_ok, retract_message = self._retract(
                         retract, cfg,
                         cancel_requested=cancel_requested,
                         stop_guard=stop_guard,
                         on_retract_start=on_retract_start,
+                    )
+                    retract_completed_ns = time.monotonic_ns()
+                    _logger.info(
+                        "[CONDITIONAL_SERVO_PHASE_TIMING] operation_id=%s "
+                        "stationary_to_retract_start_ms=%s retract_total_ms=%.3f "
+                        "procedure_total_ms=%.3f retract_success=%s",
+                        operation_id,
+                        self._elapsed_ms(
+                            status.get("stopped_monotonic_ns"),
+                            retract_started_ns,
+                        ),
+                        (retract_completed_ns - retract_started_ns) / 1_000_000.0,
+                        (retract_completed_ns - int(started_at * 1_000_000_000)) / 1_000_000.0,
+                        retract_ok,
                     )
                     if not retract_ok:
                         return self._result(
@@ -1467,6 +1486,7 @@ class ServoUntilConditionProcedure:
         mover = getattr(self._robot, "move_fast_linear", None)
         if not callable(mover):
             return False, "fast_lin_unsupported"
+        request_started_ns = time.monotonic_ns()
         outcome = mover(
             # The asynchronous driver may retain or mutate the submitted list.
             # Keep the verification target isolated from transport ownership.
@@ -1480,6 +1500,7 @@ class ServoUntilConditionProcedure:
             request_timeout_s=max(8.0, float(retract.timeout_s) + 5.0),
             allow_subzero_retract=True,
         )
+        request_accepted_ns = time.monotonic_ns()
         if not isinstance(outcome, dict) or outcome.get("unsupported"):
             return False, "fast_lin_unsupported"
         result_code = outcome.get("result")
@@ -1520,6 +1541,7 @@ class ServoUntilConditionProcedure:
                     )
                 )
                 if position_error <= tolerance:
+                    target_tolerance_reached_ns = time.monotonic_ns()
                     break
             if time.monotonic() >= deadline:
                 if final_pose is None:
@@ -1547,6 +1569,7 @@ class ServoUntilConditionProcedure:
             required_inactive_samples=1,
         ):
             return False, "fast_lin_retract_execution_still_active"
+        execution_inactive_ns = time.monotonic_ns()
         settled_pose = self._read_current_pose()
         if settled_pose is None:
             return False, "retract_position_unreadable"
@@ -1567,10 +1590,22 @@ class ServoUntilConditionProcedure:
             )
             return False, "fast_lin_retract_final_mismatch"
         final_pose = settled_pose
+        verification_completed_ns = time.monotonic_ns()
         _logger.info(
             "[SERVO_UNTIL_CONDITION] Fast LIN retract completed target_z=%.3f final_z=%.3f",
             target_z,
             float(final_pose[2]),
+        )
+        _logger.info(
+            "[SERVO_RETRACT_TIMING] task_id=%s request_acceptance_ms=%.3f "
+            "accepted_to_target_tolerance_ms=%.3f target_tolerance_to_inactive_ms=%.3f "
+            "final_verification_ms=%.3f total_ms=%.3f",
+            outcome.get("task_id"),
+            (request_accepted_ns - request_started_ns) / 1_000_000.0,
+            (target_tolerance_reached_ns - request_accepted_ns) / 1_000_000.0,
+            (execution_inactive_ns - target_tolerance_reached_ns) / 1_000_000.0,
+            (verification_completed_ns - execution_inactive_ns) / 1_000_000.0,
+            (verification_completed_ns - request_started_ns) / 1_000_000.0,
         )
         return True, ""
 

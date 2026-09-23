@@ -128,7 +128,10 @@ class TestCycleStartUnwind(unittest.TestCase):
             ),
         )
         ctx = PaintExecutionContext(
-            production_service=SimpleNamespace(_path_executor=executor),
+            production_service=SimpleNamespace(
+                _path_executor=executor,
+                _clear_prepositioned_start_group=MagicMock(),
+            ),
             stop_requested=lambda: False,
             control=PaintExecutionControl(),
         )
@@ -142,6 +145,7 @@ class TestCycleStartUnwind(unittest.TestCase):
             vel=24.0,
             acc=18.0,
         )
+        ctx.production_service._clear_prepositioned_start_group.assert_not_called()
 
 
 class TestCalibrationPickupTestMode(unittest.TestCase):

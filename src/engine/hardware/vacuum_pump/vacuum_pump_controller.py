@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 import time
 
 from src.engine.hardware.vacuum_pump.interfaces.i_vacuum_pump_controller import IVacuumPumpController
@@ -40,6 +41,9 @@ class VacuumPumpController(IVacuumPumpController, IHealthCheckable):
             else None
         )
         self._last_operation_ok = False
+        self._blow_off_lock = threading.RLock()
+        self._blow_off_timer: threading.Timer | None = None
+        self._blow_off_generation = 0
 
     def turn_on(self) -> bool:
         """Turn the vacuum pump ON.
@@ -50,11 +54,13 @@ class VacuumPumpController(IVacuumPumpController, IHealthCheckable):
         Returns:
             True if the write succeeded, False otherwise.
         """
-        if not self._close_blow_off():
-            self._last_operation_ok = False
-            return False
-        self._last_operation_ok = self._write_pump(self._config.on_value, "ON")
-        return self._last_operation_ok
+        with self._blow_off_lock:
+            self._cancel_pending_blow_off_locked()
+            if not self._close_blow_off():
+                self._last_operation_ok = False
+                return False
+            self._last_operation_ok = self._write_pump(self._config.on_value, "ON")
+            return self._last_operation_ok
 
     def turn_off(self) -> bool:
         """Turn the vacuum pump OFF and optionally pulse the blow-off.
@@ -66,16 +72,95 @@ class VacuumPumpController(IVacuumPumpController, IHealthCheckable):
             True if both the OFF write and blow-off pulse (if any) succeeded.
             False if the OFF write failed or the blow-off pulse failed.
         """
-        if not self._write_pump(self._config.off_value, "OFF"):
-            self._last_operation_ok = False
-            return False
-        self._last_operation_ok = self._pulse_blow_off()
-        return self._last_operation_ok
+        with self._blow_off_lock:
+            self._cancel_pending_blow_off_locked()
+            if not self._write_pump(self._config.off_value, "OFF"):
+                self._last_operation_ok = False
+                return False
+            self._last_operation_ok = self._pulse_blow_off()
+            return self._last_operation_ok
+
+    def turn_off_nonblocking(self) -> bool:
+        """Turn off vacuum and finish the blow-off pulse in the background."""
+        with self._blow_off_lock:
+            self._cancel_pending_blow_off_locked()
+            if not self._write_pump(self._config.off_value, "OFF"):
+                self._last_operation_ok = False
+                return False
+            register = self._blow_off_register
+            if register is None:
+                self._last_operation_ok = True
+                return True
+            try:
+                self._transport.write_register(
+                    register, int(self._config.blow_off_on_value)
+                )
+            except Exception:
+                _logger.exception(
+                    "Vacuum pump blow-off pulse failed register=%d", register
+                )
+                self._last_operation_ok = False
+                return False
+            pulse_seconds = max(0.0, float(self._config.blow_off_pulse_seconds))
+            if pulse_seconds == 0.0:
+                return self._finish_blow_off_locked(register)
+            generation = self._blow_off_generation
+            timer = threading.Timer(
+                pulse_seconds,
+                self._finish_blow_off_async,
+                args=(register, generation),
+            )
+            timer.daemon = True
+            self._blow_off_timer = timer
+            self._last_operation_ok = True
+            timer.start()
+            _logger.info(
+                "Vacuum pump blow-off pulse continuing asynchronously "
+                "register=%d duration_s=%.3f",
+                register,
+                pulse_seconds,
+            )
+            return True
 
     def close(self) -> None:
         """Release the underlying Modbus transport if it owns a session."""
-        self._transport.disconnect()
-        self._last_operation_ok = False
+        with self._blow_off_lock:
+            had_pending_pulse = self._cancel_pending_blow_off_locked()
+            if had_pending_pulse:
+                self._close_blow_off()
+            self._transport.disconnect()
+            self._last_operation_ok = False
+
+    def _cancel_pending_blow_off_locked(self) -> bool:
+        self._blow_off_generation += 1
+        timer = self._blow_off_timer
+        self._blow_off_timer = None
+        if timer is not None:
+            timer.cancel()
+        return timer is not None
+
+    def _finish_blow_off_async(self, register: int, generation: int) -> None:
+        with self._blow_off_lock:
+            if generation != self._blow_off_generation:
+                return
+            self._blow_off_timer = None
+            if self._finish_blow_off_locked(register):
+                _logger.info(
+                    "Vacuum pump asynchronous blow-off pulse completed register=%d",
+                    register,
+                )
+
+    def _finish_blow_off_locked(self, register: int) -> bool:
+        try:
+            self._transport.write_register(
+                register, int(self._config.blow_off_off_value)
+            )
+        except Exception:
+            _logger.exception("Vacuum pump blow-off close failed register=%d", register)
+            self._last_operation_ok = False
+            return False
+        self._last_operation_ok = True
+        return True
 
     def read_state(self) -> bool:
         """Return whether the pump output register currently contains ON."""

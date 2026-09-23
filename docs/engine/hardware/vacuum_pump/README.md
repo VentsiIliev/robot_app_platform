@@ -12,9 +12,15 @@ Interface contracts for vacuum-pump hardware control. Concrete implementations a
 class IVacuumPumpController(ABC):
     def turn_on(self) -> bool: ...
     def turn_off(self) -> bool: ...
+    def turn_off_nonblocking(self) -> bool: ...
 ```
 
 High-level controller interface. Returns `True` on success, `False` on failure. Consumed by `IDeviceControlService` in the `device_control` application.
+
+`turn_off()` waits for the configured blow-off pulse to finish.
+`turn_off_nonblocking()` returns after vacuum is disabled and blow-off is
+activated; supporting controllers close the blow-off valve in the background.
+Calling `turn_on()` or `close()` safely cancels a pending background pulse.
 
 ### `IVacuumPumpTransport`
 

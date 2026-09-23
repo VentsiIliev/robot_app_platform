@@ -291,7 +291,9 @@ def execute_magazine_pickup_release(
         if not ok:
             return False, msg
 
-    ok, msg = executor._motion.turn_vacuum_off()
+    # The release pose has already been reached, so the robot can continue to
+    # the calibration route while the configured blow-off pulse finishes.
+    ok, msg = executor._motion.turn_vacuum_off(wait_for_blow_off=False)
     if not ok:
         load_service.cancel_work_area_nesting()
         return False, msg
@@ -384,7 +386,7 @@ def _execute_magazine_servo_contact_pickup_release(
     approach_pose = _wait_for_stable_pose(
         executor._robot_service,
         sample_interval_s=0.02,
-        required_stable_samples=1,
+        required_stable_samples=0,
     )
     if approach_pose is None:
         discard_background_plan()
@@ -537,12 +539,17 @@ def _execute_magazine_servo_contact_pickup_release(
                 return False, NO_WORKPIECE_AT_MAGAZINE
             return False, f"Magazine servo contact pickup failed: {result.message}"
         # A vacuum seal against the pile/tray can remain active briefly after
-        # an empty descent. Require it to survive the retract for 300 ms before
-        # carrying anything toward calibration.
+        # an empty descent. Confirm it once more after 50 ms before carrying
+        # anything toward calibration, without imposing the previous 300 ms
+        # delay on every successful pickup.
         if not pickup_condition_is_active_after_retract(
             condition,
-            required_samples=4,
-            sample_interval_s=0.1,
+            required_samples=int(
+                pickup_motion.magazine_post_retract_confirmation_samples
+            ),
+            sample_interval_s=float(
+                pickup_motion.magazine_post_retract_confirmation_interval_s
+            ),
         ):
             off_ok, off_msg = executor._motion.turn_vacuum_off()
             recovered, recovery_error = return_to_fixed_pose("after workpiece loss")

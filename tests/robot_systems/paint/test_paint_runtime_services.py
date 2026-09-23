@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 import unittest
 from types import SimpleNamespace
 from unittest.mock import MagicMock, call, patch
@@ -33,7 +34,7 @@ from src.engine.hardware.fan.modbus.modbus_fan_control import ModbusFanControl
 from src.engine.hardware.vacuum_sensor.models.vacuum_sensor_config import VacuumSensorConfig
 from src.engine.hardware.vacuum_sensor.vacuum_sensor_service import VacuumSensorService
 from src.engine.hardware.xinje import XinjeMA8X8YR
-from src.robot_systems.paint.processes.robot_calibration_process import (
+from src.engine.robot.calibration.robot_calibration_process import (
     RobotCalibrationProcess,
 )
 
@@ -659,7 +660,7 @@ class TestRobotCalibrationProcess(unittest.TestCase):
         thread = MagicMock()
 
         with patch(
-            "src.robot_systems.paint.processes.robot_calibration_process.threading.Thread",
+            "src.engine.robot.calibration.robot_calibration_process.threading.Thread",
             return_value=thread,
         ) as thread_cls:
             process._on_start()
@@ -721,6 +722,45 @@ class TestRobotCalibrationProcess(unittest.TestCase):
 
 
 class TestVacuumPumpController(unittest.TestCase):
+    def test_nonblocking_turn_off_closes_blow_off_after_pulse(self) -> None:
+        transport = MagicMock()
+        controller = VacuumPumpController(
+            transport,
+            VacuumPumpConfig(
+                pump_register=128,
+                blow_off_register=129,
+                blow_off_pulse_seconds=0.02,
+            ),
+        )
+
+        self.assertTrue(controller.turn_off_nonblocking())
+        self.assertEqual(
+            transport.write_register.call_args_list,
+            [call(128, 0), call(129, 1)],
+        )
+
+        time.sleep(0.04)
+        self.assertEqual(transport.write_register.call_args_list[-1], call(129, 0))
+
+    def test_turn_on_cancels_pending_nonblocking_blow_off(self) -> None:
+        transport = MagicMock()
+        controller = VacuumPumpController(
+            transport,
+            VacuumPumpConfig(
+                pump_register=128,
+                blow_off_register=129,
+                blow_off_pulse_seconds=0.03,
+            ),
+        )
+
+        self.assertTrue(controller.turn_off_nonblocking())
+        self.assertTrue(controller.turn_on())
+        calls_after_turn_on = list(transport.write_register.call_args_list)
+        time.sleep(0.05)
+
+        self.assertEqual(transport.write_register.call_args_list, calls_after_turn_on)
+        self.assertEqual(calls_after_turn_on[-2:], [call(129, 0), call(128, 1)])
+
     def test_read_state_reads_configured_register_without_writing(self) -> None:
         transport = MagicMock()
         transport.read_register.return_value = 1

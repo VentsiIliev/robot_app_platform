@@ -72,9 +72,14 @@ class PaintProcessConfigSerializer(ISettingsSerializer[PaintProcessConfig]):
                 "unmatched_second_pass",
             }
         })
+        raw_pickup_motion = dict(_section(raw, "pickup_motion"))
+        # Removed after the fail-safe sensor pickup path stopped permitting a
+        # planned-descent fallback. Accept the persisted key during upgrades so
+        # one obsolete setting cannot prevent the complete Paint config loading.
+        raw_pickup_motion.pop("servo_contact_fallback_to_planned_descend", None)
         pickup_motion = _build_dataclass(
             PickupMotionConfig,
-            _section(raw, "pickup_motion"),
+            raw_pickup_motion,
             default.pickup_motion,
         )
         values["pickup_motion"] = replace(

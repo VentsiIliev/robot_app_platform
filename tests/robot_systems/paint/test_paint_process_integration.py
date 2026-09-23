@@ -116,6 +116,7 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
             calls.append(kwargs)
             if kwargs.get("magazine_stage_only"):
                 context = SimpleNamespace(
+                    magazine_config=config,
                     magazine_discovery_contours=[],
                     magazine_discovery_active_contour=object(),
                     magazine_snapshot=object(),
@@ -1019,11 +1020,11 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
         )
         contexts = iter(
             [
-                SimpleNamespace(magazine_discovery_contours=[pile_two], magazine_discovery_active_contour=pile_one, magazine_discovery_empty_capture=False, magazine_snapshot="capture"),
-                SimpleNamespace(magazine_discovery_contours=[pile_two], magazine_discovery_active_contour=pile_one, magazine_discovery_empty_capture=False, magazine_snapshot="capture"),
-                SimpleNamespace(magazine_discovery_contours=[], magazine_discovery_active_contour=pile_two, magazine_discovery_empty_capture=False, magazine_snapshot="capture"),
-                SimpleNamespace(magazine_discovery_contours=[], magazine_discovery_active_contour=pile_two, magazine_discovery_empty_capture=False, magazine_snapshot="capture"),
-                SimpleNamespace(magazine_discovery_contours=[], magazine_discovery_active_contour=None, magazine_discovery_empty_capture=True, magazine_snapshot="empty"),
+                SimpleNamespace(magazine_config=config, magazine_discovery_contours=[pile_two], magazine_discovery_active_contour=pile_one, magazine_discovery_empty_capture=False, magazine_snapshot="capture"),
+                SimpleNamespace(magazine_config=config, magazine_discovery_contours=[pile_two], magazine_discovery_active_contour=pile_one, magazine_discovery_empty_capture=False, magazine_snapshot="capture"),
+                SimpleNamespace(magazine_config=config, magazine_discovery_contours=[], magazine_discovery_active_contour=pile_two, magazine_discovery_empty_capture=False, magazine_snapshot="capture"),
+                SimpleNamespace(magazine_config=config, magazine_discovery_contours=[], magazine_discovery_active_contour=pile_two, magazine_discovery_empty_capture=False, magazine_snapshot="capture"),
+                SimpleNamespace(magazine_config=config, magazine_discovery_contours=[], magazine_discovery_active_contour=None, magazine_discovery_empty_capture=True, magazine_snapshot="empty"),
             ]
         )
 

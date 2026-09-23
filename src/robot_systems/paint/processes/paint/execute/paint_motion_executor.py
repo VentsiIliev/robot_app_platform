@@ -239,7 +239,10 @@ class PaintMotionExecutor:
         if (control is None or not control.pause_requested()) and not interrupted_by_pause:
             return False
         _logger.info("[EXECUTE] Paused during non-contact motion '%s'; waiting to resume", label)
-        return owner._wait_for_paint_resume(control)
+        resumed = owner._wait_for_paint_resume(control)
+        if resumed:
+            self._ordered_chain_interrupted_by_pause = False
+        return resumed
 
     def consume_ordered_chain_resume_start_index(self) -> int | None:
         start_index = self._ordered_chain_resume_start_index
@@ -257,30 +260,46 @@ class PaintMotionExecutor:
         if not segments:
             return []
 
+        backend_index = self.consume_ordered_chain_resume_start_index()
+        if backend_index is not None and 0 <= backend_index < len(segments):
+            _logger.info(
+                "[PICKUP] Resuming ordered sequence from backend segment %d/%d",
+                backend_index + 1,
+                len(segments),
+            )
+            return segments[backend_index:]
+        if backend_index is not None:
+            _logger.warning(
+                "[PICKUP] Ignoring invalid backend resume segment %d for %d commands",
+                backend_index,
+                len(segments),
+            )
+
         current = self._read_current_robot_pose()
         if current is None:
             _logger.warning("[PICKUP] Resume requested but current robot pose is unavailable; reusing full sequence")
             return segments
 
-        target_positions = []
-        for segment in segments:
+        indexed_targets: list[tuple[int, list[float]]] = []
+        for command_index, segment in enumerate(segments):
             if isinstance(segment, OrderedPathCommand):
-                target_positions.append(list(segment.path[-1]))
+                indexed_targets.append((command_index, list(segment.path[-1])))
             elif isinstance(segment, OrderedPositionCommand):
-                target_positions.append(list(segment.position))
-        if not target_positions:
+                indexed_targets.append((command_index, list(segment.position)))
+        if not indexed_targets:
             return segments
 
         current_xyz = np.asarray(current[:3], dtype=float)
-        targets_xyz = [np.asarray(target[:3], dtype=float) for target in target_positions if len(target) >= 3]
-        if not targets_xyz:
-            return segments
+        targets_xyz = [np.asarray(target[:3], dtype=float) for _, target in indexed_targets]
 
         best_index = min(
             range(len(targets_xyz)),
             key=lambda index: float(np.linalg.norm(current_xyz - targets_xyz[index])),
         )
-        for index in range(max(0, best_index - 1), min(len(targets_xyz) - 1, best_index + 1) + 1):
+        for index in range(
+            max(0, best_index - 1),
+            min(len(targets_xyz) - 1, best_index + 2),
+        ):
             distance = self._point_to_segment_distance(
                 current_xyz,
                 targets_xyz[index],
@@ -290,7 +309,8 @@ class PaintMotionExecutor:
                 best_index = index + 1
                 break
 
-        start_index = min(best_index + 1, len(segments) - 1)
+        next_target_index = min(best_index + 1, len(indexed_targets) - 1)
+        start_index = indexed_targets[next_target_index][0]
         _logger.info(
             "[PICKUP] Resuming ordered sequence from segment %d/%d current=%s",
             start_index + 1,
@@ -348,7 +368,7 @@ class PaintMotionExecutor:
         return False, "Vacuum pump failed to turn on; pickup motion was not started"
 
     @timed_step(_logger, "vacuum_off")
-    def turn_vacuum_off(self) -> tuple[bool, str]:
+    def turn_vacuum_off(self, *, wait_for_blow_off: bool = True) -> tuple[bool, str]:
         """Disable the vacuum pump after staging if one is configured."""
         owner = self._owner
         if not owner._is_vacuum_pump_enabled():
@@ -358,6 +378,11 @@ class PaintMotionExecutor:
             _logger.info("[PICKUP] Vacuum pump OFF skipped: pump not configured")
             return True, ""
         _logger.info("[PICKUP] Turning vacuum pump OFF after staged pivot move")
-        if owner._vacuum_pump.turn_off():
+        turn_off = (
+            owner._vacuum_pump.turn_off
+            if wait_for_blow_off
+            else owner._vacuum_pump.turn_off_nonblocking
+        )
+        if turn_off():
             return True, ""
         return False, "Pickup succeeded, but vacuum pump OFF failed after pivot stage"

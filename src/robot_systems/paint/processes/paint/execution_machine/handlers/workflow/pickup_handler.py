@@ -28,6 +28,7 @@ from src.robot_systems.paint.processes.paint.execution_machine.handlers.common.m
     wait_or_guard,
 )
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handlers import (
+    build_plate_entry_segments_for_paint_chain,
     build_ordered_dropoff_preparation_segments,
     open_dropoff_passage_for_preparation,
     _resolve_dropoff_safe_travel_waypoints,
@@ -359,6 +360,19 @@ def try_execute_ordered_pickup_and_paint_contact(
         if second_pass_paths
         else list(paint_paths[-1][-1])
     )
+    plate_entry_in_chain = False
+    if (
+        _dropoff_strategy(executor) is DropoffStrategy.PLATE_LAYOUT
+        and bool(config.dropoff.plate_use_entry_gate_as_detach_pose)
+    ):
+        plate_segments, plate_release_pose, error = build_plate_entry_segments_for_paint_chain(
+            executor
+        )
+        if error:
+            return False, error, total_waypoints
+        post_pickup_segments.extend(plate_segments)
+        plate_entry_in_chain = bool(plate_segments)
+        final_pose = plate_release_pose or final_pose
     if _should_preplan_dropoff_in_ordered_chain(executor):
         config = executor._paint_process_config()
         if bool(config.dropoff_safe_travel.enabled) and not _resolve_dropoff_safe_travel_waypoints(executor):
@@ -400,6 +414,8 @@ def try_execute_ordered_pickup_and_paint_contact(
             executor._dropoff_unwind_prepared = True
         if ok and final_pose is not None:
             executor._last_process_end_pose = list(final_pose)
+        if ok and plate_entry_in_chain:
+            executor._plate_entry_completed_in_paint_chain = True
         return ok, msg, total_waypoints
 
     segments: list[OrderedMotionCommand] = build_ordered_pickup_segments(pickup_plan)
@@ -423,6 +439,8 @@ def try_execute_ordered_pickup_and_paint_contact(
         executor._dropoff_unwind_prepared = True
     if final_pose is not None:
         executor._last_process_end_pose = list(final_pose)
+    if plate_entry_in_chain:
+        executor._plate_entry_completed_in_paint_chain = True
     return True, "", total_waypoints
 
 

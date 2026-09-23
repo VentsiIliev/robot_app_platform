@@ -131,6 +131,9 @@ class TestFixedMagazinePickup(unittest.TestCase):
             [10.0, 20.0, 120.0, 180.0, 0.0, 30.0],
             execute_servo.call_args.kwargs["retract_reference_pose"],
         )
+        executor._motion.turn_vacuum_off.assert_called_once_with(
+            wait_for_blow_off=False
+        )
 
     def test_fixed_pickup_allows_approach_to_correct_initial_tolerance_miss(self):
         config = PaintProcessConfig()
@@ -163,6 +166,9 @@ class TestFixedMagazinePickup(unittest.TestCase):
 
         self.assertTrue(ok, message)
         execute_servo.assert_called_once()
+        executor._motion.turn_vacuum_off.assert_called_once_with(
+            wait_for_blow_off=False
+        )
 
     def test_old_settings_default_to_vision_targeting(self):
         restored = PaintProcessConfigSerializer().from_dict({"magazine_load": {"enabled": True}})
@@ -204,6 +210,25 @@ class TestFixedMagazinePickup(unittest.TestCase):
         )
         self.assertEqual(1.5, restored.magazine_load.fixed_pickup_position_tolerance_mm)
         self.assertEqual(0.75, restored.magazine_load.fixed_pickup_orientation_tolerance_deg)
+
+    def test_magazine_post_retract_confirmation_round_trips_through_ui_mapper(self):
+        base = PaintProcessConfig()
+        flat = PaintProcessSettingsMapper.to_flat_dict(base)
+        flat.update({
+            "pickup_magazine_post_retract_confirmation_samples": 3,
+            "pickup_magazine_post_retract_confirmation_interval_s": 0.08,
+        })
+
+        restored = PaintProcessSettingsMapper.from_flat_dict(flat, base)
+
+        self.assertEqual(
+            3,
+            restored.pickup_motion.magazine_post_retract_confirmation_samples,
+        )
+        self.assertEqual(
+            0.08,
+            restored.pickup_motion.magazine_post_retract_confirmation_interval_s,
+        )
 
     def test_fixed_mode_moves_to_fixed_group_and_skips_camera_wait(self):
         load_service = MagicMock()

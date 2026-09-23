@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from contextlib import nullcontext
-from time import perf_counter
+from time import monotonic, perf_counter, sleep
 
 from src.robot_systems.paint.processes.paint.execute.diagnostics import elapsed_s
 from src.robot_systems.paint.processes.paint.execution_machine.context import PaintExecutionContext
@@ -40,8 +40,37 @@ def unwind_joint6_at_cycle_start(ctx: PaintExecutionContext) -> bool:
         )
     )
     if ok:
+        ok = _wait_for_unwind_motion_idle(robot_service)
+    if ok:
+        # Keep the plate-exit's preposition marker.  The stable-idle wait above
+        # closes the unwind handoff race, and the magazine navigation handler
+        # verifies the fresh Cartesian pose before it trusts this marker.  If
+        # unwind changed the pose, verification fails and the normal correction
+        # move still runs; a no-op unwind can reuse the already-reached pose.
         ctx.cycle_start_unwind_completed = True
     return ok
+
+
+def _wait_for_unwind_motion_idle(robot_service, *, timeout_s: float = 2.0) -> bool:
+    """Wait through the blocking-response/websocket-inactive handoff."""
+    getter = getattr(robot_service, "get_execution_status", None)
+    if not callable(getter):
+        return True
+    deadline = monotonic() + max(0.0, float(timeout_s))
+    inactive_samples = 0
+    while monotonic() < deadline:
+        status = getter()
+        if not isinstance(status, dict):
+            return True
+        if not bool(status.get("is_executing")):
+            inactive_samples += 1
+            if inactive_samples >= 2:
+                return True
+        else:
+            inactive_samples = 0
+        sleep(0.025)
+    _logger.error("[CYCLE_START] Joint 6 unwind did not reach a stable idle state")
+    return False
 
 
 def start_paint_motion_if_needed(ctx: PaintExecutionContext) -> None:
@@ -58,6 +87,7 @@ def start_paint_motion_if_needed(ctx: PaintExecutionContext) -> None:
     executor._set_cycle_process_config_snapshot(ctx.raw_process_config or ctx.process_config)
     executor._apply_paint_process_contact_config()
     executor._dropoff_unwind_prepared = False
+    executor._plate_entry_completed_in_paint_chain = False
     ctx.paint_total_waypoints = 0
     ctx.paint_contact_executed_in_ordered_chain = False
 

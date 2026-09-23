@@ -17,7 +17,7 @@ def handle_capture_workpiece(ctx: PaintExecutionContext) -> PaintExecutionState:
     magazine_enabled = bool(
         ctx.magazine_config is not None and ctx.magazine_config.enabled
     )
-    if not magazine_enabled:
+    if not magazine_enabled and service._vision_service is not None:
         ready, message = service._wait_for_fresh_capture_frame(
             1.0,
             ctx.motion_cancel_requested,

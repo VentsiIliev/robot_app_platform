@@ -570,16 +570,20 @@ class PaintRobotSystem(BaseRobotSystem):
         self._paint_targeting = self.get_settings(CommonSettingsID.TARGETING)
         self._targeting_provider = PaintRobotSystemTargetingProvider(self)
         self._vacuum_pump = self.get_optional_service(ServiceID.VACUUM_PUMP)
-        self.register_managed_resource(self._vacuum_pump)
+        if self._vacuum_pump is not None:
+            self.register_managed_resource(self._vacuum_pump)
         self._vacuum_sensor = self.get_optional_service(ServiceID.VACUUM_SENSOR)
         if self._vacuum_sensor is not None:
             self.register_managed_resource(self._vacuum_sensor)
         self._fan = self.get_optional_service(ServiceID.FAN)
-        self.register_managed_resource(self._fan)
+        if self._fan is not None:
+            self.register_managed_resource(self._fan)
         self._tray_fan = self.get_optional_service(ServiceID.TRAY_FAN)
-        self.register_managed_resource(self._tray_fan)
+        if self._tray_fan is not None:
+            self.register_managed_resource(self._tray_fan)
         self._dryer = self.get_optional_service(ServiceID.DRYER)
-        self.register_managed_resource(self._dryer)
+        if self._dryer is not None:
+            self.register_managed_resource(self._dryer)
         self._production_start_guard = self.build_production_start_guard()
         self._pickup_condition = self._build_pickup_condition()
 
