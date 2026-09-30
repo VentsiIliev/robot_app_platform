@@ -1,6 +1,7 @@
 import unittest
 from dataclasses import replace
 from unittest.mock import MagicMock
+from src.engine.robot.configuration.robot_settings import RobotSettings
 
 from src.engine.robot.calibration.robot_calibration.tcp_offset_capture import (
     CameraTcpOffsetSample,
@@ -24,7 +25,7 @@ class TestFinalizeTcpOffsetCalibration(unittest.TestCase):
             CameraTcpOffsetSample(1, 0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
             CameraTcpOffsetSample(1, 1, 0.0, 15.0, 9.5, -20.5, 9.5, -20.5),
         ]
-        ctx.robot_config = MagicMock()
+        ctx.robot_config = RobotSettings()
         ctx.settings_service = MagicMock()
         ctx.robot_config_key = "robot_config"
 
@@ -35,6 +36,24 @@ class TestFinalizeTcpOffsetCalibration(unittest.TestCase):
         self.assertAlmostEqual(ctx.robot_config.camera_to_tcp_x_offset, 10.25, places=3)
         self.assertAlmostEqual(ctx.robot_config.camera_to_tcp_y_offset, -20.0, places=3)
         ctx.settings_service.save.assert_called_once_with("robot_config", ctx.robot_config)
+
+    def test_saves_offset_to_selected_area_without_replacing_global(self):
+        ctx = MagicMock()
+        ctx.camera_tcp_offset_config = MagicMock(min_samples=2, max_acceptance_std_mm=5.0)
+        ctx.camera_tcp_offset_samples = [
+            CameraTcpOffsetSample(0, 1, 0, 15, 10, -20, 10, -20),
+            CameraTcpOffsetSample(1, 1, 0, 15, 10, -20, 10, -20),
+        ]
+        ctx.robot_config = RobotSettings(camera_to_tcp_x_offset=3, camera_to_tcp_y_offset=4)
+        ctx.robot_config.camera_to_tcp_mode = "per_area"
+        ctx.vision_service.get_calibration_target_area_id.return_value = "magazine"
+        ctx.robot_config_key = "robot_config"
+
+        ok, _ = finalize_tcp_offset_calibration(ctx)
+
+        self.assertTrue(ok)
+        self.assertEqual(ctx.robot_config.camera_to_tcp_for_area("magazine")[:2], (10, -20))
+        self.assertEqual(ctx.robot_config.camera_to_tcp_for_area("paint")[:2], (3, 4))
 
     def test_rejects_result_when_sample_spread_is_too_high(self):
         ctx = MagicMock()

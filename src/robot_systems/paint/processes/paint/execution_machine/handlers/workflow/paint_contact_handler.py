@@ -25,6 +25,17 @@ def handle_paint_contact(ctx: PaintExecutionContext) -> PaintExecutionState:
     if ctx.paint_contact_executed_in_ordered_chain:
         return PaintExecutionState.EDGE_CLEANUP
 
+    if ctx.adjustment_session is not None:
+        from src.robot_systems.paint.processes.paint.execute.incremental_paint_executor import (
+            run_incremental_paint_contact,
+        )
+
+        ok, msg = run_incremental_paint_contact(ctx)
+        if not ok:
+            fail_paint_motion(ctx, msg)
+            return PaintExecutionState.ERROR
+        return PaintExecutionState.PREPARE_DROPOFF
+
     ok, msg, total_waypoints = executor._paint_contact.execute(ctx.execution_plan, control=ctx.control)
     ctx.paint_total_waypoints = int(total_waypoints)
 

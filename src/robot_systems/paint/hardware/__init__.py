@@ -1,0 +1,1 @@
+"""Paint-specific hardware adapters."""

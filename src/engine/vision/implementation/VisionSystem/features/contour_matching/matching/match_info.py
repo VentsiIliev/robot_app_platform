@@ -21,3 +21,5 @@ class MatchInfo:
     sprayFillObjs: Optional[list[Contour]] = None
     mlConfidence: float = 0.0
     mlResult: str = "UNKNOWN"
+    reflected: bool = False
+    pickupObj: Optional[Contour] = None

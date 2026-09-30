@@ -436,15 +436,31 @@ def _build_calibration_application(robot_system):
         CameraZShiftCalibrationService,
     )
     from src.engine.robot.calibration.calibration_navigation_service import CalibrationNavigationService
+    from src.engine.robot.calibration.service_builders import build_calibration_artifact_vision_proxy
     from src.engine.vision.homography_residual_transformer import HomographyResidualTransformer
 
     vision_service = robot_system.get_optional_service(CommonServiceID.VISION)
+    calibration_vision_service = (
+        build_calibration_artifact_vision_proxy(vision_service, robot_system._settings_service)
+        if vision_service is not None else None
+    )
     work_area_service = robot_system.get_service(CommonServiceID.WORK_AREAS)
     robot_service = robot_system.get_optional_service(CommonServiceID.ROBOT)
     robot_config = robot_system._robot_config
     navigation_service = CalibrationNavigationService(
         robot_system.get_service(CommonServiceID.NAVIGATION),
-        before_move=(lambda: work_area_service.set_active_area_id("spray")),
+        calibration_group_getter=lambda: (
+            str(getattr(robot_system.get_target_frame_for_work_area(
+                calibration_vision_service.get_calibration_target_area_id()
+            ), "target_navigation_group", "") or "").strip()
+            or ("CALIBRATION" if calibration_vision_service.get_calibration_target_area_id()
+                in {"global", "spray"} else "")
+        ),
+        before_move=lambda: work_area_service.set_active_area_id(
+            calibration_vision_service.get_calibration_target_area_id()
+            if calibration_vision_service.get_calibration_target_area_id() != "global"
+            else "spray"
+        ),
     )
     transformer = (
         HomographyResidualTransformer(
@@ -468,6 +484,10 @@ def _build_calibration_application(robot_system):
             robot_tool=robot_system._robot_config.robot_tool,
             robot_user=robot_system._robot_config.robot_user,
             on_offsets_saved=robot_system.invalidate_shared_vision_resolver,
+            target_area_id_getter=lambda: robot_system._settings_service.get(
+                CommonSettingsID.CALIBRATION_VISION_SETTINGS
+            ).calibration_target_work_area,
+            matrix_path_getter=calibration_vision_service.matrix_path_for_area,
         )
         if vision_service is not None and robot_service is not None and robot_config is not None else None
     )
@@ -531,6 +551,7 @@ def _build_calibration_application(robot_system):
         marker_height_mapping_service=marker_height_mapping_service,
         intrinsic_capture_service=intrinsic_capture_service,
         calibration_settings_service=CalibrationSettingsApplicationService(robot_system._settings_service),
+        settings_service=robot_system._settings_service,
         laser_calibration_service=getattr(robot_system, "_height_measuring_calibration_service", None),
         laser_ops=getattr(robot_system, "_laser_detection_service", None),
         observer_group_provider=robot_system.get_observer_group_for_area,

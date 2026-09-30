@@ -55,6 +55,25 @@ class TestToolSettingsControllerLoad(unittest.TestCase):
         view.set_tools.assert_called_once()
         view.set_slots.assert_called_once()
         view.set_status.assert_called_once()
+        view.set_calibration_progress.assert_called_once_with(
+            reference_captured=False, candidate_samples=0
+        )
+
+    def test_successful_reference_capture_resets_samples_and_updates_progress(self):
+        ctrl, model, view = _make_ctrl()
+        ctrl._candidate_samples = 2
+        ctrl._show_reference_result((True, "Reference captured"))
+        view.set_calibration_progress.assert_called_once_with(
+            reference_captured=True, candidate_samples=0
+        )
+
+    def test_successful_candidate_capture_increments_progress(self):
+        ctrl, model, view = _make_ctrl()
+        ctrl._reference_captured = True
+        ctrl._show_candidate_result((True, "Contact captured", {}))
+        view.set_calibration_progress.assert_called_once_with(
+            reference_captured=True, candidate_samples=1
+        )
 
 
 class TestToolSettingsControllerRefresh(unittest.TestCase):

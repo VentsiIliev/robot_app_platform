@@ -1,0 +1,14 @@
+{
+  "__meta__": {
+    "display_name": "English"
+  },
+  "ToolSettingsView": {
+    "Jog the reference tool to the calibration point, then capture the reference contact.": "Jog the reference tool to the calibration point, then capture the reference contact.",
+    "Reference captured. Fit the tool being calibrated to the same point from different wrist orientations, capturing at least 3 contacts.": "Reference captured. Fit the tool being calibrated to the same point from different wrist orientations, capturing at least 3 contacts.",
+    "Contact samples are ready. Select the tool to update, then solve the calibration.": "Contact samples are ready. Select the tool to update, then solve the calibration.",
+    "Ready to solve calibration for {tool_name} (ID {tool_id}).": "Ready to solve calibration for {tool_name} (ID {tool_id}).",
+    "Reference: captured ✓": "Reference: captured ✓",
+    "Reference: not captured": "Reference: not captured",
+    "Tool contacts: {count} / 3 minimum": "Tool contacts: {count} / 3 minimum"
+  }
+}

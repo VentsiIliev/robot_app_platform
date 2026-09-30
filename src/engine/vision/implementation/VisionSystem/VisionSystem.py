@@ -30,7 +30,11 @@ DEFAULT_STORAGE_PATH = str(get_path_resolver().vision_system_root / 'storage')
 class VisionSystem:
 
     def __init__(self, storage_path=None, messaging_service=None, service=None,
-                 work_area_service: IWorkAreaService | None = None):
+                 work_area_service: IWorkAreaService | None = None,
+                 camera_device: int | str | None = None,
+                 camera_resolution: tuple[int, int] | None = None,
+                 allow_camera_fallback: bool = True,
+                 camera_flips: tuple[bool, bool] = (False, False)):
         self._configure_opencv_threads()
         self.optimal_camera_matrix = None
         self.roi = None
@@ -44,6 +48,9 @@ class VisionSystem:
         self.service           = service or Service(data_storage_path=self.storage_path)
         self.messaging_service = messaging_service
         self._work_area_service = work_area_service
+        self._camera_device = camera_device
+        self._camera_resolution = camera_resolution
+        self._allow_camera_fallback = bool(allow_camera_fallback)
         self._active_area_id = work_area_service.get_active_area_id() if work_area_service is not None else ""
         self.service_id        = "vision_service"
 
@@ -86,7 +93,12 @@ class VisionSystem:
         self._latest_contours = []   # ← cached by run(), read by get_latest_contours()
 
         self.current_skip_frames = 0
-        self.frame_grabber = FrameGrabber(self.camera, maxlen=5)
+        self.frame_grabber = FrameGrabber(
+            self.camera,
+            maxlen=5,
+            flip_horizontal=camera_flips[0],
+            flip_vertical=camera_flips[1],
+        )
         self.frame_grabber.start()
         self._last_processed_frame_sequence = 0
         self._latest_frame_timestamp_s = 0.0
@@ -144,14 +156,22 @@ class VisionSystem:
         SubscriptionManager(self, self.messaging_service).subscribe_all()
 
     def setup_camera(self, should_cancel=None) -> None:
-        camera_index       = self.camera_settings.get_camera_index()
+        configured_device = self._camera_device
+        if configured_device is None:
+            configured_device = self.camera_settings.get_camera_index()
+        width = self.camera_settings.get_camera_width()
+        height = self.camera_settings.get_camera_height()
+        if self._camera_resolution is not None:
+            width, height = self._camera_resolution
+            self.camera_settings.set_resolution(width, height)
         camera_initializer = CameraInitializer(
-            width  = self.camera_settings.get_camera_width(),
-            height = self.camera_settings.get_camera_height(),
+            width=width,
+            height=height,
         )
-        self.camera, camera_index = camera_initializer.initializeCameraWithRetry(
-            camera_index,
+        self.camera, resolved_device = camera_initializer.initializeCameraWithRetry(
+            configured_device,
             should_cancel=should_cancel,
+            allow_fallback=self._allow_camera_fallback,
         )
         if self.camera is None:
             return
@@ -162,7 +182,10 @@ class VisionSystem:
         # self.camera = RemoteCamera(url = "http://192.168.222.44:5005/video_feed", width=self.camera_settings.get_camera_width(), height=self.camera_settings.get_camera_height())
         # self.camera = RemoteCamera(url = "http://localhost:5005/video_feed", width=self.camera_settings.get_camera_width(), height=self.camera_settings.get_camera_height())
         self._configure_hardware_auto_exposure()
-        self.camera_settings.set_camera_index(camera_index)
+        # Preserve the legacy Index field only when it remains the source of
+        # camera selection. Device-role configuration is persisted separately.
+        if self._camera_device is None:
+            self.camera_settings.set_camera_index(resolved_device)
 
     def _configure_hardware_auto_exposure(self) -> None:
         """Apply the persisted UVC automatic-exposure mode at camera startup."""
@@ -279,6 +302,8 @@ class VisionSystem:
             self.image = self._brightness_service.adjust(self.image)
 
         self.rawImage = self.image.copy()
+        if self.message_publisher:
+            self.message_publisher.publish_camera_frame(self.rawImage)
 
         if self.rawMode:
             if self.message_publisher:

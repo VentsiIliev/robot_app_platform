@@ -7,6 +7,7 @@ import numpy as np
 from src.engine.robot.path_preparation.default_workpiece_path_preparation_service import (
     DefaultWorkpiecePathPreparationService,
     PIXEL_TO_MM_MODE_HOMOGRAPHY_RESIDUAL,
+    _cut_closed_contour_at_saved_selection_start,
     _submit_debug_plot,
 )
 from src.engine.robot.path_preparation.geometry import (
@@ -27,6 +28,33 @@ class _Schema:
 
 class _SegmentConfig:
     schema = _Schema()
+
+
+class TestSavedPaintSelectionContourCut(unittest.TestCase):
+    def test_moves_cut_to_first_point_of_segment_crossing_canonical_seam(self):
+        angles = np.linspace(0.0, 2.0 * np.pi, 10, endpoint=False)
+        contour = np.column_stack((10.0 * np.cos(angles), 10.0 * np.sin(angles)))
+        selection = [{"contour": contour[[8, 9, 0, 1]].tolist()}]
+
+        reordered, start_index = _cut_closed_contour_at_saved_selection_start(
+            contour,
+            selection,
+        )
+
+        self.assertEqual(8, start_index)
+        np.testing.assert_allclose(reordered, contour[[8, 9, 0, 1, 2, 3, 4, 5, 6, 7]])
+
+    def test_moves_cut_to_first_point_of_non_wrapping_selection_without_reversing(self):
+        contour = np.asarray([[float(index * 10), 0.0] for index in range(10)])
+        selection = [{"contour": [[20.0, 0.0], [30.0, 0.0]]}]
+
+        reordered, start_index = _cut_closed_contour_at_saved_selection_start(contour, selection)
+
+        self.assertEqual(2, start_index)
+        np.testing.assert_array_equal(
+            reordered,
+            contour[[2, 3, 4, 5, 6, 7, 8, 9, 0, 1]],
+        )
 
 
 def _make_service(**kwargs):
@@ -363,6 +391,45 @@ class TestDefaultWorkpiecePathPreparationService(unittest.TestCase):
         self.assertEqual(44.0, job["pickup_rz"])
         min_rect_rz.assert_called_once()
         path_rz.assert_not_called()
+
+    def test_workpiece_layer_with_saved_selection_uses_directed_segment_pickup_rz(self):
+        service = _make_service(execute_from_workpiece_layer=True, target_point_name="tool")
+        workpiece = {
+            "contour": [[0, 0], [10, 0], [10, 10], [0, 10]],
+            "pickupPoint": {"x": 5, "y": 6},
+            "sprayPattern": {
+                "Contour": [
+                    {
+                        "contour": [[10, 0], [10, 10]],
+                        "settings": {"closed_path": False},
+                    }
+                ]
+            },
+        }
+
+        with patch.object(
+            service,
+            "_transform_to_robot",
+            return_value=[
+                [10, 20, 30, 180, 0, 0],
+                [10, 30, 30, 180, 0, 0],
+                [20, 30, 30, 180, 0, 0],
+            ],
+        ), patch.object(
+            service,
+            "_transform_single_pixel_to_robot",
+            side_effect=[(11.0, 12.0), (13.0, 14.0)],
+        ), patch(
+            "src.engine.robot.path_preparation.default_workpiece_path_preparation_service.compute_pickup_rz_from_initial_paint_segment",
+            return_value=91.0,
+        ) as initial_segment_rz, patch(
+            "src.engine.robot.path_preparation.default_workpiece_path_preparation_service.compute_pickup_rz_from_min_rect_long_axis",
+        ) as min_rect_rz:
+            plan = service.build_execution_plan(workpiece)
+
+        self.assertEqual(91.0, plan.execution_jobs[0]["pickup_rz"])
+        initial_segment_rz.assert_called_once()
+        min_rect_rz.assert_not_called()
 
     def test_build_execution_plan_accepts_nested_workpiece_contour_payload(self):
         service = _make_service(

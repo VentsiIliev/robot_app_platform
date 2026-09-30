@@ -55,6 +55,8 @@ class VisionTargetResolver:
         work_area_profile_ids: Optional[Dict[str, str]] = None,
         profile_reference_frames: Optional[Dict[str, str]] = None,
         global_reference_frame: str = "calibration",
+        area_registries: Optional[Dict[str, PointRegistry]] = None,
+        area_tcp: Optional[Dict[str, tuple[float, float, list[dict]]]] = None,
     ) -> None:
         self._base = base_transformer
         self._registry = registry
@@ -77,6 +79,8 @@ class VisionTargetResolver:
             for profile, reference in (profile_reference_frames or {}).items()
         }
         self._global_reference_frame = str(global_reference_frame or "calibration").strip().lower()
+        self._area_registries = dict(area_registries or {})
+        self._area_tcp = dict(area_tcp or {})
 
     def resolve(
         self,
@@ -85,8 +89,21 @@ class VisionTargetResolver:
         *,
         frame: str = "",
         mapper: Optional[PlanePoseMapper] = None,
+        area_id: str = "",
     ) -> TargetTransformResult:
         frame_obj = self._frames.get(str(frame or "").strip().lower())
+        area_id = str(area_id or getattr(frame_obj, "work_area_id", "") or "").strip()
+        if frame_obj is None and area_id:
+            frame_obj = next(
+                (candidate for candidate in self._frames.values() if candidate.work_area_id == area_id),
+                None,
+            )
+        area_registry = self._area_registries.get(area_id)
+        if area_registry is not None:
+            point = area_registry.by_name(point.name)
+        tcp_x, tcp_y, tcp_residuals = self._area_tcp.get(
+            area_id, (self._tcp_x, self._tcp_y, self._tcp_rotation_residuals)
+        )
         base_transformer = self._base
         active_mapper = mapper if mapper is not None else (frame_obj.mapper if frame_obj else None)
         if self._calibration_mode == "per_area":
@@ -142,9 +159,9 @@ class VisionTargetResolver:
         # correct cancellation without replacing the automatic camera sweep used
         # by camera targets.
         is_taught_tool = str(point.name).strip().lower() == "tool"
-        sweep_offset_x = float(point.offset_x) if is_taught_tool else self._tcp_x
-        sweep_offset_y = float(point.offset_y) if is_taught_tool else self._tcp_y
-        rotation_residuals = [] if is_taught_tool else self._tcp_rotation_residuals
+        sweep_offset_x = float(point.offset_x) if is_taught_tool else tcp_x
+        sweep_offset_y = float(point.offset_y) if is_taught_tool else tcp_y
+        rotation_residuals = [] if is_taught_tool else tcp_residuals
         final_x, final_y, final_z = command_xyz_from_selected_xyz(
             plane_xy[0],
             plane_xy[1],
@@ -208,7 +225,10 @@ class VisionTargetResolver:
             float(final_z),
         )
 
-        z_correction = frame_obj.get_z_correction(final_xy[0], final_xy[1]) if frame_obj is not None else 0.0
+        z_correction = (
+            frame_obj.get_z_correction(final_xy[0], final_xy[1])
+            if frame_obj is not None and frame else 0.0
+        )
 
         return TargetTransformResult(
             calibration_xy=calibration_xy,
@@ -229,6 +249,13 @@ class VisionTargetResolver:
 
     def get_frame(self, name: str) -> Optional[TargetFrame]:
         return self._frames.get(str(name or "").strip().lower())
+
+    def registry_for_area(self, area_id: str) -> PointRegistry:
+        return self._area_registries.get(str(area_id or "").strip(), self._registry)
+
+    def registry_for_frame(self, frame_name: str) -> PointRegistry:
+        frame = self.get_frame(frame_name)
+        return self.registry_for_area(getattr(frame, "work_area_id", ""))
 
 def _map_plane(xy: Tuple[float, float], mapper: Optional[PlanePoseMapper]) -> Tuple[float, float]:
     if mapper is None:

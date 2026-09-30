@@ -6,12 +6,21 @@ Covers:
 - CameraSettingsApplicationService — delegation to settings_service and vision_service
 """
 import unittest
+from enum import Enum
 from unittest.mock import MagicMock
 
 from src.applications.camera_settings.camera_settings_data import CameraSettingsData
 from src.applications.camera_settings.service.i_camera_settings_service import ICameraSettingsService
 from src.applications.camera_settings.service.stub_camera_settings_service import StubCameraSettingsService
 from src.applications.camera_settings.service.camera_settings_application_service import CameraSettingsApplicationService
+from src.engine.vision.camera_device_settings import (
+    CameraDeviceSpec,
+    CameraDevicesConfig,
+)
+
+
+class _SettingsKey(str, Enum):
+    CAMERAS = "cameras"
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -243,6 +252,69 @@ class TestCameraSettingsApplicationServiceWorkArea(unittest.TestCase):
         self.assertIn("No work area service", msg)
         self.assertEqual(pts, [])
 
+
+class TestCameraSettingsApplicationServiceDevices(unittest.TestCase):
+    def _make_service(self):
+        settings_service = MagicMock()
+        config = CameraDevicesConfig(
+            cameras={
+                "primary_vision": CameraDeviceSpec("/dev/missing-primary", required=True),
+                "auxiliary": CameraDeviceSpec("/dev/missing-auxiliary"),
+            }
+        )
+        settings_service.get.return_value = config
+        vision = _make_vision_service()
+        service = CameraSettingsApplicationService(
+            settings_service=settings_service,
+            vision_service=vision,
+            camera_devices_settings_key=_SettingsKey.CAMERAS,
+        )
+        return service, settings_service, vision
+
+    def test_load_camera_devices_includes_missing_configured_devices(self):
+        service, _, _ = self._make_service()
+
+        state = service.load_camera_devices()
+
+        self.assertEqual(state.assignments["primary_vision"], "/dev/missing-primary")
+        configured = {option.device: option for option in state.options}
+        self.assertFalse(configured["/dev/missing-primary"].connected)
+
+    def test_save_camera_devices_preserves_role_metadata(self):
+        service, settings_service, _ = self._make_service()
+
+        service.save_camera_devices(
+            {
+                "primary_vision": "/dev/new-primary",
+                "auxiliary": "/dev/new-auxiliary",
+            },
+            {"primary_vision": (True, False), "auxiliary": (False, True)},
+        )
+
+        saved = settings_service.save.call_args.args[1]
+        self.assertEqual(saved.get("primary_vision").device, "/dev/new-primary")
+        self.assertTrue(saved.get("primary_vision").required)
+        self.assertTrue(saved.get("primary_vision").flip_horizontal)
+        self.assertTrue(saved.get("auxiliary").flip_vertical)
+
+    def test_save_applies_flips_to_running_camera_owners(self):
+        service, settings_service, _ = self._make_service()
+        apply_flips = MagicMock()
+        service._camera_flip_setter = apply_flips
+
+        service.save_camera_devices(
+            {"primary_vision": "/dev/missing-primary", "auxiliary": "/dev/missing-auxiliary"},
+            {"primary_vision": (True, False), "auxiliary": (False, True)},
+        )
+
+        self.assertEqual(settings_service.save.call_count, 1)
+        self.assertEqual(
+            apply_flips.call_args_list,
+            [
+                unittest.mock.call("primary_vision", True, False),
+                unittest.mock.call("auxiliary", False, True),
+            ],
+        )
 
 if __name__ == "__main__":
     unittest.main()

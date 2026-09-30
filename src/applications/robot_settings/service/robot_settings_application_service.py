@@ -79,12 +79,37 @@ class RobotSettingsApplicationService(IRobotSettingsService):
     def load_targeting_definitions(self):
         if self._load_targeting_definitions_fn is None:
             return None
-        return self._load_targeting_definitions_fn()
+        data = self._load_targeting_definitions_fn()
+        if data is None:
+            return None
+        config = self.load_config()
+        return {
+            **data,
+            "camera_to_tcp_mode": getattr(config, "camera_to_tcp_mode", "global"),
+            "camera_to_tcp_global": {
+                "x_mm": float(config.camera_to_tcp_x_offset),
+                "y_mm": float(config.camera_to_tcp_y_offset),
+                "rotation_residuals": list(config.camera_to_tcp_rotation_residuals),
+            },
+            "camera_to_tcp_by_area": dict(getattr(config, "camera_to_tcp_by_area", {})),
+        }
 
     def save_targeting_definitions(self, targeting) -> None:
         if self._save_targeting_definitions_fn is None:
             return
         self._save_targeting_definitions_fn(targeting)
+        if not targeting.get("camera_to_tcp_changed", False):
+            return
+        config = self.load_config()
+        config.camera_to_tcp_mode = (
+            "per_area" if targeting.get("camera_to_tcp_mode") == "per_area" else "global"
+        )
+        config.camera_to_tcp_by_area = dict(targeting.get("camera_to_tcp_by_area", {}))
+        global_tcp = targeting.get("camera_to_tcp_global", {})
+        if targeting.get("camera_to_tcp_global_changed", False):
+            config.camera_to_tcp_x_offset = float(global_tcp.get("x_mm", config.camera_to_tcp_x_offset))
+            config.camera_to_tcp_y_offset = float(global_tcp.get("y_mm", config.camera_to_tcp_y_offset))
+        self.save_config(config)
 
     def get_current_position(self) -> Optional[List[float]]:
         if self._robot is None:

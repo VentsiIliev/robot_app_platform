@@ -75,6 +75,10 @@ class TestCalibrationArtifactRouting(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "dedicated profile"):
             proxy.begin_calibration()
 
+        # Standalone TCP calibration may read the shared matrix for this area.
+        settings_service.get.return_value.coordinate_calibration_mode = "per_area"
+        self.assertEqual(proxy.matrix_path_for_area("magazine"), "/tmp/global.npy")
+
 
 if __name__ == "__main__":
     unittest.main()

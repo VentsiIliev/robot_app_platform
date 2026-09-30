@@ -319,6 +319,41 @@ class TestCalibrationApplicationServiceDelegation(unittest.TestCase):
         self.assertFalse(ok)
         self.assertIn("System not calibrated", msg)
 
+    def test_camera_tcp_area_requires_per_area_mode(self):
+        calibration_settings_service = MagicMock()
+        calibration_settings_service.load_settings.return_value = _make_calibration_settings()
+        settings_service = MagicMock()
+        settings_service.get.return_value = SimpleNamespace(camera_to_tcp_mode="global")
+        svc = CalibrationApplicationService(
+            _make_vision(), MagicMock(),
+            calibration_settings_service=calibration_settings_service,
+            settings_service=settings_service,
+            work_area_definitions=[WorkAreaDefinition("paint", "Paint", "#000000")],
+        )
+
+        ok, message = svc.validate_camera_tcp_calibration_target("paint")
+
+        self.assertFalse(ok)
+        self.assertIn("Enable per-area", message)
+        self.assertTrue(svc.validate_camera_tcp_calibration_target("global")[0])
+
+    def test_camera_tcp_area_can_use_shared_global_vision_profile(self):
+        calibration_settings_service = MagicMock()
+        settings = _make_calibration_settings()
+        settings.vision.coordinate_calibration_mode = "per_area"
+        settings.vision.work_area_calibration_profiles = {"paint": "global"}
+        calibration_settings_service.load_settings.return_value = settings
+        settings_service = MagicMock()
+        settings_service.get.return_value = SimpleNamespace(camera_to_tcp_mode="per_area")
+        svc = CalibrationApplicationService(
+            _make_vision(), MagicMock(),
+            calibration_settings_service=calibration_settings_service,
+            settings_service=settings_service,
+            work_area_definitions=[WorkAreaDefinition("paint", "Paint", "#000000")],
+        )
+
+        self.assertTrue(svc.validate_camera_tcp_calibration_target("paint")[0])
+
     def test_calibrate_camera_tcp_offset_delegates_to_calibrator_when_calibrated(self):
         calibrator = MagicMock()
         calibrator.calibrate.return_value = (True, "tcp ok")

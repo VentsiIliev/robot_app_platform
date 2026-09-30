@@ -41,6 +41,7 @@ class DeviceControlController(IApplicationController, BackgroundWorker):
         view: DeviceControlView,
         dryer_view=None,
         dryer_controller=None,
+        extra_panels=(),
     ) -> None:
         BackgroundWorker.__init__(self)
         self._model  = model
@@ -48,6 +49,7 @@ class DeviceControlController(IApplicationController, BackgroundWorker):
         self._logger = logging.getLogger(self.__class__.__name__)
         self._dryer_view = dryer_view
         self._dryer_controller = dryer_controller
+        self._extra_panels = tuple(extra_panels)
         self._device_poll_in_flight = False
         self._device_action_in_flight = False
         self._pending_device_enabled: dict[str, bool] = {}
@@ -74,11 +76,19 @@ class DeviceControlController(IApplicationController, BackgroundWorker):
         view.device_enabled_requested.connect(self._on_device_enabled)
 
     def load(self) -> None:
-        self._view.setup_devices(self._model.get_devices())
+        devices = self._model.get_devices()
+        self._view.setup_devices(devices)
+        device_keys = {device.key for device in devices}
         if self._dryer_view is not None:
             self._view.set_device_panel("dryer", self._dryer_view)
         if self._dryer_controller is not None:
             self._dryer_controller.load()
+        for key, label, panel, controller in getattr(self, "_extra_panels", ()):
+            if key in device_keys:
+                self._view.set_device_panel(key, panel)
+            else:
+                self._view.add_custom_tab(key, label, panel)
+            controller.load()
         motors = self._model.get_motors()
         self._view.setup_motors(motors)
 
@@ -100,6 +110,8 @@ class DeviceControlController(IApplicationController, BackgroundWorker):
         self._device_executor.shutdown(wait=False, cancel_futures=True)
         if self._dryer_controller is not None:
             self._dryer_controller.stop()
+        for _key, _label, _panel, controller in getattr(self, "_extra_panels", ()):
+            controller.stop()
         self._stop_threads()
 
     # ── Laser ─────────────────────────────────────────────────────────

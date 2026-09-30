@@ -3,14 +3,14 @@
     {
       "name": "camera",
       "display_name": "camera",
-      "x_mm": 12.83,
-      "y_mm": 59.68
+      "x_mm": 233.35,
+      "y_mm": -11.82
     },
     {
       "name": "tool",
       "display_name": "tool",
-      "x_mm": 98.1,
-      "y_mm": 71.22
+      "x_mm": 312.4,
+      "y_mm": 0.0
     }
   ],
   "FRAMES": [
@@ -35,5 +35,22 @@
       "use_height_correction": true,
       "work_area_id": "vertical_shaft_alignment"
     }
-  ]
+  ],
+  "POINT_MODE": "per_area",
+  "AREA_POINTS": {
+    "magazine": [
+      {
+        "name": "camera",
+        "display_name": "camera",
+        "x_mm": 246.43,
+        "y_mm": -324.43
+      },
+      {
+        "name": "tool",
+        "display_name": "tool",
+        "x_mm": 328.8,
+        "y_mm": -318.9
+      }
+    ]
+  }
 }

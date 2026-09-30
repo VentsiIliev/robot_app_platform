@@ -47,7 +47,7 @@ class PaintWorkpiecePreparationService:
         *,
         enable_matching: bool = True,
         default_settings_override: Optional[dict] = None,
-    ) -> tuple[dict, str]:
+    ) -> tuple[dict | None, str]:
         """Choose between a matched saved workpiece and a raw captured-contour fallback."""
         can_match = bool(enable_matching and self._can_match_fn())
         _logger.info(
@@ -57,7 +57,7 @@ class PaintWorkpiecePreparationService:
             can_match,
         )
         if can_match:
-            ok, payload, _ = self._match_workpiece_fn(captured_contour)
+            ok, payload, match_message = self._match_workpiece_fn(captured_contour)
             if ok and payload:
                 _logger.info(
                     "[PREP] matched workpiece id=%s name=%s",
@@ -68,6 +68,11 @@ class PaintWorkpiecePreparationService:
                 if raw is not None:
                     label = payload.get("workpieceId") or payload.get("name") or "matched workpiece"
                     return raw, f"Executed {label}"
+            _logger.warning(
+                "[PREP] Unknown workpiece; matching did not return saved data: %s",
+                str(match_message or "No match found"),
+            )
+            return None, "Unknown workpiece"
         if not can_match:
             _logger.info("[PREP] Paint workpiece matching is disabled or not available; using captured contour")
         default_settings = (

@@ -53,6 +53,35 @@ class TestTargetingDefinitionsTab(unittest.TestCase):
 
         self.assertEqual(emissions, [])
 
+    def test_per_area_points_and_tcp_can_reuse_global_independently(self):
+        tab = TargetingDefinitionsTab()
+        tab.load({
+            "points": [{"name": "tool", "display_name": "Tool", "x_mm": 1, "y_mm": 2}],
+            "frames": [{"name": "magazine", "work_area_id": "magazine"}],
+            "camera_to_tcp_global": {"x_mm": 3, "y_mm": 4, "rotation_residuals": []},
+        })
+        tab._per_area_points.setChecked(True)
+        tab._point_area.setCurrentIndex(tab._point_area.findData("magazine"))
+        tab._local_points.setChecked(True)
+        tab._points[0]["x_mm"] = 9
+        tab._per_area_tcp.setChecked(True)
+        emissions = []
+        tab.definitions_changed.connect(lambda: emissions.append(True))
+        tab._tcp_area.setCurrentIndex(tab._tcp_area.findData("magazine"))
+        self.assertEqual(emissions, [])
+        tab._local_tcp.setChecked(True)
+        tab._tcp_x.setText("12")
+        tab._on_tcp_value_changed()
+
+        saved = tab.get_values()
+        self.assertEqual(saved["points"][0]["x_mm"], 1)
+        self.assertEqual(saved["area_points"]["magazine"][0]["x_mm"], 9)
+        self.assertEqual(saved["camera_to_tcp_global"]["x_mm"], 3)
+        self.assertEqual(saved["camera_to_tcp_by_area"]["magazine"]["x_mm"], 12)
+        tab._local_points.setChecked(False)
+        self.assertNotIn("magazine", tab.get_values()["area_points"])
+        self.assertIn("magazine", tab.get_values()["camera_to_tcp_by_area"])
+
     def test_local_choice_derives_internal_profile_values(self):
         frame = _apply_calibration_choice(
             {"name": "magazine", "work_area_id": "magazine"},

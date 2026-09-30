@@ -1,4 +1,5 @@
 import unittest
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 from src.applications.robot_settings.service.robot_settings_application_service import RobotSettingsApplicationService
@@ -24,6 +25,29 @@ class TestGetCurrentPosition(unittest.TestCase):
 
     def test_returns_none_when_no_robot(self):
         self.assertIsNone(_make_svc().get_current_position())
+
+    def test_area_tcp_mode_change_preserves_newer_global_calibration(self):
+        settings = MagicMock()
+        config = SimpleNamespace(
+            camera_to_tcp_mode="global", camera_to_tcp_by_area={},
+            camera_to_tcp_x_offset=42.0, camera_to_tcp_y_offset=43.0,
+        )
+        settings.get.return_value = config
+        service = RobotSettingsApplicationService(
+            settings,
+            config_key=CommonSettingsID.ROBOT_CONFIG,
+            movement_groups_key=CommonSettingsID.MOVEMENT_GROUPS,
+            calibration_key=CommonSettingsID.ROBOT_CALIBRATION,
+            save_targeting_definitions_fn=lambda data: None,
+        )
+        service.save_targeting_definitions({
+            "camera_to_tcp_changed": True,
+            "camera_to_tcp_mode": "per_area",
+            "camera_to_tcp_global": {"x_mm": 1.0, "y_mm": 2.0},
+            "camera_to_tcp_by_area": {"paint": {"x_mm": 10.0, "y_mm": 11.0}},
+        })
+        self.assertEqual((config.camera_to_tcp_x_offset, config.camera_to_tcp_y_offset), (42.0, 43.0))
+        self.assertEqual(config.camera_to_tcp_by_area["paint"]["x_mm"], 10.0)
 
     def test_delegates_to_robot(self):
         robot = MagicMock()

@@ -34,6 +34,38 @@ class TestUnmatchedSecondPass(unittest.TestCase):
         self.assertEqual(scaled.paint_process_acceleration_scale_percent, 10.0)
         self.assertEqual(config.contact_staging.attach_acc_percent, 5.0)
 
+    def test_process_acceleration_scale_applies_to_plate_profile_dictionaries(self) -> None:
+        config = replace(
+            PaintProcessConfig(),
+            paint_process_acceleration_scale_percent=20.0,
+            dropoff=replace(
+                PaintProcessConfig().dropoff,
+                plate_motion_profiles=[{
+                    "key": "entry_gate",
+                    "vel_percent": 80.0,
+                    "acc_percent": 50.0,
+                    "motion_type": "ptp",
+                    "blendR": 20.0,
+                }],
+                plate_next_cycle_waypoints=[{
+                    "position": [1.0, 2.0, 3.0, 180.0, 0.0, 0.0],
+                    "vel_percent": 60.0,
+                    "acc_percent": 40.0,
+                    "motion_type": "ptp",
+                    "blendR": 0.0,
+                }],
+            ),
+        )
+
+        scaled = scale_paint_process_accelerations(config)
+
+        self.assertEqual(80.0, scaled.dropoff.plate_motion_profiles[0]["vel_percent"])
+        self.assertEqual(10.0, scaled.dropoff.plate_motion_profiles[0]["acc_percent"])
+        self.assertEqual(60.0, scaled.dropoff.plate_next_cycle_waypoints[0]["vel_percent"])
+        self.assertEqual(8.0, scaled.dropoff.plate_next_cycle_waypoints[0]["acc_percent"])
+        self.assertEqual(50.0, config.dropoff.plate_motion_profiles[0]["acc_percent"])
+        self.assertEqual(40.0, config.dropoff.plate_next_cycle_waypoints[0]["acc_percent"])
+
     def test_config_roundtrip_preserves_second_pass_overrides(self) -> None:
         config = replace(
             PaintProcessConfig(),

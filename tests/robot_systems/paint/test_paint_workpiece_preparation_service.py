@@ -133,7 +133,7 @@ class TestPaintWorkpiecePreparationService(unittest.TestCase):
         self.assertEqual(raw["velocity"], "10")
         self.assertEqual(raw["acceleration"], "10")
 
-    def test_prepare_workpiece_falls_back_when_match_returns_no_payload(self):
+    def test_prepare_workpiece_stops_when_match_returns_no_payload(self):
         service = PaintWorkpiecePreparationService(
             can_match_fn=lambda: True,
             match_workpiece_fn=lambda contour: (False, None, "no match"),
@@ -141,8 +141,8 @@ class TestPaintWorkpiecePreparationService(unittest.TestCase):
 
         raw, description = service.prepare_workpiece(_square(2.0), frame=None)
 
-        self.assertEqual(description, "Executed captured contour")
-        self.assertEqual(raw["workpieceId"], "captured")
+        self.assertEqual(description, "Unknown workpiece")
+        self.assertIsNone(raw)
 
     def test_prepare_workpiece_uses_matched_contour_branch(self):
         payload = _matched_payload()
@@ -158,7 +158,7 @@ class TestPaintWorkpiecePreparationService(unittest.TestCase):
         self.assertEqual(raw["contour"], {"contour": [[0.0, 0.0], [10.0, 0.0], [10.0, 10.0], [0.0, 10.0]]})
         self.assertEqual(description, "Executed saved-1")
 
-    def test_prepare_workpiece_falls_back_when_matched_raw_has_no_contour(self):
+    def test_prepare_workpiece_stops_when_matched_raw_has_no_contour(self):
         payload = _matched_payload()
         payload["raw"].pop("contour")
         service = PaintWorkpiecePreparationService(
@@ -168,10 +168,10 @@ class TestPaintWorkpiecePreparationService(unittest.TestCase):
 
         raw, description = service.prepare_workpiece(_square(4.0), frame=None)
 
-        self.assertEqual(description, "Executed captured contour")
-        self.assertEqual(raw["workpieceId"], "captured")
+        self.assertEqual(description, "Unknown workpiece")
+        self.assertIsNone(raw)
 
-    def test_prepare_workpiece_returns_captured_contour_when_matched_raw_empty(self):
+    def test_prepare_workpiece_stops_when_matched_raw_is_empty(self):
         service = PaintWorkpiecePreparationService(
             can_match_fn=lambda: True,
             match_workpiece_fn=lambda contour: (True, {"workpieceId": "saved", "raw": {}}, "matched"),
@@ -179,8 +179,8 @@ class TestPaintWorkpiecePreparationService(unittest.TestCase):
 
         raw, description = service.prepare_workpiece(_square(2.0), frame=None)
 
-        self.assertEqual(description, "Executed captured contour")
-        self.assertEqual(raw["workpieceId"], "captured")
+        self.assertEqual(description, "Unknown workpiece")
+        self.assertIsNone(raw)
 
     def test_resolve_frame_size_uses_defaults_for_missing_shape(self):
         class _BadFrame:

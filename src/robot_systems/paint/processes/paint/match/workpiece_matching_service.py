@@ -18,12 +18,14 @@ class PaintWorkpieceMatchingService(IWorkpieceMatcher):
         load_saved_workpiece_fn: Optional[Callable[[str], Optional[dict]]] = None,
         run_matching_fn: Optional[Callable[[list, list], tuple]] = None,
         capture_snapshot_service=None,
+        debug_dump_dir: str | None = None,
     ) -> None:
         """Store repository, matching, and snapshot dependencies for paint matching."""
         self._list_saved_workpieces_fn = list_saved_workpieces_fn
         self._load_saved_workpiece_fn = load_saved_workpiece_fn
         self._run_matching_fn = run_matching_fn
         self._capture_snapshot_service = capture_snapshot_service
+        self._debug_dump_dir = debug_dump_dir
         self._last_snapshot: VisionCaptureSnapshot | None = None
 
     def can_match_saved_workpieces(self) -> bool:
@@ -50,6 +52,7 @@ class PaintWorkpieceMatchingService(IWorkpieceMatcher):
             )
             workpieces = list((result or {}).get("workpieces", []))
             confidences = list((result or {}).get("mlConfidences", []))
+            self._save_match_diagnostics(contour, candidates, matched=bool(workpieces))
             if not workpieces:
                 return False, None, f"No match found. Saved workpieces checked: {len(candidates)}"
 
@@ -72,6 +75,24 @@ class PaintWorkpieceMatchingService(IWorkpieceMatcher):
         except Exception as exc:
             _logger.exception("Paint workpiece matching failed")
             return False, None, str(exc)
+
+    def _save_match_diagnostics(self, contour, candidates: list, *, matched: bool) -> None:
+        if not self._debug_dump_dir:
+            return
+        try:
+            from src.robot_systems.paint.processes.paint.match.matching_diagnostics import (
+                save_matching_diagnostics,
+            )
+
+            path = save_matching_diagnostics(
+                self._debug_dump_dir,
+                contour,
+                candidates,
+                matched=matched,
+            )
+            _logger.info("[MATCH_DEBUG] Saved workpiece matching diagnostics: %s", path)
+        except Exception:
+            _logger.exception("[MATCH_DEBUG] Failed to save workpiece matching diagnostics")
 
     def run_matching(self):
         """Run full-scene matching using a fresh snapshot, mirroring the shared matching workflow."""

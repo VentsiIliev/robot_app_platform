@@ -20,6 +20,16 @@ class CameraSettingsModel(IApplicationModel):
     def set_raw_mode(self, enabled: bool) -> None:
         self._service.set_raw_mode(enabled)
 
+    def load_camera_devices(self):
+        return self._service.load_camera_devices()
+
+    def save_camera_devices(
+        self,
+        assignments: dict[str, str],
+        flips: dict[str, tuple[bool, bool]],
+    ) -> None:
+        self._service.save_camera_devices(assignments, flips)
+
     def save_work_area(self, area_type: str, normalized_points) -> tuple:
         key = area_type.removesuffix("_area") if area_type.endswith("_area") else area_type
         w = self._settings.width or 1

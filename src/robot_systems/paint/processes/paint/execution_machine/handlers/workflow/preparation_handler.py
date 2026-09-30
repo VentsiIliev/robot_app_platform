@@ -32,6 +32,12 @@ def handle_prepare_workpiece(ctx: PaintExecutionContext) -> PaintExecutionState:
         enable_matching=bool(ctx.process_config.enable_workpiece_matching),
         default_settings_override=_cycle_default_paint_settings(ctx),
     )
+    if str(ctx.workpiece_description).startswith("Unknown workpiece"):
+        service.publish_dashboard_message(
+            "warning",
+            "Unknown Workpiece",
+            "No saved workpiece matched the captured contour. Paint execution was stopped.",
+        )
     service._log_phase_timing("workpiece_preparation", phase_start, cycle=ctx.cycle_index)
     if ctx.should_stop():
         ctx.set_result(False, "Paint process stopped")

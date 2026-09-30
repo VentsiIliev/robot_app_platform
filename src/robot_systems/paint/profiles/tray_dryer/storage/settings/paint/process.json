@@ -19,7 +19,7 @@
   "default_paint_velocity_percent": 100.0,
   "default_paint_acceleration_percent": 100.0,
   "paint_process_acceleration_scale_percent": 100.0,
-  "default_paint_offset_mm": 0.0,
+  "default_paint_offset_mm": -5.0,
   "unmatched_paint_pass_count": 1,
   "unmatched_second_pass": {
     "use_pass_1_settings": true,
@@ -32,9 +32,9 @@
   "pause_dashboard_live_view_after_capture": true,
   "apply_camera_to_tcp_for_pickup": true,
   "pickup_motion": {
-    "approach_offset_mm": 10.0,
+    "approach_offset_mm": 20.0,
     "contact_offset_mm": 10.0,
-    "initial_lift_clearance_mm": 10.0,
+    "initial_lift_clearance_mm": 20.0,
     "approach_vel_percent": 100.0,
     "approach_acc_percent": 100.0,
     "approach_motion_type": "ptp",
@@ -64,7 +64,7 @@
     "calibration_contact_execution_mode": "ros_managed",
     "magazine_contact_execution_mode": "ros_managed",
     "servo_contact_linear_mm_s": 10.0,
-    "servo_contact_min_z_mm": 0.0,
+    "servo_contact_min_z_mm": 6.0,
     "servo_contact_fast_lin_velocity_percent": 20.0,
     "servo_contact_fast_lin_acceleration_percent": 60.0,
     "servo_contact_timeout_s": 7.0,
@@ -85,8 +85,8 @@
     "attach_paint_axis_offset_mm": 30.0,
     "attach_perpendicular_axis_offset_mm": -30.0,
     "detach_z_offset_mm": 0.0,
-    "detach_paint_axis_offset_mm": 30.0,
-    "detach_perpendicular_axis_offset_mm": -30.0
+    "detach_paint_axis_offset_mm": -100.0,
+    "detach_perpendicular_axis_offset_mm": -100.0
   },
   "edge_cleanup": {
     "enabled_after_xz_ry": false,
@@ -119,36 +119,36 @@
     "release_align_blendR": 0.0,
     "plate_corners": [
       [
-        -697.854,
-        -301.722,
-        23.0,
-        -179.976,
-        0.003,
-        -0.029
+        -441.868,
+        -437.007,
+        13.0,
+        -179.93,
+        -0.065,
+        0.088
       ],
       [
-        -427.845,
-        -301.729,
-        23.0,
-        -179.974,
-        0.006,
-        -0.025
+        -211.987,
+        -437.128,
+        13.0,
+        -179.898,
+        -0.035,
+        0.164
       ],
       [
-        -427.675,
-        158.05,
-        23.0,
-        -179.971,
-        0.006,
-        -0.023
+        -211.867,
+        79.338,
+        13.0,
+        -179.791,
+        0.046,
+        0.099
       ],
       [
-        -654.348,
-        158.013,
-        23.0,
-        -179.966,
-        0.001,
-        -0.028
+        -414.72,
+        79.043,
+        13.0,
+        -179.745,
+        0.0,
+        0.0
       ]
     ],
     "plate_release_z_offset_mm": 0.0,
@@ -162,19 +162,19 @@
     "plate_robot_tool": 1,
     "plate_robot_user": 1,
     "plate_passage_gate_pose": [
-      -392.1,
-      3.917,
-      150.0,
-      -179.999,
+      -192.215,
+      -93.551,
+      232.0,
+      -179.99,
       0.0,
       0.0
     ],
     "plate_use_entry_gate_as_detach_pose": true,
     "plate_exit_gate_pose": [
-      -392.1,
-      3.917,
-      270.0,
-      179.99,
+      -192.221,
+      -93.581,
+      309.995,
+      -179.99,
       0.0,
       0.0
     ],
@@ -182,10 +182,10 @@
     "plate_next_cycle_waypoints": [
       {
         "position": [
-          -76.606,
-          83.209,
-          270.0,
-          179.99,
+          134.258,
+          14.187,
+          310.0,
+          -179.99,
           0.0,
           0.0
         ],
@@ -196,10 +196,10 @@
       },
       {
         "position": [
-          2.691,
-          -232.298,
-          270.0,
-          179.99,
+          240.617,
+          -265.993,
+          310.0,
+          -179.99,
           0.0,
           0.0
         ],
@@ -210,15 +210,15 @@
       }
     ],
     "plate_next_cycle_midpoint_pose": [
-      -76.606,
-      83.209,
-      270.0,
-      179.99,
+      134.258,
+      14.187,
+      310.0,
+      -179.99,
       0.0,
       0.0
     ],
     "plate_use_center_waypoint": false,
-    "plate_auto_center_near_corner": false,
+    "plate_auto_center_near_corner": true,
     "plate_distribute_unwind": true,
     "plate_motion_profiles": [
       {
@@ -305,7 +305,7 @@
     "transfer_to_calibration_blendR": 0.0,
     "release_z_mm": 50.0,
     "camera_settle_s": 0.1,
-    "release_settle_s": 0.2
+    "release_settle_s": 0.5
   },
   "safe_travel": {
     "enabled": false,

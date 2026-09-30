@@ -1,0 +1,24 @@
+{
+  "__meta__": {
+    "display_name": "English"
+  },
+  "CameraDevicesWidget": {
+    "Camera Assignments": "Camera Assignments",
+    "Live Preview": "Live Preview",
+    "Primary vision": "Primary vision",
+    "Auxiliary": "Auxiliary",
+    "Flip horizontally": "Flip horizontally",
+    "Flip vertically": "Flip vertically",
+    "Refresh devices": "Refresh devices",
+    "Save assignments": "Save assignments",
+    "Preview primary vision": "Preview primary vision",
+    "Preview auxiliary": "Preview auxiliary",
+    "connected": "connected",
+    "missing": "missing",
+    "Camera assignments loaded.": "Camera assignments loaded.",
+    "No frame available from the selected camera.": "No frame available from the selected camera.",
+    "Camera settings saved. Flip changes are live; device changes require a restart.": "Camera settings saved. Flip changes are live; device changes require a restart.",
+    "Assign both camera roles before saving.": "Assign both camera roles before saving.",
+    "Primary and auxiliary cameras must be different devices.": "Primary and auxiliary cameras must be different devices."
+  }
+}

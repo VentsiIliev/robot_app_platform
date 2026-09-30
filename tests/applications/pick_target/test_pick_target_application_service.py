@@ -8,6 +8,28 @@ from src.applications.pick_target.service.pick_target_application_service import
 
 
 class TestPickTargetApplicationService(unittest.TestCase):
+    def test_move_uses_live_robot_config_after_settings_object_is_replaced(self):
+        robot = MagicMock()
+        robot.move_ptp.return_value = True
+        current_config = SimpleNamespace(robot_tool=2, robot_user=1)
+
+        service = PickTargetApplicationService(
+            vision_service=None,
+            capture_snapshot_service=None,
+            robot_service=robot,
+            resolver=None,
+            robot_config=SimpleNamespace(robot_tool=2, robot_user=1),
+            robot_config_getter=lambda: current_config,
+            navigation=None,
+        )
+
+        current_config.robot_tool = 1
+        current_config.robot_user = 3
+
+        self.assertTrue(service.move_to(1.0, 2.0, 3.0, 180.0, 0.0, 0.0))
+        self.assertEqual(1, robot.move_ptp.call_args.kwargs["tool"])
+        self.assertEqual(3, robot.move_ptp.call_args.kwargs["user"])
+
     def test_transform_point_uses_live_resolver_getter(self):
         registry = MagicMock()
         target_point = object()

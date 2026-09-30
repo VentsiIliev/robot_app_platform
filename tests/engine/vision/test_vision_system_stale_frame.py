@@ -15,6 +15,29 @@ from src.engine.vision.implementation.VisionSystem.core.camera.frame_grabber imp
 
 
 class TestVisionSystemStaleFrame(unittest.TestCase):
+    def test_frame_grabber_applies_updated_horizontal_flip_to_next_frame(self):
+        frame = np.array([[1, 2], [3, 4]], dtype=np.uint8)
+        camera = MagicMock()
+
+        def capture(*, timeout):
+            time.sleep(0.01)
+            return frame.copy()
+
+        camera.capture.side_effect = capture
+        grabber = FrameGrabber(camera)
+        grabber.start()
+        try:
+            original = grabber.get_latest_snapshot_since(0, timeout_s=1.0)
+            self.assertIsNotNone(original)
+            np.testing.assert_array_equal(original.frame, frame)
+
+            grabber.set_flips(True, False)
+            flipped = grabber.get_latest_snapshot_since(original.sequence, timeout_s=1.0)
+            self.assertIsNotNone(flipped)
+            np.testing.assert_array_equal(flipped.frame, np.array([[2, 1], [4, 3]], dtype=np.uint8))
+        finally:
+            grabber.stop()
+
     def test_frame_grabber_pause_clears_frames_and_resume_keeps_camera_open(self):
         camera = MagicMock()
         grabber = FrameGrabber(camera)

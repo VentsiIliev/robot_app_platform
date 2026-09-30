@@ -188,6 +188,8 @@ class CameraTcpOffsetCalibrationService:
         robot_tool: int,
         robot_user: int,
         on_offsets_saved: Callable[[], None] | None = None,
+        target_area_id_getter: Callable[[], str] | None = None,
+        matrix_path_getter: Callable[[str], str] | None = None,
     ):
         self._vision = vision_service
         self._robot = robot_service
@@ -199,6 +201,8 @@ class CameraTcpOffsetCalibrationService:
         self._tool = robot_tool
         self._user = robot_user
         self._on_offsets_saved = on_offsets_saved
+        self._target_area_id_getter = target_area_id_getter
+        self._matrix_path_getter = matrix_path_getter
         self._stop_event = threading.Event()
         self._transformer = HomographyResidualTransformer(vision_service.camera_to_robot_matrix_path)
         self._image_to_robot_mapping: Optional[_StandaloneTcpAxisCalibration] = None
@@ -212,6 +216,16 @@ class CameraTcpOffsetCalibrationService:
 
     def calibrate(self) -> tuple[bool, str]:
         self._refresh_runtime_settings()
+        try:
+            self._calibration_area_id = (
+                self._target_area_id_getter() if self._target_area_id_getter else "global"
+            )
+            if self._matrix_path_getter is not None:
+                self._transformer = HomographyResidualTransformer(
+                    self._matrix_path_getter(self._calibration_area_id)
+                )
+        except (KeyError, ValueError, RuntimeError) as exc:
+            return False, str(exc)
         cfg = self._calibration_settings.camera_tcp_offset
         self._stop_event.clear()
         self._transformer.reload()
@@ -452,9 +466,9 @@ class CameraTcpOffsetCalibrationService:
                     return False, "Camera-to-TCP post-solve verification failed"
                 rotation_residuals = verified
 
-            self._robot_config.camera_to_tcp_x_offset = offset_x
-            self._robot_config.camera_to_tcp_y_offset = offset_y
-            self._robot_config.camera_to_tcp_rotation_residuals = rotation_residuals
+            self._robot_config.save_camera_to_tcp_for_area(
+                self._calibration_area_id, offset_x, offset_y, rotation_residuals
+            )
             self._settings.save(self._robot_config_key, self._robot_config)
             if self._on_offsets_saved is not None:
                 try:

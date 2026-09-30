@@ -1,0 +1,24 @@
+{
+  "__meta__": {
+    "display_name": "Български"
+  },
+  "CameraDevicesWidget": {
+    "Camera Assignments": "Разпределение на камерите",
+    "Live Preview": "Преглед на живо",
+    "Primary vision": "Основна камера",
+    "Auxiliary": "Помощна камера",
+    "Flip horizontally": "Обърни хоризонтално",
+    "Flip vertically": "Обърни вертикално",
+    "Refresh devices": "Обнови устройствата",
+    "Save assignments": "Запази разпределението",
+    "Preview primary vision": "Преглед на основната камера",
+    "Preview auxiliary": "Преглед на помощната камера",
+    "connected": "свързана",
+    "missing": "липсва",
+    "Camera assignments loaded.": "Разпределението на камерите е заредено.",
+    "No frame available from the selected camera.": "Няма наличен кадър от избраната камера.",
+    "Camera settings saved. Flip changes are live; device changes require a restart.": "Настройките на камерите са запазени. Обръщането се прилага веднага; промяната на устройство изисква рестарт.",
+    "Assign both camera roles before saving.": "Задайте и двете роли на камерите преди запазване.",
+    "Primary and auxiliary cameras must be different devices.": "Основната и помощната камера трябва да са различни устройства."
+  }
+}

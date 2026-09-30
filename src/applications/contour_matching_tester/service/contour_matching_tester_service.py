@@ -1,4 +1,4 @@
-from typing import List, Optional, Tuple
+from typing import List, Optional, Protocol, Tuple
 import logging
 
 import numpy as np
@@ -18,9 +18,17 @@ def _close_contour(contour: np.ndarray) -> np.ndarray:
     return pts.reshape(-1, 1, 2)
 
 
+class MatchingWorkpieceStore(Protocol):
+    """Storage operations shared by glue and paint matching tests."""
+
+    def list_all(self) -> list[dict]: ...
+    def load(self, storage_id: str): ...
+    def get_thumbnail_bytes(self, storage_id: str) -> Optional[bytes]: ...
+
+
 class ContourMatchingTesterService(IContourMatchingTesterService):
 
-    def __init__(self, vision_service=None, workpiece_service=None, capture_snapshot_service: ICaptureSnapshotService | None = None):
+    def __init__(self, vision_service=None, workpiece_service: MatchingWorkpieceStore | None = None, capture_snapshot_service: ICaptureSnapshotService | None = None):
         self._vision_service    = vision_service
         self._workpiece_service = workpiece_service
         self._capture_snapshot_service = capture_snapshot_service
@@ -60,12 +68,5 @@ class ContourMatchingTesterService(IContourMatchingTesterService):
     def get_thumbnail(self, workpiece_index: int) -> Optional[bytes]:
         if workpiece_index < 0 or workpiece_index >= len(self._metadata):
             return None
-        thumb_path = self._metadata[workpiece_index].get("thumbnail_path")
-        if not thumb_path:
-            return None
-        try:
-            with open(thumb_path, "rb") as f:
-                return f.read()
-        except Exception as exc:
-            _logger.warning("Could not read thumbnail at %s: %s", thumb_path, exc)
-            return None
+        storage_id = self._metadata[workpiece_index]["id"]
+        return self._workpiece_service.get_thumbnail_bytes(storage_id)

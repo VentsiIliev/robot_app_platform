@@ -12,3 +12,14 @@ class PaintDashboardLiveViewEvent:
 
 class PaintDashboardLiveViewTopics:
     STATE = "paint/dashboard/live-view/state"
+
+
+@dataclass(frozen=True)
+class PaintDashboardMessageEvent:
+    level: str
+    title: str
+    message: str
+
+
+class PaintDashboardMessageTopics:
+    MESSAGE = "paint/dashboard/message"

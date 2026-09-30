@@ -87,7 +87,7 @@ class PaintExecutionTransitions:
             S.BUILD_EXECUTION_PLAN: {S.EXECUTE_PAINT, S.PICKUP, S.STOPPED, S.ERROR},
             S.EXECUTE_PAINT: {S.COMPLETED, *active},
             S.PICKUP: {S.PAINT_CONTACT, S.COMPLETED, *active},
-            S.PAINT_CONTACT: {S.EDGE_CLEANUP, *active},
+            S.PAINT_CONTACT: {S.EDGE_CLEANUP, S.PREPARE_DROPOFF, *active},
             S.EDGE_CLEANUP: {S.PREPARE_DROPOFF, *active},
             S.PREPARE_DROPOFF: {S.DROPOFF, *active},
             S.DROPOFF: {S.POST_RETURN, *active},

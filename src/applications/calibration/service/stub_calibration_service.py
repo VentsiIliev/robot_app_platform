@@ -68,6 +68,9 @@ class StubCalibrationService(ICalibrationService):
         _logger.info("Stub: calibrate_camera_tcp_offset")
         return True, "Stub: camera TCP offset calibrated"
 
+    def validate_camera_tcp_calibration_target(self, area_id: str) -> tuple[bool, str]:
+        return True, f"Stub: camera-to-TCP target selected ({area_id})"
+
     def calibrate_camera_z_shift(
         self,
         marker_id: int,

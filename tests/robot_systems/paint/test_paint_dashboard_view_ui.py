@@ -572,10 +572,35 @@ class TestPaintDashboardUi(unittest.TestCase):
         self.assertIs(view._expanded_tabs.widget(0), view._plate_layout)
         self.assertIs(
             view._expanded_tabs.widget(1),
-            view._dashboard.trajectory_widget,
+            view._camera_page,
         )
+        self.assertIs(view._dashboard.trajectory_widget.parentWidget(), view._camera_page)
         self.assertEqual("Tray", view._expanded_tabs.tabToolTip(0))
         self.assertEqual("Camera", view._expanded_tabs.tabToolTip(1))
+
+    def test_camera_selector_offers_configured_roles_and_emits_selection(self) -> None:
+        view = PaintDashboardView(
+            config=PaintDashboardConfig(),
+            action_buttons=PAINT_DASHBOARD_ACTIONS,
+            cards=[],
+            auxiliary_toggles=[],
+            camera_roles=("primary_vision", "auxiliary"),
+            ui_config=PaintDashboardUiConfig(
+                show_camera_preview=False,
+                show_tray_camera_tab=True,
+            ),
+        )
+        selected = []
+        view.camera_selected.connect(selected.append)
+
+        self.assertEqual(
+            [action.data() for action in view._camera_menu.actions()],
+            ["primary_vision", "auxiliary"],
+        )
+        view._camera_menu.triggered.emit(view._camera_menu.actions()[1])
+
+        self.assertEqual(selected, ["auxiliary"])
+        self.assertIn("Auxiliary", view._camera_selector.text())
 
     def test_camera_disabled_moves_status_cards_to_exclusive_compact_rail(self) -> None:
         view = PaintDashboardView(
@@ -989,6 +1014,32 @@ class TestPaintDashboardUi(unittest.TestCase):
         self.assertEqual(view._messages[0]["title"], "Info")
         self.assertEqual(view._messages[1]["level"], "warning")
         self.assertEqual(view._messages[1]["message"], "blocked")
+
+    def test_warning_dialog_uses_shared_styled_message_box_and_keeps_queue_entry(self) -> None:
+        with (
+            patch(
+                "src.robot_systems.paint.applications.dashboard.view.paint_dashboard_view.DashboardWidget",
+                _FakeDashboardWidget,
+            ),
+            patch(
+                "src.robot_systems.paint.applications.dashboard.view.paint_dashboard_view.show_styled_warning"
+            ) as show_warning,
+        ):
+            view = PaintDashboardView(
+                config=SimpleNamespace(preview_aux_rows=1, preview_aux_cols=1),
+                action_buttons=[],
+                cards=[],
+            )
+
+            view.show_warning_dialog("Unknown Workpiece", "Paint execution was stopped.")
+
+        show_warning.assert_called_once_with(
+            view,
+            "Unknown Workpiece",
+            "Paint execution was stopped.",
+        )
+        self.assertEqual(view._messages[-1]["level"], "warning")
+        self.assertEqual(view._messages[-1]["title"], "Unknown Workpiece")
 
     def test_dashboard_message_queue_keeps_latest_fifo_rows(self) -> None:
         with patch(

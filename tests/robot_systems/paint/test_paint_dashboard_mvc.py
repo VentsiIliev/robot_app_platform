@@ -4,6 +4,8 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import ANY, MagicMock, patch
 
+from PyQt6.QtWidgets import QApplication
+
 from src.robot_systems.paint.applications.dashboard.controller.paint_dashboard_controller import (
     PaintDashboardController,
 )
@@ -14,9 +16,12 @@ from src.robot_systems.paint.applications.dashboard.model.paint_dashboard_model 
 from src.robot_systems.paint.processes.paint.dashboard_live_view_events import (
     PaintDashboardLiveViewEvent,
     PaintDashboardLiveViewTopics,
+    PaintDashboardMessageEvent,
+    PaintDashboardMessageTopics,
 )
 from src.shared_contracts.events.robot_events import RobotTopics
 from src.shared_contracts.events.shell_events import ApplicationShortcut, ShellTopics
+from src.shared_contracts.events.vision_events import CameraTopics
 
 
 def _signal() -> MagicMock:
@@ -98,6 +103,34 @@ class TestPaintDashboardController(unittest.TestCase):
         view.destroyed = _signal()
         view.isVisible.return_value = True
         return view
+
+    def test_camera_selection_subscribes_to_selected_topic_and_stops_on_hide(self) -> None:
+        app = QApplication.instance() or QApplication([])
+        self.assertIsNotNone(app)
+        model = MagicMock()
+        view = self._make_view()
+        view.is_camera_feed_visible.return_value = True
+        broker = MagicMock()
+        with (
+            patch.object(PaintDashboardController, "_init_dashboard_camera_feed"),
+            patch.object(PaintDashboardController, "_init_dashboard_process_state"),
+        ):
+            controller = PaintDashboardController(model, view, broker)
+        controller._active = True
+        controller._on_camera_feed_visible(True)
+
+        controller._on_camera_selected("auxiliary")
+        topic = CameraTopics.frame("auxiliary")
+        broker.subscribe.assert_called_once_with(topic, controller._on_auxiliary_camera_frame)
+        self.assertFalse(controller._dashboard_camera_feed_updates_enabled())
+
+        controller._on_auxiliary_camera_frame({"image": "aux-frame"})
+        controller._show_selected_camera_frame()
+        view.set_trajectory_image.assert_called_once_with({"image": "aux-frame"})
+
+        controller._on_camera_feed_visible(False)
+        broker.unsubscribe.assert_called_once_with(topic, controller._on_auxiliary_camera_frame)
+        self.assertFalse(controller._camera_display_timer.isActive())
 
     def test_compact_dashboard_starts_without_destination_semantics(self):
         model = MagicMock()
@@ -283,6 +316,7 @@ class TestPaintDashboardController(unittest.TestCase):
             patch.object(PaintDashboardController, "_subscribe_dashboard_process_state") as sub_process,
             patch.object(PaintDashboardController, "_subscribe_dashboard_robot_state") as sub_robot,
             patch.object(PaintDashboardController, "_subscribe_dashboard_live_view_state") as sub_live_view,
+            patch.object(PaintDashboardController, "_subscribe_dashboard_messages") as sub_messages,
             patch.object(PaintDashboardController, "_unsubscribe_all") as unsub_all,
         ):
             controller = PaintDashboardController(model, view, MagicMock())
@@ -293,6 +327,7 @@ class TestPaintDashboardController(unittest.TestCase):
             sub_process.assert_called_once_with()
             sub_robot.assert_called_once_with()
             sub_live_view.assert_called_once_with()
+            sub_messages.assert_called_once_with()
             view.apply_dashboard_state.assert_called_once_with(state)
             view.destroyed.connect.assert_called_once_with(controller.stop)
 
@@ -503,6 +538,43 @@ class TestPaintDashboardController(unittest.TestCase):
         controller._subscribe.assert_called_once_with(
             PaintDashboardLiveViewTopics.STATE,
             controller._on_dashboard_live_view_state_raw,
+        )
+
+    def test_unknown_workpiece_message_is_forwarded_as_dashboard_warning(self) -> None:
+        view = self._make_view()
+        with (
+            patch.object(PaintDashboardController, "_init_dashboard_camera_feed"),
+            patch.object(PaintDashboardController, "_init_dashboard_process_state"),
+        ):
+            controller = PaintDashboardController(MagicMock(), view, MagicMock())
+        controller._dashboard_notice_bridge.warning_ready = MagicMock()
+
+        controller._on_dashboard_message_raw(
+            PaintDashboardMessageEvent(
+                level="warning",
+                title="Unknown Workpiece",
+                message="No saved workpiece matched the captured contour.",
+            )
+        )
+
+        controller._dashboard_notice_bridge.warning_ready.emit.assert_called_once_with(
+            "Unknown Workpiece",
+            "No saved workpiece matched the captured contour.",
+        )
+
+    def test_subscribe_dashboard_messages_uses_paint_message_topic(self) -> None:
+        with (
+            patch.object(PaintDashboardController, "_init_dashboard_camera_feed"),
+            patch.object(PaintDashboardController, "_init_dashboard_process_state"),
+        ):
+            controller = PaintDashboardController(MagicMock(), self._make_view(), MagicMock())
+        controller._subscribe = MagicMock()
+
+        controller._subscribe_dashboard_messages()
+
+        controller._subscribe.assert_called_once_with(
+            PaintDashboardMessageTopics.MESSAGE,
+            controller._on_dashboard_message_raw,
         )
 
     def test_dashboard_live_view_state_freezes_capture_frame_and_blocks_live_updates(self) -> None:

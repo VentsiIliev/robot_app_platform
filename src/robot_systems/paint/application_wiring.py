@@ -18,10 +18,10 @@ _PAINT_PROCESS = PAINT_PROCESS_CONFIG
 _PAINT_EXECUTION_TARGET_POINT = "tool"
 
 
-def _effective_camera_to_tcp_offsets(robot_system, robot_config=None) -> tuple[float, float]:
+def _effective_camera_to_tcp_offsets(robot_system, robot_config=None, area_id: str = "") -> tuple[float, float]:
     resolver = getattr(robot_system, "_get_camera_to_tcp_offsets", None)
     if callable(resolver):
-        return resolver()
+        return resolver(area_id) if area_id else resolver()
     config = robot_config or getattr(robot_system, "_robot_config", None)
     return (
         float(getattr(config, "camera_to_tcp_x_offset", 0.0)),
@@ -133,13 +133,15 @@ def _validate_active_capture_area(robot_system, area_id: str, robot_pose) -> tup
     if not group_name:
         return False, f"Active work area '{area_id}' has no declared capture movement group."
 
-    if robot_pose is None or len(robot_pose) < 6:
-        return False, f"Cannot verify robot pose for active work area '{area_id}'."
-
     navigation = getattr(robot_system, "_navigation", None) if robot_system is not None else None
     expected = navigation.get_group_position(group_name) if navigation is not None else None
+    observer_pose_reader = getattr(type(navigation), "get_current_observer_position", None)
+    if callable(observer_pose_reader):
+        robot_pose = navigation.get_current_observer_position(group_name, fresh=True)
     if expected is None or len(expected) < 6:
         return False, f"Movement group '{group_name}' has no configured capture position."
+    if robot_pose is None or len(robot_pose) < 6:
+        return False, f"Cannot verify robot pose for active work area '{area_id}'."
 
     expected = [float(v) for v in expected[:6]]
     pose = [float(v) for v in robot_pose[:6]]
@@ -246,8 +248,10 @@ def _build_dashboard_application(robot_system):
     from src.applications.base.robot_jog_service_builder import build_robot_system_jog_service
     from src.applications.base.widget_application import WidgetApplication
     from src.robot_systems.paint.applications.dashboard import PaintDashboardFactory
+    from src.robot_systems.paint.component_ids import SettingsID
 
     dashboard_ui_config = robot_system.ui_config
+    camera_roles = tuple(robot_system.get_settings(SettingsID.CAMERAS).cameras)
     jog_service = (
         build_robot_system_jog_service(robot_system)
         if dashboard_ui_config.show_jog_widget
@@ -256,10 +260,34 @@ def _build_dashboard_application(robot_system):
     return WidgetApplication(
         widget_factory=lambda ms: PaintDashboardFactory(
             ui_config=dashboard_ui_config,
+            camera_roles=camera_roles,
         ).build(
             robot_system._dashboard_service,
             messaging=ms,
             jog_service=jog_service,
+        )
+    )
+
+
+def _build_paint_adjustment_application(robot_system):
+    from src.applications.base.widget_application import WidgetApplication
+    from src.robot_systems.paint.applications.paint_adjustment import PaintAdjustmentFactory
+    from src.robot_systems.paint.applications.paint_adjustment.service.paint_adjustment_service import (
+        PaintAdjustmentService,
+    )
+
+    service = PaintAdjustmentService(
+        robot_system._settings_service,
+        start_single_cycle=robot_system._main_process.start_manual_single_cycle,
+        get_cycle_state=lambda: robot_system._main_process.state.value,
+        start_adjustment=robot_system._main_process.start_adjustment_cycle,
+        paint_next=robot_system._main_process.paint_next_adjustment_section,
+        finish_adjustment=robot_system._main_process.finish_adjustment_cycle,
+        get_adjustment_status=robot_system._main_process.adjustment_status,
+    )
+    return WidgetApplication(
+        widget_factory=lambda messaging: PaintAdjustmentFactory().build(
+            service, messaging=messaging
         )
     )
 
@@ -283,6 +311,25 @@ def _build_paint_workpiece_service(robot_system):
     from src.robot_systems.paint.domain.workpieces import JsonPaintWorkpieceRepository, PaintWorkpieceService
 
     return PaintWorkpieceService(JsonPaintWorkpieceRepository(robot_system.workpieces_storage_path()))
+
+
+def _build_contour_matching_tester(robot_system):
+    from src.applications.base.robot_jog_service_builder import build_robot_system_jog_service
+    from src.applications.base.widget_application import WidgetApplication
+    from src.applications.contour_matching_tester.contour_matching_tester_factory import ContourMatchingTesterFactory
+    from src.applications.contour_matching_tester.service.contour_matching_tester_service import ContourMatchingTesterService
+
+    service = ContourMatchingTesterService(
+        vision_service=robot_system.get_optional_service(CommonServiceID.VISION),
+        workpiece_service=_build_paint_workpiece_service(robot_system),
+        capture_snapshot_service=_build_capture_snapshot_service(robot_system),
+    )
+    jog_service = build_robot_system_jog_service(robot_system)
+    return WidgetApplication(
+        widget_factory=lambda ms: ContourMatchingTesterFactory().build(
+            service, ms, jog_service=jog_service
+        )
+    )
 
 
 def _build_paint_path_debug_dump_dir():
@@ -326,7 +373,7 @@ def _build_paint_path_executor(robot_system):
         if not hasattr(current, "camera_to_tcp_x_offset"):
             return current
         resolved = deepcopy(current)
-        tcp_x, tcp_y = _effective_camera_to_tcp_offsets(robot_system, current)
+        tcp_x, tcp_y = _effective_camera_to_tcp_offsets(robot_system, current, "paint")
         resolved.camera_to_tcp_x_offset = tcp_x
         resolved.camera_to_tcp_y_offset = tcp_y
         return resolved
@@ -378,7 +425,7 @@ def _build_paint_path_executor(robot_system):
         debug_dump_dir=debug_dump_dir,
     )
     effective_tcp_x, effective_tcp_y = _effective_camera_to_tcp_offsets(
-        robot_system, robot_config
+        robot_system, robot_config, "magazine"
     )
     contact_motion_config = PaintExecutorContactMotionConfig(
         motion_plane=pivot_profile.motion_plane,
@@ -417,6 +464,12 @@ def _build_paint_path_preparation_service(robot_system):
 
     def _paint_source_contour_processor(pts_px, settings):
         started_at = perf_counter()
+        if settings.get("closed_path") is False:
+            _logger.info(
+                "[PAINT_OPEN_SEGMENT] Preserving %d selected source points as an open path",
+                len(pts_px),
+            )
+            return np.asarray(pts_px, dtype=float)[:, :2].copy()
         if _bypass_contour_preparation_enabled():
             _logger.warning(
                 "[PAINT_DIAGNOSTIC_BYPASS] Pixel contour interpolation and smoothing "
@@ -445,6 +498,17 @@ def _build_paint_path_preparation_service(robot_system):
 
     def _paint_mm_contour_processor(path_pts, settings):
         started_at = perf_counter()
+        if settings.get("closed_path") is False:
+            open_xy = resample_contour_xy(
+                np.asarray(path_pts, dtype=float)[:, :2],
+                spacing=1.0,
+                closed=False,
+            )
+            return {
+                "method": "paint_open_segment_1mm_resample",
+                "prepared_xy": open_xy.tolist(),
+                "curve_xy": open_xy.tolist(),
+            }
         if _bypass_contour_preparation_enabled():
             _logger.warning(
                 "[PAINT_DIAGNOSTIC_BYPASS] Robot-space 1 mm resampling, hairpin cleanup, "
@@ -529,6 +593,8 @@ def _build_paint_path_preparation_service(robot_system):
         resolver_getter=lambda: robot_system.get_shared_vision_resolver()[1],
         z_min=z_min,
         rz_mode="constant",
+        # RTCP traverses the complete Workpiece contour. Saved Paint segments
+        # are projected onto it later as contact/non-contact regions.
         execute_from_workpiece_layer=True,
         target_point_name=execution_target_point_name,
         pickup_target_point_name=execution_target_point_name,
@@ -547,16 +613,24 @@ def _build_paint_path_preparation_service(robot_system):
     )
 
 
-def _build_paint_matching_service(robot_system, workpiece_service=None, capture_snapshot_service=None):
+def _build_paint_matching_service(
+    robot_system,
+    workpiece_service=None,
+    capture_snapshot_service=None,
+    debug_dump_dir=None,
+):
     from src.robot_systems.paint.processes.paint.match.workpiece_matching_service import PaintWorkpieceMatchingService
 
     vision_service = robot_system.get_optional_service(CommonServiceID.VISION)
-    return PaintWorkpieceMatchingService(
+    matching_kwargs = dict(
         list_saved_workpieces_fn=(workpiece_service or _build_paint_workpiece_service(robot_system)).list_all,
         load_saved_workpiece_fn=(workpiece_service or _build_paint_workpiece_service(robot_system)).load_raw,
         run_matching_fn=vision_service.run_matching if vision_service is not None else None,
         capture_snapshot_service=capture_snapshot_service or _build_capture_snapshot_service(robot_system),
     )
+    if debug_dump_dir is not None:
+        matching_kwargs["debug_dump_dir"] = debug_dump_dir
+    return PaintWorkpieceMatchingService(**matching_kwargs)
 
 
 def _build_paint_workpiece_preparation_service(robot_system):
@@ -630,6 +704,7 @@ def _build_paint_workpiece_editor_service(robot_system):
         robot_system,
         workpiece_service=workpiece_service,
         capture_snapshot_service=capture_snapshot_service,
+        debug_dump_dir=_build_paint_path_debug_dump_dir(),
     )
     path_preparation_service = _build_paint_path_preparation_service(robot_system)
     path_executor = _build_paint_path_executor(robot_system)
@@ -671,16 +746,39 @@ def _build_paint_workpiece_editor_service(robot_system):
 
 
 def _build_paint_contour_editor_application(robot_system):
-    from contour_editor import ContourEditorUiConfig, EditorButton
+    from contour_editor import (
+        ContourEditorUiConfig,
+        CustomEditorButtonSpec,
+        EditorButton,
+        ToolbarPlacement,
+    )
     from src.applications.base.widget_application import WidgetApplication
     from src.applications.base.robot_jog_service_builder import build_robot_system_jog_service
     from src.applications.workpiece_editor.workpiece_editor_factory import WorkpieceEditorFactory
 
     service = _build_paint_workpiece_editor_service(robot_system)
-    ui_config = ContourEditorUiConfig.hide(
-        EditorButton.GENERATE_PATTERN,
-        EditorButton.PREVIEW,
+    from src.robot_systems.paint.domain.paint_segment_selection import (
+        APPLY_PAINT_SELECTION_ACTION,
+        apply_selected_paint_segments,
     )
+
+    ui_config = ContourEditorUiConfig(
+        hidden_buttons=frozenset((EditorButton.GENERATE_PATTERN, EditorButton.PREVIEW)),
+        custom_buttons=(
+            CustomEditorButtonSpec(
+                action_id=APPLY_PAINT_SELECTION_ACTION,
+                icon_name="fa5s.paint-roller",
+                tooltip="Create paint segments from rectangle selection",
+                placement=ToolbarPlacement.TOP_CENTER,
+                primary=True,
+            ),
+        ),
+    )
+
+    def _handle_custom_action(action_id: str, editor):
+        if action_id != APPLY_PAINT_SELECTION_ACTION:
+            return False, "Unknown editor action."
+        return apply_selected_paint_segments(editor)
 
     jog_service = build_robot_system_jog_service(robot_system)
     return WidgetApplication(
@@ -689,6 +787,7 @@ def _build_paint_contour_editor_application(robot_system):
             messaging=ms,
             jog_service=jog_service,
             ui_config=ui_config,
+            custom_action_handler=_handle_custom_action,
         )
     )
 
@@ -858,6 +957,7 @@ def _build_camera_settings_application(robot_system):
     service = CameraSettingsApplicationService(
         settings_service=robot_system._settings_service,
         vision_service=robot_system.get_optional_service(CommonServiceID.VISION),
+        work_area_service=robot_system.get_optional_service(CommonServiceID.WORK_AREAS),
     )
     factory = CameraSettingsFactory()
     jog_service = build_robot_system_jog_service(robot_system)
@@ -995,7 +1095,15 @@ def _build_calibration_application(robot_system):
     )
     navigation_service = CalibrationNavigationService(
         robot_system.get_service(CommonServiceID.NAVIGATION),
-        before_move=(lambda: work_area_service.set_active_area_id("paint")),
+        calibration_group_getter=lambda: _get_capture_group_for_work_area(
+            robot_system,
+            calibration_vision_service.get_calibration_target_area_id()
+            if calibration_vision_service.get_calibration_target_area_id() != "global" else "paint",
+        ),
+        before_move=lambda: work_area_service.set_active_area_id(
+            calibration_vision_service.get_calibration_target_area_id()
+            if calibration_vision_service.get_calibration_target_area_id() != "global" else "paint"
+        ),
     )
     transformer = (
         HomographyResidualTransformer(
@@ -1031,6 +1139,10 @@ def _build_calibration_application(robot_system):
             robot_tool=robot_system._robot_config.robot_tool,
             robot_user=robot_system._robot_config.robot_user,
             on_offsets_saved=robot_system.invalidate_shared_vision_resolver,
+            target_area_id_getter=lambda: robot_system._settings_service.get(
+                CommonSettingsID.CALIBRATION_VISION_SETTINGS
+            ).calibration_target_work_area,
+            matrix_path_getter=calibration_vision_service.matrix_path_for_area,
         )
         if vision_service is not None and robot_service is not None and robot_config is not None else None
     )
@@ -1291,6 +1403,14 @@ def _build_device_control_application(robot_system):
         DeviceControlApplicationService,
     )
     from src.applications.device_control.dryer import DryerControlService
+    from src.applications.camera_settings.controller.camera_devices_controller import (
+        CameraDevicesController,
+    )
+    from src.applications.camera_settings.model.camera_settings_model import CameraSettingsModel
+    from src.applications.camera_settings.service.camera_settings_application_service import (
+        CameraSettingsApplicationService,
+    )
+    from src.applications.camera_settings.view.camera_devices_widget import CameraDevicesWidget
     from src.engine.hardware.peripherals.device_control_adapters import (
         build_device_control_adapters,
     )
@@ -1311,6 +1431,7 @@ def _build_device_control_application(robot_system):
             inputs=current.inputs,
             outputs=current.outputs,
             commands=current.commands,
+            statuses=current.statuses,
         )
         robot_system._settings_service.save(
             SettingsID.PERIPHERALS,
@@ -1326,7 +1447,28 @@ def _build_device_control_application(robot_system):
         "laser": getattr(robot_system, "_laser_detection_service", None),
     }
     devices = build_device_control_adapters(peripheral_config, services, persist_enabled)
+    if "paint_head" in peripheral_config.peripherals:
+        from src.robot_systems.paint.hardware.paint_head_availability_adapter import (
+            PaintHeadAvailabilityAdapter,
+        )
+
+        devices.append(
+            PaintHeadAvailabilityAdapter(
+                enabled_provider=lambda: bool(
+                    robot_system._settings_service.get(SettingsID.PERIPHERALS)
+                    .peripherals["paint_head"].enabled
+                ),
+                persist_enabled=persist_enabled,
+            )
+        )
     service = DeviceControlApplicationService(motors=[], devices=devices)
+    camera_service = CameraSettingsApplicationService(
+        settings_service=robot_system._settings_service,
+        vision_service=robot_system.get_optional_service(CommonServiceID.VISION),
+        work_area_service=robot_system.get_optional_service(CommonServiceID.WORK_AREAS),
+        camera_devices_settings_key=SettingsID.CAMERAS,
+        camera_flip_setter=robot_system.apply_camera_flips,
+    )
     dryer_control_service = (
         DryerControlService(
             settings_service=robot_system._settings_service,
@@ -1336,11 +1478,44 @@ def _build_device_control_application(robot_system):
         if any(device.key == "dryer" for device in devices)
         else None
     )
-    return WidgetApplication(
-        widget_factory=lambda _ms: DeviceControlFactory(
+    def _build_widget(_messaging_service):
+        camera_panel = CameraDevicesWidget()
+        camera_controller = CameraDevicesController(
+            CameraSettingsModel(camera_service),
+            camera_panel,
+            _messaging_service,
+        )
+        extra_panels = [("cameras", "Cameras", camera_panel, camera_controller)]
+        if "paint_head" in peripheral_config.peripherals:
+            from src.robot_systems.paint.applications.paint_head_settings.paint_head_settings_controller import (
+                PaintHeadSettingsController,
+            )
+            from src.robot_systems.paint.applications.paint_head_settings.paint_head_settings_model import (
+                PaintHeadSettingsModel,
+            )
+            from src.robot_systems.paint.applications.paint_head_settings.paint_head_settings_service import (
+                PaintHeadSettingsService,
+            )
+            from src.robot_systems.paint.applications.paint_head_settings.paint_head_settings_view import (
+                PaintHeadSettingsView,
+            )
+
+            paint_head_panel = PaintHeadSettingsView()
+            paint_head_controller = PaintHeadSettingsController(
+                PaintHeadSettingsModel(
+                    PaintHeadSettingsService(robot_system._settings_service)
+                ),
+                paint_head_panel,
+            )
+            extra_panels.append(
+                ("paint_head", "Paint Head", paint_head_panel, paint_head_controller)
+            )
+        return DeviceControlFactory(
             dryer_control_service=dryer_control_service,
+            extra_panels=tuple(extra_panels),
         ).build(service)
-    )
+
+    return WidgetApplication(widget_factory=_build_widget)
 
 
 def _build_ethercat_diagnostics_application(robot_app):
@@ -1417,6 +1592,7 @@ def _build_pick_target_application(robot_system):
         resolver=None,
         resolver_getter=lambda: robot_system.get_shared_vision_resolver()[1],
         robot_config=robot_system._robot_config,
+        robot_config_getter=lambda: robot_system.get_settings(CommonSettingsID.ROBOT_CONFIG),
         navigation=robot_system._navigation,
         height_measuring=height_service,
         default_target_name=default_target_name,

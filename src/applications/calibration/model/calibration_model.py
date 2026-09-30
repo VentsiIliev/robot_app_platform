@@ -59,6 +59,9 @@ class CalibrationModel(IApplicationModel):
     def calibrate_camera_tcp_offset(self) -> tuple[bool, str]:
         return self._service.calibrate_camera_tcp_offset()
 
+    def validate_camera_tcp_calibration_target(self, area_id: str) -> tuple[bool, str]:
+        return self._service.validate_camera_tcp_calibration_target(area_id)
+
     def calibrate_camera_z_shift(
         self,
         marker_id: int,

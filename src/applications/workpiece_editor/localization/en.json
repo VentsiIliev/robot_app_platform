@@ -17,10 +17,18 @@
     "Saved workpieces checked: {count}": "Saved workpieces checked: {count}",
     "Unmatched contours: {count}": "Unmatched contours: {count}",
     "Match Workpiece Failed": "Match Workpiece Failed",
+    "The captured contour did not match a saved workpiece.\n\n{details}": "The captured contour did not match a saved workpiece.\n\n{details}",
+    "No match found.": "No match found.",
+    "Matched workpiece has no contour.": "Matched workpiece has no contour.",
+    "The saved workpiece was aligned to the captured contour.": "The saved workpiece was aligned to the captured contour.",
     "No Process Action": "No Process Action",
     "Prepared process has no executable action.": "Prepared process has no executable action.",
     "Process Started": "Process Started",
     "Process Failed": "Process Failed",
-    "Load Failed": "Load Failed"
+    "Load Failed": "Load Failed",
+    "Paint Selection": "Paint Selection",
+    "Paint segments created from the rectangle selection.": "Paint segments created from the rectangle selection.",
+    "Select at least two neighboring Paint contour points.": "Select at least two neighboring Paint contour points.",
+    "Unknown editor action.": "Unknown editor action."
   }
 }

@@ -16,10 +16,12 @@ class CameraSettingsFactory:
         service: ICameraSettingsService,
         messaging: IMessagingService,
         jog_service=None,
+        show_camera_devices: bool = False,
     ):
         from src.applications.camera_settings.mapper import CameraSettingsMapper
         view, _ = camera_tab_factory(
             mapper=CameraSettingsMapper,
+            show_camera_devices=show_camera_devices,
         )
         model      = CameraSettingsModel(service)
         controller = CameraSettingsController(model, view, messaging)

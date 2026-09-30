@@ -11,6 +11,8 @@ from src.engine.robot.targeting import RemoteTcpSettings, TargetFrameSettings
 class TargetingSettings:
     points: list[RemoteTcpSettings] = field(default_factory=list)
     frames: list[TargetFrameSettings] = field(default_factory=list)
+    point_mode: str = "global"
+    area_points: dict[str, list[RemoteTcpSettings]] = field(default_factory=dict)
 
     @classmethod
     def defaults(cls) -> "TargetingSettings":
@@ -30,21 +32,48 @@ class TargetingSettings:
             for item in frames_data
             if isinstance(item, dict)
         ] if isinstance(frames_data, list) else []
-        settings = cls(points=points, frames=frames)
+        area_points = {
+            str(area).strip(): [RemoteTcpSettings.from_dict(item) for item in items if isinstance(item, dict)]
+            for area, items in (data.get("AREA_POINTS", {}) or {}).items()
+            if str(area).strip() and isinstance(items, list)
+        }
+        settings = cls(
+            points=points, frames=frames,
+            point_mode=data.get("POINT_MODE", "global"),
+            area_points=area_points,
+        )
         settings.ensure_defaults()
         return settings
 
     def to_dict(self) -> dict[str, Any]:
-        cloned = TargetingSettings(points=list(self.points), frames=list(self.frames))
+        cloned = TargetingSettings(
+            points=list(self.points), frames=list(self.frames),
+            point_mode=self.point_mode, area_points=self.area_points,
+        )
         cloned.ensure_defaults()
         return {
             "POINTS": [point.to_dict() for point in cloned.points],
             "FRAMES": [frame.to_dict() for frame in cloned.frames],
+            "POINT_MODE": cloned.point_mode,
+            "AREA_POINTS": {
+                area: [point.to_dict() for point in points]
+                for area, points in cloned.area_points.items()
+            },
         }
 
     def ensure_defaults(self) -> None:
         self.points = _dedupe_points(self.points)
         self.frames = _dedupe_frames(self.frames)
+        self.point_mode = "per_area" if self.point_mode == "per_area" else "global"
+        self.area_points = {
+            str(area).strip(): _dedupe_points(points)
+            for area, points in self.area_points.items() if str(area).strip()
+        }
+
+    def points_for_area(self, area_id: str) -> list[RemoteTcpSettings]:
+        if self.point_mode != "per_area":
+            return self.points
+        return self.area_points.get(str(area_id or "").strip(), self.points)
 
 
 def _dedupe_points(points: list[RemoteTcpSettings]) -> list[RemoteTcpSettings]:

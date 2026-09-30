@@ -484,14 +484,20 @@ class PaintMagazineLoadService:
     ) -> tuple[bool, str]:
         """Verify the live robot pose against the configured capture group."""
         expected = self._validated_pose(self._navigation.get_group_position(group_name))
-        try:
-            actual = read_fresh_pose(
-                self._path_executor._robot_service,
-                error_message="Failed to read fresh robot pose before magazine capture",
-            )
-        except FreshPoseReadError as exc:
-            _logger.error("[MAGAZINE_CAPTURE_POSE] %s", exc)
-            actual = None
+        observer_pose_reader = getattr(
+            type(self._navigation), "get_current_observer_position", None
+        )
+        if callable(observer_pose_reader):
+            actual = self._navigation.get_current_observer_position(group_name, fresh=True)
+        else:
+            try:
+                actual = read_fresh_pose(
+                    self._path_executor._robot_service,
+                    error_message="Failed to read fresh robot pose before magazine capture",
+                )
+            except FreshPoseReadError as exc:
+                _logger.error("[MAGAZINE_CAPTURE_POSE] %s", exc)
+                actual = None
         if expected is None:
             return False, f"Magazine capture group '{group_name}' has no valid configured pose"
         if actual is None:

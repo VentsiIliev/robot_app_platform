@@ -45,6 +45,8 @@ class CameraSettingsController(IApplicationController, BrokerSubscriptionMixin, 
         self._setup_subscriptions()
         settings = self._model.load()
         self._view.settings_view.set_values(CameraSettingsMapper.to_flat_dict(settings))
+        if self._view.camera_devices_widget is not None:
+            self._refresh_camera_devices()
         self._view.destroyed.connect(self.stop)
 
     def stop(self) -> None:
@@ -99,6 +101,41 @@ class CameraSettingsController(IApplicationController, BrokerSubscriptionMixin, 
         self._view.save_requested.connect(self._on_save)
         self._view.value_changed_signal.connect(self._on_value_changed)
         self._view.raw_mode_toggled.connect(self._model.set_raw_mode)
+        devices = self._view.camera_devices_widget
+        if devices is None:
+            return
+        devices.refresh_requested.connect(self._refresh_camera_devices)
+        devices.save_requested.connect(self._save_camera_devices)
+
+    def _refresh_camera_devices(self) -> None:
+        self._run_in_thread(
+            fn=self._model.load_camera_devices,
+            on_done=self._on_camera_devices_loaded,
+            on_error=self._on_camera_devices_error,
+        )
+
+    def _on_camera_devices_loaded(self, state) -> None:
+        if self._active and self._view.camera_devices_widget is not None:
+            self._view.camera_devices_widget.set_camera_devices(state)
+
+    def _on_camera_devices_error(self, message: str) -> None:
+        if self._active and self._view.camera_devices_widget is not None:
+            self._view.camera_devices_widget.set_error(message)
+
+    def _save_camera_devices(
+        self,
+        assignments: dict[str, str],
+        flips: dict[str, tuple[bool, bool]],
+    ) -> None:
+        self._run_in_thread(
+            fn=lambda: self._model.save_camera_devices(assignments, flips),
+            on_done=self._on_camera_devices_saved,
+            on_error=self._on_camera_devices_error,
+        )
+
+    def _on_camera_devices_saved(self, _result) -> None:
+        if self._active and self._view.camera_devices_widget is not None:
+            self._view.camera_devices_widget.set_saved()
 
     def _on_value_changed(self, key: str, value, component_name: str) -> None:
         if key == "hardware_auto_exposure":

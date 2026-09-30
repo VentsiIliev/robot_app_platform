@@ -32,6 +32,11 @@ from src.robot_systems.paint.timing import timed_step
 _logger = logging.getLogger(__name__)
 
 
+def _completed_rotation_turns(rotation_delta_deg: float) -> int:
+    """Count only fully executed 360-degree turns, preserving direction."""
+    return int(float(rotation_delta_deg) / 360.0)
+
+
 @dataclass(frozen=True)
 class DropoffReleaseWaypoint:
     """One release-strategy move or release action."""
@@ -1027,7 +1032,7 @@ def _plate_route_poses_with_distributed_unwind(
             "Plate-layout distributed unwind requires a non-zero executed paint RZ direction"
         )
     start_rotation = float(current[rotation_index])
-    completed_turns = int(round(paint_rz_delta / 360.0))
+    completed_turns = _completed_rotation_turns(paint_rz_delta)
     if completed_turns == 0:
         _logger.info(
             "[PLATE_LAYOUT] Distributed unwind not needed: paint_rz_delta=%.3f has no completed turn",
@@ -1163,8 +1168,17 @@ def build_plate_entry_segments_for_paint_chain(
         paint_end_rz = getattr(executor, "_last_paint_contact_end_rz", None)
         if paint_start_rz is None or not isinstance(paint_end_rz, (int, float)):
             return [], None, "Plate-layout optimized entry has no valid paint rotation"
-        completed_turns = int(round((float(paint_end_rz) - float(paint_start_rz)) / 360.0))
+        completed_turns = _completed_rotation_turns(
+            float(paint_end_rz) - float(paint_start_rz)
+        )
         if completed_turns:
+            if not use_center:
+                use_center = True
+                _logger.info(
+                    "[PLATE_LAYOUT] Forcing plate center waypoint to safely distribute "
+                    "completed unwind turns=%d",
+                    completed_turns,
+                )
             target_release_rz = float(gate_pose[5]) - (90.0 * completed_turns)
             nominal_release_rz = float(release_pose[5])
             release_pose[5] = nominal_release_rz + 180.0 * round(

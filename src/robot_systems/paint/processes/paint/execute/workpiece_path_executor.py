@@ -820,6 +820,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         align_start_to_zero_rz: bool = False,
         anchor_xy: tuple[float, float] | None = None,
         source_rotation_deg: float = 0.0,
+        enforce_open_path_side: bool = False,
     ) -> tuple[
         list[list[float]],
         list[np.ndarray] | None,
@@ -838,6 +839,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
                 self._contact_motion_config,
                 anchor_xy=anchor_xy,
                 source_rotation_deg=source_rotation_deg,
+                enforce_open_path_side=enforce_open_path_side,
             )
         _logger.debug("Simulated pivot path has %d points", len(pivot_path))
         if align_start_to_zero_rz:

@@ -21,6 +21,14 @@ _BG = BG_COLOR
 _TEXT = TEXT_COLOR
 _MUTED = TEXT_COLOR
 _BORDER = BORDER
+_STEP_DONE_STYLE = """
+    QPushButton {
+        background: #2E7D32; color: white;
+        border: none; border-radius: 8px;
+        padding: 0 16px; font-size: 11pt; font-weight: bold;
+        min-height: 44px;
+    }
+"""
 
 _BTN = f"""
     QPushButton {{
@@ -89,7 +97,26 @@ class ToolSettingsView(IApplicationView):
 
         calibration = QGroupBox("Guided TCP Calibration")
         calibration.setStyleSheet(GROUP_STYLE)
-        calibration_layout = QHBoxLayout(calibration)
+        calibration_layout = QVBoxLayout(calibration)
+
+        self._calibration_guide = QLabel()
+        self._calibration_guide.setWordWrap(True)
+        self._calibration_guide.setStyleSheet(
+            f"background: white; border: 1px solid {_BORDER}; border-radius: 8px; "
+            f"padding: 10px; color: {_TEXT}; font-size: 13px;"
+        )
+        calibration_layout.addWidget(self._calibration_guide)
+
+        progress_layout = QHBoxLayout()
+        self._reference_state = QLabel()
+        self._candidate_state = QLabel()
+        for label in (self._reference_state, self._candidate_state):
+            label.setStyleSheet(f"color: {_MUTED}; font-size: 12px; font-weight: bold;")
+            progress_layout.addWidget(label)
+        progress_layout.addStretch()
+        calibration_layout.addLayout(progress_layout)
+
+        actions_layout = QHBoxLayout()
         self._btn_capture_reference = QPushButton("1. Capture Reference Contact")
         self._btn_capture_candidate = QPushButton("2. Capture Tool Contact")
         self._btn_solve = QPushButton("3. Solve Selected Tool")
@@ -97,15 +124,21 @@ class ToolSettingsView(IApplicationView):
         for button in (self._btn_capture_reference, self._btn_capture_candidate, self._btn_solve):
             button.setStyleSheet(GHOST_BTN_STYLE)
             button.setCursor(Qt.CursorShape.PointingHandCursor)
-            calibration_layout.addWidget(button)
+            actions_layout.addWidget(button)
         self._btn_activate.setStyleSheet(ACTION_BTN_STYLE)
         self._btn_activate.setCursor(Qt.CursorShape.PointingHandCursor)
-        calibration_layout.addWidget(self._btn_activate)
+        actions_layout.addWidget(self._btn_activate)
+        calibration_layout.addLayout(actions_layout)
         self._btn_capture_reference.clicked.connect(self.capture_reference_requested.emit)
         self._btn_capture_candidate.clicked.connect(self.capture_candidate_requested.emit)
         self._btn_solve.clicked.connect(self._on_solve)
         self._btn_activate.clicked.connect(self._on_activate)
-        root.addWidget(calibration)
+        self._reference_captured = False
+        self._candidate_samples = 0
+        self.set_calibration_progress(reference_captured=False, candidate_samples=0)
+        # Keep the guided workflow above the large tables so it remains visible
+        # on the smaller touch displays used by the paint system.
+        root.insertWidget(1, calibration)
 
         # Save button spans full width below both panels
         self._btn_save_slots = QPushButton(qta.icon("fa5s.save", color="white"), "  Save All Changes")
@@ -214,6 +247,60 @@ class ToolSettingsView(IApplicationView):
     def set_status(self, msg: str) -> None:
         self._status.setText(msg)
 
+    def set_calibration_progress(
+        self, *, reference_captured: bool, candidate_samples: int
+    ) -> None:
+        """Show calibration progress and make the next valid action obvious."""
+        self._reference_captured = bool(reference_captured)
+        self._candidate_samples = max(0, int(candidate_samples))
+        selected_tool_id, selected_tool_name = self.selected_tool()
+
+        if not self._reference_captured:
+            guide = self.tr(
+                "Jog the reference tool to the calibration point, then capture the reference contact."
+            )
+        elif self._candidate_samples < 3:
+            guide = self.tr(
+                "Reference captured. Fit the tool being calibrated to the same point from different wrist orientations, capturing at least 3 contacts."
+            )
+        elif selected_tool_id is None:
+            guide = self.tr(
+                "Contact samples are ready. Select the tool to update, then solve the calibration."
+            )
+        else:
+            guide = self.tr(
+                "Ready to solve calibration for {tool_name} (ID {tool_id})."
+            ).format(tool_name=selected_tool_name, tool_id=selected_tool_id)
+
+        self._calibration_guide.setText(guide)
+        self._reference_state.setText(
+            self.tr("Reference: captured ✓")
+            if self._reference_captured
+            else self.tr("Reference: not captured")
+        )
+        self._candidate_state.setText(
+            self.tr("Tool contacts: {count} / 3 minimum").format(
+                count=self._candidate_samples
+            )
+        )
+        self._btn_capture_candidate.setEnabled(self._reference_captured)
+        self._btn_solve.setEnabled(
+            self._candidate_samples >= 3 and selected_tool_id is not None
+        )
+        self._btn_capture_reference.setStyleSheet(
+            _STEP_DONE_STYLE if self._reference_captured else ACTION_BTN_STYLE
+        )
+        self._btn_capture_candidate.setStyleSheet(
+            ACTION_BTN_STYLE
+            if self._reference_captured and self._candidate_samples < 3
+            else GHOST_BTN_STYLE
+        )
+        self._btn_solve.setStyleSheet(
+            ACTION_BTN_STYLE
+            if self._candidate_samples >= 3 and selected_tool_id is not None
+            else GHOST_BTN_STYLE
+        )
+
     def selected_tool(self):
         rows = self._tools_table.selectedItems()
         if not rows:
@@ -231,6 +318,10 @@ class ToolSettingsView(IApplicationView):
         self._btn_edit_tool.setEnabled(has)
         self._btn_remove_tool.setEnabled(has)
         self._btn_geometry.setEnabled(has)
+        self.set_calibration_progress(
+            reference_captured=self._reference_captured,
+            candidate_samples=self._candidate_samples,
+        )
 
     def _on_edit_tool(self) -> None:
         tid, name = self.selected_tool()
@@ -325,4 +416,8 @@ class ToolSettingsView(IApplicationView):
     def changeEvent(self, event) -> None:
         if event.type() == QEvent.Type.LanguageChange:
             self.setWindowTitle(self.tr("Tools & Magazine"))
+            self.set_calibration_progress(
+                reference_captured=self._reference_captured,
+                candidate_samples=self._candidate_samples,
+            )
         super().changeEvent(event)

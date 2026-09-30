@@ -118,6 +118,7 @@ class PaintPickupTransferPlanner:
                 owner._contact_motion_config,
                 anchor_xy=anchor_xy,
                 source_rotation_deg=source_rotation_deg,
+                enforce_open_path_side=bool(jobs[0].get("paint_selection_cut_applied")),
             )
 
         if not projected_pivot_path:

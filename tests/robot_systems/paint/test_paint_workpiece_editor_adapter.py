@@ -109,6 +109,58 @@ class TestPaintWorkpieceEditorAdapter(unittest.TestCase):
         self.assertEqual(len(editor_data.get_layer(contour_layer_name()).segments), 1)
         self.assertEqual(len(editor_data.get_layer(fill_layer_name()).segments), 1)
 
+    def test_from_raw_copies_complete_matching_contour_into_empty_paint_layer(self):
+        raw = {
+            "contour": [[1, 2], [3, 4], [5, 6]],
+            "sprayPattern": {"Contour": [], "Fill": []},
+        }
+
+        editor_data = self.adapter.from_raw(raw)
+
+        matching = editor_data.get_layer(workpiece_layer_name()).segments[0]
+        paint = editor_data.get_layer(contour_layer_name()).segments[0]
+        matching_points = [(point.x(), point.y()) for point in matching.points]
+        paint_points = [(point.x(), point.y()) for point in paint.points]
+        self.assertEqual(paint_points, matching_points)
+
+    def test_from_raw_does_not_replace_saved_paint_sections(self):
+        raw = {
+            "contour": [[1, 2], [3, 4], [5, 6]],
+            "sprayPattern": {
+                "Contour": [
+                    {"contour": [[10, 20], [30, 40]], "settings": {"velocity": 8}},
+                ],
+                "Fill": [],
+            },
+        }
+
+        editor_data = self.adapter.from_raw(raw)
+
+        paint = editor_data.get_layer(contour_layer_name()).segments
+        self.assertEqual(len(paint), 1)
+        self.assertEqual([(point.x(), point.y()) for point in paint[0].points], [(10.0, 20.0), (30.0, 40.0)])
+        self.assertEqual(paint[0].settings["velocity"], 8)
+
+    def test_selected_paint_sections_round_trip_without_initial_copy_marker(self):
+        raw = {
+            "contour": [[0, 0], [10, 0], [10, 10]],
+            "sprayPattern": {
+                "Contour": [{
+                    "contour": [[2, 0], [5, 0]],
+                    "settings": {"closed_path": False},
+                }],
+                "Fill": [],
+            },
+        }
+
+        editor_data = self.adapter.from_raw(raw)
+        result = self.adapter.to_workpiece_data(editor_data)
+
+        selected = result["sprayPattern"]["Contour"]
+        self.assertEqual(len(selected), 1)
+        self.assertIs(selected[0]["settings"]["closed_path"], False)
+        self.assertNotIn("paint_selection_source", selected[0]["settings"])
+
     def test_print_summary_delegates_to_shared_helper(self):
         editor_data = ContourEditorData()
 

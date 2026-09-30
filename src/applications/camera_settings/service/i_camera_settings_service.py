@@ -1,6 +1,21 @@
 from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
 from typing import List, Tuple
 from src.applications.camera_settings.camera_settings_data import CameraSettingsData
+
+
+@dataclass(frozen=True)
+class CameraDeviceOption:
+    device: str
+    capture_node: str
+    connected: bool
+
+
+@dataclass(frozen=True)
+class CameraDevicesState:
+    assignments: dict[str, str]
+    options: tuple[CameraDeviceOption, ...]
+    flips: dict[str, tuple[bool, bool]] = field(default_factory=dict)
 
 
 class ICameraSettingsService(ABC):
@@ -22,3 +37,13 @@ class ICameraSettingsService(ABC):
 
     @abstractmethod
     def get_work_area(self, area_type: str) -> tuple[bool, str, List[Tuple[float, float]]]: ...
+
+    @abstractmethod
+    def load_camera_devices(self) -> CameraDevicesState: ...
+
+    @abstractmethod
+    def save_camera_devices(
+        self,
+        assignments: dict[str, str],
+        flips: dict[str, tuple[bool, bool]],
+    ) -> None: ...

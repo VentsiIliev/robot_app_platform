@@ -151,11 +151,11 @@ def finalize_tcp_offset_calibration(context) -> tuple[bool, str]:
     if robot_config is None or settings_service is None:
         return False, "Robot config/settings unavailable for saving TCP offsets"
 
-    robot_config.camera_to_tcp_x_offset = offset_x
-    robot_config.camera_to_tcp_y_offset = offset_y
     # The integrated calibration does not perform the standalone post-solve
     # verification sweep, so an older correction curve must not survive it.
-    robot_config.camera_to_tcp_rotation_residuals = []
+    target_area_getter = getattr(context.vision_service, "get_calibration_target_area_id", None)
+    area_id = target_area_getter() if callable(target_area_getter) else "global"
+    robot_config.save_camera_to_tcp_for_area(area_id, offset_x, offset_y, [])
     settings_service.save(robot_config_key, robot_config)
     return True, (
         f"Saved camera_to_tcp_x_offset={offset_x:.6f} camera_to_tcp_y_offset={offset_y:.6f} "

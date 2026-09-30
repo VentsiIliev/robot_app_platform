@@ -134,6 +134,13 @@ class ToolSettingsApplicationService(IToolSettingsService):
             reference_id = self._load().reference_tool_id
             reference = self._registry_transform(reference_id)
             flange = self._robot.get_current_flange_position()
+            _logger.info(
+                "[TOOL_CALIBRATION] capturing_reference reference_tool_id=%d "
+                "registry_transform=%s flange_pose=%s",
+                int(reference_id),
+                [round(float(value), 6) for value in reference],
+                [round(float(value), 6) for value in flange],
+            )
             self._calibration.capture_reference(flange, reference)
             return True, f"Reference contact captured with tool {reference_id}"
         except Exception as exc:
@@ -154,11 +161,21 @@ class ToolSettingsApplicationService(IToolSettingsService):
 
     def solve_tool_calibration(self, tool_id: int) -> Tuple[bool, str, dict]:
         try:
+            _logger.info("[TOOL_CALIBRATION] solving target_tool_id=%d", int(tool_id))
             result = self._calibration.solve()
         except Exception as exc:
             return False, str(exc), {}
         ok, message = self.update_tool_geometry(
             int(tool_id), result["relative_transform"], self._tool_collision_profile(tool_id)
+        )
+        _logger.info(
+            "[TOOL_CALIBRATION] persisted target_tool_id=%d success=%s "
+            "relative_transform=%s absolute_transform=%s max_spread_mm=%.6f",
+            int(tool_id),
+            bool(ok),
+            [round(float(value), 6) for value in result["relative_transform"]],
+            [round(float(value), 6) for value in result["absolute_transform"]],
+            float(result["max_spread_mm"]),
         )
         return ok, message, result if ok else {}
 

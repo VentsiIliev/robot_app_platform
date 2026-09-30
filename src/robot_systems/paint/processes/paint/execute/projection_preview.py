@@ -68,6 +68,7 @@ def project_pivot_paths_for_editor(
                 float(pickup_plan.source_rotation_deg)
                 if pickup_plan is not None else 0.0
             ),
+            enforce_open_path_side=bool(job.get("paint_selection_cut_applied")),
         )
         center_path = align_projected_path_to_pickup_plan(center_path, pickup_plan)
         center_path = pivot_execution_command_path(center_path, pickup_plan=pickup_plan)
@@ -109,6 +110,7 @@ def project_pivot_motion_snapshots_for_editor(
                 float(pickup_plan.source_rotation_deg)
                 if pickup_plan is not None else 0.0
             ),
+            enforce_open_path_side=bool(job.get("paint_selection_cut_applied")),
         )
         motion.append(snapshots)
     return motion, last_pivot_pose

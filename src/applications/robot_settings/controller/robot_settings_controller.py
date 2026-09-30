@@ -91,6 +91,7 @@ class RobotSettingsController(IApplicationController, BackgroundWorker):
     def _on_robot_config_changed(self) -> None:
         try:
             self._view.update_robot_config(self._model.reload_config())
+            self._view.load_targeting_definitions(self._model.reload_targeting_definitions())
             self._logger.debug("Robot Settings UI refreshed after external config change")
         except Exception:
             self._logger.exception("Failed to refresh Robot Settings after external config change")
@@ -167,12 +168,9 @@ class RobotSettingsController(IApplicationController, BackgroundWorker):
 
     def _on_targeting_changed(self) -> None:
         try:
-            self._model.save(
-                self._view.get_values(),
-                self._view.get_movement_groups(),
-                self._view.get_targeting_definitions(),
-            )
-            self._publish_targeting_changed(self._view.get_targeting_definitions())
+            targeting = self._view.get_targeting_definitions()
+            self._model.save_targeting_definitions(targeting)
+            self._publish_targeting_changed(targeting)
             self._logger.debug("Auto-saved targeting definitions")
         except Exception:
             self._logger.exception("Auto-save targeting definitions failed")

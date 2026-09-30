@@ -47,7 +47,7 @@ def _refine_alignment_with_mask(workpiece_contour, target_contour):
 
 def _coarse_search(workpiece_contour, target_contour, centroid, best_rotation, best_overlap):
     """
-    Perform a coarse rotational search over 0–360° to find a rough alignment that increases overlap.
+    Search every 10° so narrow peaks, including 180°, are always tested.
 
     Args:
         workpiece_contour (np.ndarray or Contour): Contour to rotate.
@@ -59,31 +59,16 @@ def _coarse_search(workpiece_contour, target_contour, centroid, best_rotation, b
     Returns:
         tuple: Updated (best_rotation, best_overlap) after coarse search.
     """
-    print(f"      Stage 1: Coarse search...")
-    current_step = 10  # The initial step size in degrees for rotating the contour.
-    # We start with 10° increments to quickly explore the 360° rotation space.
-    min_coarse_step = 5  # The smallest allowed step size during coarse search.
-    # If improvements are found, the step is reduced but never below this value.
-    angle = 0  # The current absolute rotation angle being tested, starting from 0°.
-    iteration = 0  # Loop counter to track how many rotations have been tested.
-    max_iterations = 100  # Safety limit to prevent infinite loops if the algorithm does not converge.
-
-    while angle < 360 and iteration < max_iterations:
-        signed_angle = angle if angle <= 180 else angle - 360
-        rotated_points = _rotate_contour(workpiece_contour, signed_angle, centroid)
+    print("      Stage 1: Coarse search...")
+    for angle in range(-180, 180, 10):
+        rotated_points = _rotate_contour(workpiece_contour, angle, centroid)
         overlap = calculate_mask_overlap(rotated_points, target_contour,canvas_size=(1280,720))
 
         if overlap > best_overlap:
             improvement = overlap - best_overlap
-            print(f"      Improvement at {signed_angle}°: overlap = {overlap:.4f} (+{improvement:.4f})")
+            print(f"      Improvement at {angle}°: overlap = {overlap:.4f} (+{improvement:.4f})")
             best_overlap = overlap
-            best_rotation = signed_angle
-            current_step = max(min_coarse_step, current_step * 0.7)
-        else:
-            current_step = min(15, current_step * 1.2)
-
-        angle += int(current_step)
-        iteration += 1
+            best_rotation = angle
 
     print(f"      Stage 1 complete: best at {best_rotation}° with overlap {best_overlap:.4f}")
     return best_rotation, best_overlap

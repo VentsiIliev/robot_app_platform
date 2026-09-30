@@ -116,6 +116,7 @@ class GlueJobBuilderService:
                 result = resolver.resolve(
                     VisionPoseRequest(x_pixels=px, y_pixels=py, z_mm=base_z, rz_degrees=rz, rx_degrees=self._RX, ry_degrees=self._RY),
                     resolver.registry.by_name(self._target_point_name),
+                    area_id="spray",
                 )
                 x, y, z, _, _, final_rz = result.robot_pose()
             else:

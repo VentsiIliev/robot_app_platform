@@ -31,6 +31,7 @@ from src.engine.robot.interfaces.i_tool_service import IToolService
 from src.engine.robot.targeting import TargetingSettingsSerializer
 from src.engine.vision.calibration_vision_settings import CalibrationVisionSettingsSerializer
 from src.engine.vision.camera_settings_serializer import CameraSettingsSerializer
+from src.engine.vision.camera_device_settings import CameraDevicesConfigSerializer
 from src.engine.vision.i_vision_service import IVisionService
 from src.engine.work_areas import IWorkAreaService, WorkAreaSettingsSerializer
 from src.robot_systems.base_robot_system import BaseRobotSystem
@@ -41,7 +42,11 @@ from src.robot_systems.paint.component_ids import ServiceID, SettingsID
 from src.robot_systems.paint.processes.paint.paint_process_config_serializer import (
     PaintProcessConfigSerializer,
 )
+from src.robot_systems.paint.processes.paint.adjustment_settings_serializer import (
+    PaintAdjustmentSettingsSerializer,
+)
 from src.robot_systems.paint.service_builders import (
+    build_paint_vision_service,
     build_fan_service,
     build_tray_fan_service,
     build_dryer_service,
@@ -106,6 +111,9 @@ def _build_application_specs():
         (paint_system_config.PAINT_DASHBOARD_APP,
          ApplicationSpec(name="PaintDashboard", folder_id=1, icon="fa5s.tachometer-alt",
                          factory=application_wiring._build_dashboard_application)),
+        (paint_system_config.PAINT_ADJUSTMENT_APP,
+         ApplicationSpec(name="PaintAdjustment", folder_id=1, icon="fa5s.paint-brush",
+                         factory=application_wiring._build_paint_adjustment_application)),
         (paint_system_config.WORKPIECE_LIBRARY_APP,
          ApplicationSpec(name="WorkpieceLibrary", folder_id=1, icon="fa5s.shapes",
                          factory=application_wiring._build_workpiece_library_application)),
@@ -145,6 +153,9 @@ def _build_application_specs():
         (paint_system_config.BROKER_DEBUG_APP,
          ApplicationSpec(name="BrokerDebug", folder_id=4, icon="fa5s.project-diagram",
                          factory=application_wiring._build_broker_debug_application)),
+        (paint_system_config.CONTOUR_MATCHING_TESTER_APP,
+         ApplicationSpec(name="ContourMatchingTester", folder_id=4, icon="fa6s.shapes",
+                         factory=application_wiring._build_contour_matching_tester)),
         (paint_system_config.USER_MANAGEMENT_APP,
          ApplicationSpec(name="UserManagement", folder_id=3, icon="fa5s.users-cog",
                          factory=application_wiring._build_user_management_application)),
@@ -175,11 +186,11 @@ def _build_application_specs():
 
 
 class PaintRobotSystem(BaseRobotSystem):
-
     allowed_dropoff_strategies = ("movement_group", "plate_layout")
     height_measuring_enabled = True
 
-    tools = [ToolDefinition(id=1, name="Calibration Tool")]
+    calibration_tool = ToolDefinition(id=1, name="Calibration Tool")
+    tools = [calibration_tool]
     tool_slots = []
 
     def build_production_start_guard(self):
@@ -377,6 +388,7 @@ class PaintRobotSystem(BaseRobotSystem):
         protected_app_role_values={
             "user_management": ["Admin"],
             "paintmotionrecipe": ["Admin", "Developer"],
+            "contourmatchingtester": ["Admin", "Developer"],
         },
     )
 
@@ -423,6 +435,7 @@ class PaintRobotSystem(BaseRobotSystem):
         ),
         SettingsSpec(CommonSettingsID.VISION_CAMERA_SETTINGS, CameraSettingsSerializer(),
                      "vision/camera_settings.json"),
+        SettingsSpec(SettingsID.CAMERAS, CameraDevicesConfigSerializer(), "hardware/cameras.json"),
         SettingsSpec(CommonSettingsID.WORK_AREA_SETTINGS, WorkAreaSettingsSerializer(), "vision/work_areas.json"),
         SettingsSpec(CommonSettingsID.HEIGHT_MEASURING_SETTINGS, HeightMeasuringSettingsSerializer(),
                      "height_measuring/settings.json"),
@@ -433,6 +446,7 @@ class PaintRobotSystem(BaseRobotSystem):
         SettingsSpec(SettingsID.PERIPHERALS, PeripheralConfigSerializer(), "hardware/peripherals.json"),
         SettingsSpec(SettingsID.DRYER_CONFIG, DryerConfigSerializer(), "dryer/settings.json"),
         SettingsSpec(SettingsID.PAINT_PROCESS_CONFIG, PaintProcessConfigSerializer(), "paint/process.json"),
+        SettingsSpec(SettingsID.PAINT_ADJUSTMENT_SETTINGS, PaintAdjustmentSettingsSerializer(), "paint/adjustment.json"),
     ]
 
     services = [
@@ -441,8 +455,13 @@ class PaintRobotSystem(BaseRobotSystem):
                     description="Named position movements"),
         ServiceSpec(CommonServiceID.WORK_AREAS, IWorkAreaService, required=True,
                     description="Shared work-area storage and active-area context"),
-        ServiceSpec(CommonServiceID.VISION, IVisionService, required=False, description="Camera-based alignment",
-                    ),
+        ServiceSpec(
+            CommonServiceID.VISION,
+            IVisionService,
+            required=False,
+            description="Camera-based alignment",
+            builder=build_paint_vision_service,
+        ),
         ServiceSpec(
             CommonServiceID.TOOLS,
             IToolService,
@@ -539,6 +558,7 @@ class PaintRobotSystem(BaseRobotSystem):
         _nav_engine = self.get_service(CommonServiceID.NAVIGATION)
         self._work_area_service = self.get_service(CommonServiceID.WORK_AREAS)
         self._vision = self.get_optional_service(CommonServiceID.VISION)
+        self._robot_config = self.get_settings(CommonSettingsID.ROBOT_CONFIG)
         self._paint_process_config_service = PaintProcessConfigService(
             self._settings_service,
             allowed_dropoff_strategies=self.allowed_dropoff_strategies,
@@ -557,8 +577,11 @@ class PaintRobotSystem(BaseRobotSystem):
                                                  calibration_move_acc_percent=PAINT_PROCESS_CONFIG.navigation_return.calibration_move_acc_percent,
                                                  calibration_move_motion_type=PAINT_PROCESS_CONFIG.navigation_return.calibration_move_motion_type,
                                                  calibration_move_blendR=PAINT_PROCESS_CONFIG.navigation_return.calibration_move_blendR,
+                                                 calibration_tool_id=self.calibration_tool.id,
+                                                 configured_tool_getter=lambda: self._settings_service.get(
+                                                     CommonSettingsID.ROBOT_CONFIG
+                                                 ).robot_tool,
                                                  paint_process_config_service=self._paint_process_config_service)
-        self._robot_config = self.get_settings(CommonSettingsID.ROBOT_CONFIG)
         self._dropoff_motion_corridor_id = "workpiece_drop_opening"
         self._paint_process_config_service.add_change_listener(
             self._refresh_dropoff_motion_corridor
@@ -590,6 +613,32 @@ class PaintRobotSystem(BaseRobotSystem):
         if self._vision is not None:
             self._vision.start()
             self.register_managed_resource(self._vision)
+
+        self._camera_stream_publishers = {}
+        from src.engine.vision.camera_stream_publisher import CameraStreamPublisher
+
+        try:
+            camera_config = self.get_settings(SettingsID.CAMERAS)
+            configured_cameras = camera_config.cameras.items()
+        except KeyError:
+            _logger.warning("No camera device configuration is available")
+            configured_cameras = ()
+
+        for role, camera_spec in configured_cameras:
+            if role == "primary_vision":
+                continue
+            publisher = CameraStreamPublisher(
+                role=role,
+                device=camera_spec.device,
+                messaging=self._messaging_service,
+                width=camera_spec.width,
+                height=camera_spec.height,
+                flip_horizontal=camera_spec.flip_horizontal,
+                flip_vertical=camera_spec.flip_vertical,
+            )
+            publisher.start()
+            self.register_managed_resource(publisher)
+            self._camera_stream_publishers[role] = publisher
 
         self._height_measuring_provider = None
         self._height_measuring_service = None
@@ -730,6 +779,15 @@ class PaintRobotSystem(BaseRobotSystem):
     def on_stop(self) -> None:
         self._robot.stop_motion()
         self._robot.disable_robot()
+
+    def apply_camera_flips(self, role: str, horizontal: bool, vertical: bool) -> None:
+        if role == "primary_vision":
+            if self._vision is not None:
+                self._vision.set_camera_flips(horizontal, vertical)
+            return
+        publisher = self._camera_stream_publishers.get(role)
+        if publisher is not None:
+            publisher.set_flips(horizontal, vertical)
 
 
 class AutomaticDryerPaintRobotSystem(PaintRobotSystem):

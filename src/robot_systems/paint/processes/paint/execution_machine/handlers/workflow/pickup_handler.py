@@ -71,14 +71,16 @@ def handle_pickup(ctx: PaintExecutionContext) -> PaintExecutionState:
             ctx.set_result(False, message)
             return PaintExecutionState.COMPLETED if message == "Drop-off plate is full" else PaintExecutionState.ERROR
 
-    stop_after_pickup = bool(ctx.process_config.stop_after_calibration_pickup)
+    stop_after_pickup = bool(
+        ctx.process_config.stop_after_calibration_pickup and ctx.adjustment_session is None
+    )
     ctx.paint_ordered_result = (
         try_execute_ordered_pickup_and_paint_contact(
             executor,
             ctx.execution_plan,
             pickup_plan=pickup_plan,
         )
-        if pickup_plan is not None and not stop_after_pickup
+        if pickup_plan is not None and not stop_after_pickup and ctx.adjustment_session is None
         else None
     )
     if ctx.paint_ordered_result is not None:

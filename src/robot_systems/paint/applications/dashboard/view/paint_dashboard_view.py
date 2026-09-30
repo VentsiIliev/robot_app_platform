@@ -16,6 +16,7 @@ from PyQt6.QtCore import (
 from PyQt6.QtGui import QIcon, QPixmap
 from PyQt6.QtWidgets import (
     QDialog,
+    QMenu,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -30,12 +31,13 @@ from PyQt6.QtWidgets import (
 )
 
 from src.applications.base.i_application_view import IApplicationView
-from src.applications.base.styled_message_box import ask_yes_no
+from src.applications.base.styled_message_box import ask_yes_no, show_warning as show_styled_warning
 from src.applications.base.drawer_toggle import DrawerToggle
 from pl_gui.dashboard.DashboardWidget import DashboardWidget
 from pl_gui.settings.settings_view.styles import (
     BG_COLOR,
     BORDER,
+    GHOST_BTN_STYLE,
     PRIMARY,
     TAB_WIDGET_STYLE,
     TEXT_COLOR,
@@ -211,6 +213,8 @@ class PaintDashboardView(IApplicationView):
     drying_mode_requested = pyqtSignal(str)
     new_tray_requested = pyqtSignal()
     remove_plate_placement_requested = pyqtSignal(int)
+    camera_selected = pyqtSignal(str)
+    camera_feed_visible = pyqtSignal(bool)
 
     def __init__(
         self,
@@ -219,9 +223,15 @@ class PaintDashboardView(IApplicationView):
         cards: list,
         auxiliary_toggles=None,
         ui_config: PaintDashboardUiConfig | None = None,
+        camera_roles=(),
         parent=None,
     ):
         self._ui_config = ui_config or PaintDashboardUiConfig()
+        self._camera_roles = tuple(camera_roles) or ("primary_vision",)
+        self._selected_camera = "primary_vision" if "primary_vision" in self._camera_roles else self._camera_roles[0]
+        self._camera_selector: QToolButton | None = None
+        self._camera_menu: QMenu | None = None
+        self._camera_page: QWidget | None = None
         self.SHOW_JOG_WIDGET = self._ui_config.show_jog_widget
         self._config = config
         self._action_buttons = action_buttons
@@ -333,7 +343,7 @@ class PaintDashboardView(IApplicationView):
             self._plate_layout.remove_requested.connect(self._on_remove_plate_placement)
             if self._ui_config.show_camera_preview:
                 self._preview_stack = QStackedWidget()
-                self._preview_stack.addWidget(camera)
+                self._preview_stack.addWidget(self._build_camera_page(camera))
                 self._preview_stack.addWidget(self._plate_layout)
                 preview_layout.insertWidget(0, self._preview_stack)
             else:
@@ -354,11 +364,12 @@ class PaintDashboardView(IApplicationView):
                 self._center_expanded_tab_icon(1, "fa5s.th")
                 if self._ui_config.show_tray_camera_tab:
                     self._expanded_tabs.addTab(
-                        camera,
+                        self._build_camera_page(camera),
                         load_icon("fa5s.camera", color=PRIMARY),
                         "",
                     )
                     self._center_expanded_tab_icon(2, "fa5s.camera")
+                    self._expanded_tabs.currentChanged.connect(self._on_expanded_tab_changed)
                 else:
                     camera.hide()
                 self._retranslate_expanded_tabs()
@@ -390,6 +401,69 @@ class PaintDashboardView(IApplicationView):
         except (AttributeError, RuntimeError):
             self._preview_stack = None
             self._plate_layout = None
+
+    def _build_camera_page(self, camera: QWidget) -> QWidget:
+        page = QWidget()
+        page_layout = QVBoxLayout(page)
+        page_layout.setContentsMargins(4, 4, 4, 4)
+        page_layout.setSpacing(4)
+        selector = QToolButton()
+        selector.setCursor(Qt.CursorShape.PointingHandCursor)
+        selector.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        selector.setStyleSheet(GHOST_BTN_STYLE)
+        menu = QMenu(selector)
+        menu.triggered.connect(self._on_camera_menu_triggered)
+        selector.setMenu(menu)
+        page_layout.addWidget(selector, alignment=Qt.AlignmentFlag.AlignLeft)
+        page_layout.addWidget(camera, stretch=1)
+        self._camera_page = page
+        self._camera_selector = selector
+        self._camera_menu = menu
+        self._retranslate_camera_selector()
+        return page
+
+    def _on_camera_menu_triggered(self, action) -> None:
+        role = str(action.data() or "")
+        if role and role != self._selected_camera:
+            self._selected_camera = role
+            self._retranslate_camera_selector()
+            self.set_trajectory_image({"image": None})
+            self.camera_selected.emit(role)
+
+    def _on_expanded_tab_changed(self, _index: int) -> None:
+        self.camera_feed_visible.emit(
+            self._camera_page is not None
+            and self._expanded_tabs.currentWidget() is self._camera_page
+        )
+
+    def _retranslate_camera_selector(self) -> None:
+        if self._camera_selector is None or self._camera_menu is None:
+            return
+        labels = {
+            "primary_vision": self._translate_text("Primary vision"),
+            "auxiliary": self._translate_text("Auxiliary"),
+        }
+        self._camera_menu.clear()
+        for role in self._camera_roles:
+            action = self._camera_menu.addAction(labels.get(role, role.replace("_", " ").title()))
+            action.setData(role)
+        selected = labels.get(self._selected_camera, self._selected_camera.replace("_", " ").title())
+        self._camera_selector.setText(f"{self._translate_text('Camera')}: {selected} ▾")
+
+    def is_camera_feed_visible(self) -> bool:
+        if self._camera_page is None:
+            return False
+        if self._expanded_tabs is not None:
+            return self._expanded_tabs.currentWidget() is self._camera_page and self.isVisible()
+        return self._camera_page.isVisible()
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        self.camera_feed_visible.emit(self.is_camera_feed_visible())
+
+    def hideEvent(self, event) -> None:
+        self.camera_feed_visible.emit(False)
+        super().hideEvent(event)
 
     def _install_compact_status_rail(self) -> None:
         if self._ui_config.show_camera_preview:
@@ -1208,6 +1282,7 @@ class PaintDashboardView(IApplicationView):
             self._quick_controls.set_drying_mode(mode)
         if self._preview_stack is not None:
             self._preview_stack.setCurrentIndex(1 if str(mode).lower() == "manual" else 0)
+            self.camera_feed_visible.emit(self.is_camera_feed_visible())
         for widget in self._control_widgets():
             widget.set_drying_mode(mode)
         if self._quick_access is not None:
@@ -1284,6 +1359,11 @@ class PaintDashboardView(IApplicationView):
 
     def show_warning(self, title: str, message: str) -> None:
         self._enqueue_message("warning", title, message)
+
+    def show_warning_dialog(self, title: str, message: str) -> None:
+        """Record a warning in the dashboard and show the shared modal warning."""
+        self._enqueue_message("warning", title, message)
+        show_styled_warning(self, title, message)
 
     def _enqueue_message(self, level: str, title: str, message: str) -> None:
         clean_title = str(title or "").strip()
@@ -1473,6 +1553,7 @@ class PaintDashboardView(IApplicationView):
             self._quick_access.retranslateUi()
         if self._expanded_tabs is not None:
             self._retranslate_expanded_tabs()
+        self._retranslate_camera_selector()
         self._last_card_states.clear()
         self._last_state_signature = None
         if self._last_state is not None:

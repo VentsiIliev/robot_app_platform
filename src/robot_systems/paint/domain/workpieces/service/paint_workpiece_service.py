@@ -57,3 +57,12 @@ class PaintWorkpieceService:
         except Exception:
             _logger.exception("PaintWorkpieceService.load_raw failed")
             return None
+
+    def load(self, storage_id: str):
+        """Return a saved workpiece in the shared contour-matcher shape."""
+        from src.robot_systems.paint.processes.paint.match.matchable_workpiece import MatchableWorkpiece
+
+        raw = self.load_raw(storage_id)
+        if not raw or not raw.get("contour"):
+            return None
+        return MatchableWorkpiece(raw, storage_id=storage_id)

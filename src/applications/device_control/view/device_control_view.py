@@ -278,6 +278,20 @@ class DeviceControlView(IApplicationView):
             return
         layout.insertWidget(max(0, layout.count() - 1), panel)
 
+    def add_custom_tab(self, key: str, label: str, panel: QWidget) -> None:
+        """Add a lifecycle-managed extension panel without device toggles."""
+        existing = self._device_tabs.get(key)
+        if existing is not None:
+            index = self._tabs.indexOf(existing)
+            if index >= 0:
+                self._tabs.removeTab(index)
+            existing.deleteLater()
+        panel.setParent(self._tabs)
+        self._tabs.addTab(panel, label)
+        self._device_tabs[key] = panel
+        self._tabs.setVisible(True)
+        self._legacy_scroll.setVisible(False)
+
     def set_device_state(self, device_key: str, state: dict[str, object]) -> None:
         label = self._device_state_labels.get(device_key)
         if label is None:

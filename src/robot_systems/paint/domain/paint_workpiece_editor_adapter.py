@@ -17,6 +17,7 @@ from src.applications.workpiece_editor.editor_core.adapters.adapter_utils import
     workpiece_layer_name,
 )
 from src.applications.workpiece_editor.editor_core.adapters.i_workpiece_data_adapter import IWorkpieceDataAdapter
+from src.robot_systems.paint.domain.paint_segment_selection import SELECTION_SOURCE_SETTING
 
 _logger = logging.getLogger(__name__)
 
@@ -37,10 +38,36 @@ class PaintWorkpieceEditorAdapter(IWorkpieceDataAdapter):
         "edge_cleanup_z_offset_mm",
     )
 
+    @staticmethod
+    def _initial_process_contours(main_contour, process_contours):
+        """Return saved paint sections or a complete editable contour copy.
+
+        The main contour remains independently stored in ``contour`` for
+        matching.  Legacy workpieces without paint sections receive an editor
+        copy in the Paint layer; saving then establishes the initial complete
+        RTCP process contour under ``sprayPattern.Contour``.
+        """
+        if process_contours:
+            return process_contours
+        if main_contour is None:
+            return []
+        try:
+            if len(main_contour) == 0:
+                return []
+        except TypeError:
+            return []
+        return [{
+            "contour": main_contour,
+            "settings": {SELECTION_SOURCE_SETTING: True},
+        }]
+
     def from_workpiece(self, workpiece) -> ContourEditorData:
         main_contour = workpiece.get_main_contour()
         main_settings = workpiece.get_main_contour_settings()
-        process_contours = workpiece.get_spray_pattern_contours()
+        process_contours = self._initial_process_contours(
+            main_contour,
+            workpiece.get_spray_pattern_contours(),
+        )
         process_fills = workpiece.get_spray_pattern_fills()
         layer_data = {
             workpiece_layer_name(): [{"contour": main_contour, "settings": main_settings}],
@@ -117,9 +144,13 @@ class PaintWorkpieceEditorAdapter(IWorkpieceDataAdapter):
             for key in self._MAIN_SETTING_KEYS
             if raw.get(key) is not None
         }
+        process_contours = self._initial_process_contours(
+            raw_contour,
+            raw.get(self._PROCESS_KEY, {}).get("Contour", []),
+        )
         layer_data = {
             workpiece_layer_name(): [{"contour": raw_contour, "settings": main_settings}],
-            contour_layer_name(): raw.get(self._PROCESS_KEY, {}).get("Contour", []),
+            contour_layer_name(): process_contours,
             fill_layer_name(): raw.get(self._PROCESS_KEY, {}).get("Fill", []),
         }
         return ContourEditorData.from_legacy_format(normalize_layer_data(layer_data))

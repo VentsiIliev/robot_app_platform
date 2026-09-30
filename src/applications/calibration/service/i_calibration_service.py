@@ -62,6 +62,9 @@ class ICalibrationService(ABC):
     def calibrate_camera_tcp_offset(self) -> tuple[bool, str]: ...
 
     @abstractmethod
+    def validate_camera_tcp_calibration_target(self, area_id: str) -> tuple[bool, str]: ...
+
+    @abstractmethod
     def calibrate_camera_z_shift(
         self,
         marker_id: int,

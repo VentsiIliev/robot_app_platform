@@ -1067,6 +1067,40 @@ class CalibrationApplicationService(ICalibrationService):
             return False, "Camera TCP offset calibration is not configured"
         return self._camera_tcp_offset_calibrator.calibrate()
 
+    def validate_camera_tcp_calibration_target(self, area_id: str) -> tuple[bool, str]:
+        target = str(area_id or "").strip()
+        if target != "global" and target not in {
+            definition.id for definition in self._work_area_definitions
+        }:
+            return False, f"Unknown camera-to-TCP work area: {target or '<empty>'}"
+
+        settings = self._calibration_settings.load()
+        if settings is None:
+            return False, "Calibration settings are unavailable"
+        if target == "global":
+            return True, "Camera-to-TCP calibration target: global"
+
+        if self._settings_service is not None:
+            robot_config = self._settings_service.get(CommonSettingsID.ROBOT_CONFIG)
+            if getattr(robot_config, "camera_to_tcp_mode", "global") != "per_area":
+                return (
+                    False,
+                    "Enable per-area camera-to-TCP calibration in Robot Settings → Targeting first",
+                )
+
+        vision = settings.vision
+        if str(vision.coordinate_calibration_mode or "global") == "per_area":
+            profile_id = (vision.work_area_calibration_profiles or {}).get(target)
+            if not profile_id:
+                return False, f"Work area '{target}' has no assigned vision calibration profile"
+            if profile_id != "global":
+                profile = (vision.coordinate_calibration_profiles or {}).get(profile_id)
+                if profile is None or not str(getattr(profile, "matrix_path", "") or "").strip():
+                    return False, f"Vision calibration profile '{profile_id}' has no matrix path"
+                if str(getattr(profile, "reference_frame", "") or "").strip().lower() != target.lower():
+                    return False, f"Vision calibration profile '{profile_id}' must use reference frame '{target}'"
+        return True, f"Camera-to-TCP calibration target: {target}"
+
     def calibrate_camera_z_shift(
         self,
         marker_id: int,

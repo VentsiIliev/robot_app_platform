@@ -2,7 +2,7 @@ from typing import Optional
 
 import cv2
 import numpy as np
-from PyQt6.QtCore import pyqtSignal, Qt
+from PyQt6.QtCore import QEvent, pyqtSignal, Qt
 from PyQt6.QtGui import QImage, QPixmap, QColor
 from PyQt6.QtWidgets import (
     QHBoxLayout, QVBoxLayout, QLabel, QFrame,
@@ -62,6 +62,7 @@ class ContourMatchingTesterView(IApplicationView):
 
     def __init__(self, parent=None):
         self._current_frame: Optional[np.ndarray] = None
+        self._selected_row = -1
         super().__init__("ContourMatchingTester", parent)
 
     def setup_ui(self) -> None:
@@ -71,6 +72,7 @@ class ContourMatchingTesterView(IApplicationView):
         root.setSpacing(8)
         root.addWidget(self._build_camera_panel(), stretch=3)
         root.addWidget(self._build_control_panel(), stretch=1)
+        self.retranslateUi()
 
     # ── Panel builders ────────────────────────────────────────────────────────
 
@@ -123,6 +125,11 @@ class ContourMatchingTesterView(IApplicationView):
         self._load_btn.clicked.connect(self._on_load_clicked)
         layout.addWidget(self._load_btn)
 
+        self._selection_hint = QLabel()
+        self._selection_hint.setWordWrap(True)
+        self._selection_hint.setStyleSheet(_SUMMARY_IDLE_STYLE)
+        layout.addWidget(self._selection_hint)
+
         self._workpiece_list = QListWidget()
         self._workpiece_list.setStyleSheet(_LIST_STYLE)
         self._workpiece_list.setMaximumHeight(120)
@@ -158,6 +165,7 @@ class ContourMatchingTesterView(IApplicationView):
 
         self._match_btn = QPushButton("Match")
         self._match_btn.setStyleSheet(ACTION_BTN_STYLE)
+        self._match_btn.setEnabled(False)
         self._match_btn.clicked.connect(self._on_match_clicked)
         layout.addWidget(self._match_btn)
 
@@ -206,6 +214,7 @@ class ContourMatchingTesterView(IApplicationView):
             self._capture_btn.setStyleSheet(_CAPTURE_BTN_STYLE)
 
     def set_workpieces(self, workpieces: list) -> None:
+        self._selected_row = -1
         self._workpiece_list.clear()
         for wp in workpieces:
             self._workpiece_list.addItem(getattr(wp, "name", str(wp)))
@@ -213,6 +222,19 @@ class ContourMatchingTesterView(IApplicationView):
         self._summary_label.setText("Run matching to see results")
         self._summary_label.setStyleSheet(_SUMMARY_IDLE_STYLE)
         self._clear_thumbnail()
+        self._match_btn.setEnabled(False)
+
+    def set_selected_workpiece(self, row: int) -> None:
+        self._selected_row = row
+        self._match_btn.setEnabled(row >= 0)
+        if row < 0:
+            self._clear_thumbnail()
+
+    def clear_match_results(self) -> None:
+        self._results_table.clearSpans()
+        self._results_table.setRowCount(0)
+        self._summary_label.setText("Run matching to see results")
+        self._summary_label.setStyleSheet(_SUMMARY_IDLE_STYLE)
 
     def show_thumbnail(self, name: str, thumbnail_bytes: Optional[bytes]) -> None:
         self._thumb_name_label.setText(name or "Unknown")
@@ -280,8 +302,21 @@ class ContourMatchingTesterView(IApplicationView):
             self._results_table.setSpan(0, 0, 1, len(_COLS))
 
     def set_matching_busy(self, busy: bool) -> None:
-        self._match_btn.setEnabled(not busy)
+        self._match_btn.setEnabled(not busy and self._selected_row >= 0)
+        self._workpiece_list.setEnabled(not busy)
+        self._load_btn.setEnabled(not busy)
+        self._capture_btn.setEnabled(not busy)
         self._match_btn.setText("Matching…" if busy else "Match")
+
+    def retranslateUi(self) -> None:
+        self._selection_hint.setText(
+            self.tr("Select one workpiece to test against all detected contours.")
+        )
+
+    def changeEvent(self, event) -> None:
+        if event.type() == QEvent.Type.LanguageChange:
+            self.retranslateUi()
+        super().changeEvent(event)
 
     # ── Private helpers ───────────────────────────────────────────────────────
 
@@ -304,8 +339,7 @@ class ContourMatchingTesterView(IApplicationView):
         self.capture_requested.emit()
 
     def _on_workpiece_row_changed(self, row: int) -> None:
-        if row >= 0:
-            self.workpiece_selected.emit(row)
+        self.workpiece_selected.emit(row)
 
     def clean_up(self) -> None:
         pass

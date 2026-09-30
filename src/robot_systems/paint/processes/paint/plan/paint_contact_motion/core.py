@@ -90,6 +90,7 @@ def project_paint_contact_motion_continuous(
         config: PaintSimulationConfig,
         anchor_xy: tuple[float, float] | None = None,
         source_rotation_deg: float = 0.0,
+        enforce_open_path_side: bool = False,
 ) -> tuple[list[list[float]], list[np.ndarray], list[dict[str, float | int]]]:
     """Project a dense contour into paint-axis contact motion.
 
@@ -190,6 +191,7 @@ def project_paint_contact_motion_continuous(
             <= max(1.0, float(PAINT_PROJECTION_TUNING.smooth_max_linear_step_mm) * 2.0)
     )
 
+    open_path_reversed = False
     if is_closed_path:
         # Closed contours have no natural start. Choose the start/order that is
         # closest to the pickup anchor and already compatible with the desired
@@ -208,6 +210,18 @@ def project_paint_contact_motion_continuous(
             points,
             float(config.closed_contour_overlap_mm),
         )
+    elif enforce_open_path_side and len(points) >= 3:
+        points, open_path_reversed = _orient_open_source_path_for_contact_side(
+            points,
+            pivot_xy=pivot_xy_tuple,
+            side_reference_heading=paint_axis_heading,
+            contact_segment_heading=contact_segment_heading,
+            side_sign=config.side_sign,
+        )
+        if open_path_reversed:
+            _logger.info(
+                "[PAINT_SELECTION] Reversed open selected path to preserve the configured physical paint side"
+            )
 
     command_rotation_sign = -1.0 if config.rotation_direction_sign < 0.0 else 1.0
     save_snapshots = _save_projection_snapshots(config)
@@ -270,7 +284,11 @@ def project_paint_contact_motion_continuous(
         diagnostics.append(
             {
                 "index": len(result) - 1,
-                "source_index": float(source_index),
+                "source_index": float(
+                    (len(path) - 1) - source_index
+                    if open_path_reversed
+                    else source_index
+                ),
                 "segment_length": segment_length,
                 "segment_heading": segment_heading,
                 "geometry_rotation": cumulative_geometry_rotation,
@@ -630,6 +648,46 @@ def _canonicalize_closed_source_path(
                 best_ordered = candidate
 
     return np.vstack([best_ordered, best_ordered[:1]])
+
+
+def _orient_open_source_path_for_contact_side(
+    points: np.ndarray,
+    *,
+    pivot_xy: tuple[float, float],
+    side_reference_heading: float,
+    contact_segment_heading: float,
+    side_sign: float,
+) -> tuple[np.ndarray, bool]:
+    """Choose the open-path direction that places the workpiece on the configured side."""
+    source = np.asarray(points, dtype=float)
+    if len(source) < 3:
+        return source, False
+    pivot = np.asarray(pivot_xy, dtype=float)
+    axis = np.asarray(
+        [
+            float(np.cos(np.radians(side_reference_heading))),
+            float(np.sin(np.radians(side_reference_heading))),
+        ],
+        dtype=float,
+    )
+    normal = np.asarray([-axis[1], axis[0]], dtype=float)
+    desired_sign = 1.0 if float(side_sign) >= 0.0 else -1.0
+
+    def side_score(candidate: np.ndarray) -> float:
+        heading = _segment_heading_deg(candidate[0], candidate[1])
+        rotation = unwrap_degrees(0.0, float(contact_segment_heading) - heading)
+        aligned = _rotate_points_about(candidate, rotation, candidate[0])
+        aligned = aligned + (pivot - aligned[0])
+        return float(np.mean((aligned[1:] - pivot) @ normal))
+
+    forward_score = side_score(source)
+    reverse = source[::-1].copy()
+    reverse_score = side_score(reverse)
+    forward_ok = forward_score * desired_sign >= 0.0
+    reverse_ok = reverse_score * desired_sign >= 0.0
+    if reverse_ok and not forward_ok:
+        return reverse, True
+    return source, False
 
 
 # Compatibility aliases for old pivot/projection naming.

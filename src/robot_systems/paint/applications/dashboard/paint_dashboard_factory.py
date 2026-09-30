@@ -29,9 +29,10 @@ from src.robot_systems.paint.applications.dashboard.view.paint_dashboard_view im
 
 
 class PaintDashboardFactory(ApplicationFactory):
-    def __init__(self, ui_config: PaintDashboardUiConfig | None = None):
+    def __init__(self, ui_config: PaintDashboardUiConfig | None = None, camera_roles=()):
         self._messaging = None
         self._ui_config = ui_config or PaintDashboardUiConfig()
+        self._camera_roles = tuple(camera_roles)
 
     def _create_model(self, service: IPaintDashboardService) -> IApplicationModel:
         return PaintDashboardModel(service)
@@ -43,6 +44,7 @@ class PaintDashboardFactory(ApplicationFactory):
             cards=PaintCardFactory().build_cards(PAINT_DASHBOARD_CARDS),
             auxiliary_toggles=PAINT_DASHBOARD_AUXILIARY_TOGGLES,
             ui_config=self._ui_config,
+            camera_roles=self._camera_roles,
         )
 
     def _create_controller(

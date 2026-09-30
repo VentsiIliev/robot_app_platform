@@ -61,6 +61,8 @@ class PaintExecutionContext:
     magazine_target: dict | None = None
     magazine_fixed_pickup_pose: list[float] | None = None
     magazine_stage_only: bool = False
+    retry_capture_until_workpiece: bool = False
+    adjustment_session: object | None = None
     magazine_nesting_has_more: bool = True
     cached_workpiece_contour: object | None = None
 

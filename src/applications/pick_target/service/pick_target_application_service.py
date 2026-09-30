@@ -26,6 +26,12 @@ _DEBUG_CAPTURE_DIR = os.path.normpath(
 )
 
 
+def _rounded(values) -> list[float] | None:
+    if values is None:
+        return None
+    return [round(float(value), 6) for value in values]
+
+
 class PickTargetApplicationService(IPickTargetService):
 
     def __init__(
@@ -36,6 +42,7 @@ class PickTargetApplicationService(IPickTargetService):
         resolver:        Optional[VisionTargetResolver],
         resolver_getter=None,
         robot_config=None,
+        robot_config_getter=None,
         navigation=None,
         height_measuring: Optional[IHeightMeasuringService] = None,
         default_target_name: str = "",
@@ -50,6 +57,7 @@ class PickTargetApplicationService(IPickTargetService):
         self._resolver      = resolver
         self._resolver_getter = resolver_getter
         self._robot_config  = robot_config
+        self._robot_config_getter = robot_config_getter
         self._navigation    = navigation
         self._height_measuring  = height_measuring
         self._use_pickup_plane = False
@@ -113,11 +121,18 @@ class PickTargetApplicationService(IPickTargetService):
     def set_pickup_plane_rz(self, rz: float) -> None:
         self._pickup_plane_rz = float(rz)
 
+    def _current_robot_config(self):
+        if self._robot_config_getter is not None:
+            return self._robot_config_getter()
+        return self._robot_config
+
     def _tool(self) -> int:
-        return self._robot_config.robot_tool if self._robot_config else 0
+        config = self._current_robot_config()
+        return config.robot_tool if config else 0
 
     def _user(self) -> int:
-        return self._robot_config.robot_user if self._robot_config else 0
+        config = self._current_robot_config()
+        return config.robot_user if config else 0
 
     @property
     def _active_frame(self) -> str:
@@ -247,17 +262,48 @@ class PickTargetApplicationService(IPickTargetService):
             _logger.warning("Robot service not available — cannot move")
             return False
         try:
-            return self._robot.move_ptp(
+            tool = self._tool()
+            success = self._robot.move_ptp(
                 [x, y, z, rx, ry, rz],
-                tool=self._tool(),
+                tool=tool,
                 user=self._user(),
                 velocity=20,
                 acceleration=10,
                 wait_to_reach=True,
             )
+            if success:
+                self._log_tool_chain(tool, [x, y, z, rx, ry, rz])
+            return success
         except Exception:
             _logger.exception("move_to(%.1f, %.1f, %.1f) failed", x, y, z)
             return False
+
+    def _log_tool_chain(self, tool_id: int, commanded_tcp: List[float]) -> None:
+        """Log the live frames used by a completed targeting move."""
+        if self._robot is None:
+            return
+        try:
+            registry = self._robot.get_tool_registry() or {}
+            id_map = registry.get("tool_id_map", {})
+            tool_name = id_map.get(
+                int(tool_id),
+                id_map.get(str(int(tool_id)), f"TOOL_{int(tool_id)}"),
+            )
+            tool_transform = registry.get("tool_registry", {}).get(tool_name)
+            flange_pose = self._robot.get_current_flange_position()
+            reported_tcp = self._robot.get_current_position()
+            _logger.info(
+                "[PICK_TARGET_TOOL_CHAIN] tool_id=%d tool_name=%s commanded_tcp=%s "
+                "registry_transform=%s source_pose=%s reported_tcp=%s",
+                int(tool_id),
+                str(tool_name),
+                _rounded(commanded_tcp),
+                _rounded(tool_transform),
+                _rounded(flange_pose),
+                _rounded(reported_tcp),
+            )
+        except Exception:
+            _logger.warning("Failed to capture pick-target tool-chain diagnostics", exc_info=True)
 
     def move_to_base(self, robot_x: float, robot_y: float, rx: float, ry: float, rz: float, z: float | None = None) -> bool:
         if self._robot is None:

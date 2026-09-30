@@ -27,6 +27,7 @@ def _make_model(**overrides):
     m.calibrate_camera.return_value           = overrides.get("camera",   (True,  "cam ok"))
     m.calibrate_robot.return_value            = overrides.get("robot",    (False, "not impl"))
     m.select_robot_calibration_target.return_value = (True, "Calibration target selected: global")
+    m.validate_camera_tcp_calibration_target.return_value = (True, "Camera-to-TCP calibration target: magazine")
     m.preview_robot_calibration.return_value = RobotCalibrationPreview(ok=True, message="ready")
     m.calibrate_camera_and_robot.return_value = overrides.get("sequence", (True,  "all ok"))
     return m
@@ -47,6 +48,7 @@ def _make_view():
     v.save_calibration_settings_requested = MagicMock()
     v.save_calibration_settings_requested.connect = MagicMock()
     v.prompt_robot_calibration_area.return_value = "global"
+    v.prompt_camera_tcp_calibration_area.return_value = "magazine"
     v.confirm_robot_calibration_preview.return_value = True
     return v
 
@@ -269,6 +271,42 @@ class TestCalibrationControllerCameraFrame(unittest.TestCase):
         fake_frame = object()
         ctrl._on_camera_frame(fake_frame)
         view.update_camera_view.assert_called_once_with(fake_frame)
+
+    def test_camera_tcp_area_is_selected_and_saved_before_start(self):
+        settings = _make_calibration_settings()
+        ctrl, model, view, _ = _make_ctrl(settings=settings)
+        ctrl._run_in_thread = MagicMock()
+
+        ctrl._on_calibrate_camera_tcp_offset()
+
+        view.prompt_camera_tcp_calibration_area.assert_called_once_with(
+            current_area_id="global"
+        )
+        model.validate_camera_tcp_calibration_target.assert_called_once_with("magazine")
+        self.assertEqual(settings.vision.calibration_target_work_area, "magazine")
+        model.save_calibration_settings.assert_called_once_with(settings)
+        ctrl._run_in_thread.assert_called_once()
+
+    def test_camera_tcp_area_cancelled_before_motion(self):
+        ctrl, model, view, _ = _make_ctrl()
+        ctrl._run_in_thread = MagicMock()
+        view.prompt_camera_tcp_calibration_area.return_value = None
+
+        ctrl._on_calibrate_camera_tcp_offset()
+
+        model.save_calibration_settings.assert_not_called()
+        ctrl._run_in_thread.assert_not_called()
+
+    def test_unconfigured_camera_tcp_area_is_rejected_before_motion(self):
+        ctrl, model, view, _ = _make_ctrl()
+        ctrl._run_in_thread = MagicMock()
+        model.validate_camera_tcp_calibration_target.return_value = (False, "No profile")
+
+        ctrl._on_calibrate_camera_tcp_offset()
+
+        view.append_log.assert_called_with("✗ No profile")
+        model.save_calibration_settings.assert_not_called()
+        ctrl._run_in_thread.assert_not_called()
 
     def test_camera_frame_ignored_when_inactive(self):
         ctrl, _, view, _ = _make_ctrl()

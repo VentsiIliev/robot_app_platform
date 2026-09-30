@@ -296,6 +296,14 @@ class CalibrationController(IApplicationController):
         if settings is None:
             self._view.append_log("✗ Calibration settings are unavailable")
             return
+        area_id = self._view.prompt_camera_tcp_calibration_area(current_area_id="global")
+        if area_id is None:
+            self._view.append_log("• Camera TCP offset calibration cancelled before area selection")
+            return
+        valid, message = self._model.validate_camera_tcp_calibration_target(area_id)
+        if not valid:
+            self._view.append_log(f"✗ {message}")
+            return
         tcp = settings.robot.camera_tcp_offset
         config = self._view.prompt_tcp_offset_calibration_config(
             marker_id=int(getattr(tcp, "marker_id", 4)),
@@ -328,7 +336,9 @@ class CalibrationController(IApplicationController):
         tcp.recenter_max_iterations = int(config.recenter_max_iterations)
         tcp.recenter_stability_wait_s = float(config.recenter_stability_wait_s)
         tcp.recenter_alignment_threshold_mm = float(config.recenter_alignment_threshold_mm)
+        settings.vision.calibration_target_work_area = area_id
         self._model.save_calibration_settings(settings)
+        self._view.append_log(f"• {message}")
         self._view.set_buttons_enabled(False)
         self._bridge.camera_tcp_btn_enabled.emit(False)
         self._bridge.camera_z_shift_btn_enabled.emit(False)

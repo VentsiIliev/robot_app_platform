@@ -11,6 +11,8 @@ from src.robot_systems.paint.processes.paint.execution_control import PaintExecu
 from src.robot_systems.paint.processes.paint.dashboard_live_view_events import (
     PaintDashboardLiveViewEvent,
     PaintDashboardLiveViewTopics,
+    PaintDashboardMessageEvent,
+    PaintDashboardMessageTopics,
 )
 from src.robot_systems.paint.processes.paint.execution_machine import (
     PaintExecutionContext,
@@ -98,8 +100,14 @@ class PaintProductionService:
             context.run_allowed.set()
         self._paint_control.request_stop()
 
-    def run_once(self, stop_requested: Optional[Callable[[], bool]] = None) -> tuple[bool, str]:
-        """Run production once, or repeat from the active source until no workpiece is found."""
+    def run_once(
+        self,
+        stop_requested: Optional[Callable[[], bool]] = None,
+        *,
+        manual_single_cycle: bool = False,
+        adjustment_session=None,
+    ) -> tuple[bool, str]:
+        """Run production, optionally forcing one calibration-table cycle without magazine load."""
         self._clear_prepositioned_start_group()
         should_stop = stop_requested or (lambda: False)
         self._paint_control.reset()
@@ -110,6 +118,22 @@ class PaintProductionService:
 
         process_config = process_config_result[2]
         magazine_config = process_config.magazine_load if process_config is not None else None
+        if manual_single_cycle or adjustment_session is not None:
+            if magazine_config is None:
+                return False, "Paint magazine calibration settings are unavailable"
+            ok, msg = self._move_to_calibration_before_manual_cycle(magazine_config, should_stop)
+            if not ok:
+                return False, msg
+            ok, msg = self._run_single_cycle(
+                should_stop,
+                process_config=process_config,
+                magazine_config=None,
+                cycle_index=1,
+                suppress_magazine_load=True,
+                retry_capture_until_workpiece=True,
+                adjustment_session=adjustment_session,
+            )
+            return ok, msg
         run_while_found = bool(
             (process_config or PAINT_PROCESS_CONFIG).run_while_workpiece_found
         )
@@ -519,6 +543,8 @@ class PaintProductionService:
         cached_snapshot=None,
         cached_workpiece_contour=None,
         suppress_magazine_load: bool = False,
+        retry_capture_until_workpiece: bool = False,
+        adjustment_session=None,
     ) -> tuple[bool, str]:
         raw_process_config = process_config or PAINT_PROCESS_CONFIG
         process_config = scale_paint_process_accelerations(raw_process_config)
@@ -563,6 +589,8 @@ class PaintProductionService:
             magazine_discovery_active_contour=magazine_discovery_active_contour,
             magazine_snapshot=magazine_discovery_snapshot,
             magazine_stage_only=bool(magazine_stage_only),
+            retry_capture_until_workpiece=retry_capture_until_workpiece,
+            adjustment_session=adjustment_session,
             snapshot=cached_snapshot,
             cached_workpiece_contour=cached_workpiece_contour,
         )
@@ -879,6 +907,22 @@ class PaintProductionService:
             )
         except Exception:
             _logger.exception("Failed to publish paint dashboard live-view state")
+
+    def publish_dashboard_message(self, level: str, title: str, message: str) -> None:
+        """Publish a production notice into the paint dashboard message queue."""
+        if self._messaging_service is None:
+            return
+        try:
+            self._messaging_service.publish(
+                PaintDashboardMessageTopics.MESSAGE,
+                PaintDashboardMessageEvent(
+                    level=str(level or "info"),
+                    title=str(title or ""),
+                    message=str(message or ""),
+                ),
+            )
+        except Exception:
+            _logger.exception("Failed to publish paint dashboard message")
 
     @staticmethod
     def _log_execution_state_timing(context: PaintExecutionContext) -> None:

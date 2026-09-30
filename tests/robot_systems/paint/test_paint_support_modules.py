@@ -45,7 +45,10 @@ from src.robot_systems.paint.domain.workpieces.paint_workpiece_library_service i
 from src.robot_systems.paint.height_measuring import (
     PaintRobotSystemHeightMeasuringProvider,
 )
-from src.robot_systems.paint.service_builders import build_vacuum_pump_service
+from src.robot_systems.paint.service_builders import (
+    build_paint_vision_service,
+    build_vacuum_pump_service,
+)
 from src.robot_systems.paint.targeting import (
     PaintRobotSystemTargetingProvider,
     build_paint_point_registry,
@@ -158,7 +161,16 @@ class TestPaintIdentifiersAndExports(unittest.TestCase):
         self.assertEqual(ServiceID.VACUUM_PUMP.value, "vacuum_pump")
         self.assertEqual(ProcessID.MAIN_PROCESS.value, "main_process")
         self.assertEqual(ProcessID.ROBOT_CALIBRATION.value, "robot_calibration")
-        self.assertEqual(list(SettingsID), [SettingsID.PAINT_PROCESS_CONFIG])
+        self.assertEqual(
+            list(SettingsID),
+            [
+                SettingsID.CAMERAS,
+                SettingsID.PAINT_PROCESS_CONFIG,
+                SettingsID.PAINT_ADJUSTMENT_SETTINGS,
+                SettingsID.DRYER_CONFIG,
+                SettingsID.PERIPHERALS,
+            ],
+        )
 
     def test_package_exports_are_stable(self) -> None:
         self.assertIs(ApplicationsDashboardFactory, PaintDashboardFactory)
@@ -171,6 +183,38 @@ class TestPaintIdentifiersAndExports(unittest.TestCase):
 
 
 class TestPaintServiceBuildersAndProviders(unittest.TestCase):
+    @patch("src.robot_systems.default_service_builders.build_vision_service")
+    def test_build_paint_vision_service_uses_primary_camera_without_fallback(
+        self, default_builder
+    ) -> None:
+        primary = SimpleNamespace(
+            device="/dev/primary",
+            width=1920,
+            height=1080,
+            flip_horizontal=True,
+            flip_vertical=False,
+        )
+        camera_config = SimpleNamespace(
+            get=MagicMock(return_value=primary),
+        )
+        ctx = SimpleNamespace(
+            settings=SimpleNamespace(get=MagicMock(return_value=camera_config)),
+        )
+        default_builder.return_value = "vision"
+
+        result = build_paint_vision_service(ctx)
+
+        self.assertEqual(result, "vision")
+        ctx.settings.get.assert_called_once_with(SettingsID.CAMERAS)
+        camera_config.get.assert_called_once_with("primary_vision")
+        default_builder.assert_called_once_with(
+            ctx,
+            camera_device="/dev/primary",
+            camera_resolution=(1920, 1080),
+            allow_camera_fallback=False,
+            camera_flips=(True, False),
+        )
+
     def test_build_vacuum_pump_service_uses_modbus_factory(self) -> None:
         modbus_config = object()
         ctx = SimpleNamespace(

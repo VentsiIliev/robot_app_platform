@@ -128,6 +128,26 @@ class TestPaintWorkpieceService(unittest.TestCase):
         self.assertEqual(service.update("a", {"name": "y"}), (True, "/tmp/file.json"))
         self.assertEqual(service.load_raw("a"), {"name": "x"})
 
+    def test_load_exposes_matchable_saved_workpiece(self) -> None:
+        repo = MagicMock()
+        repo.load_raw.return_value = {
+            "name": "Paint part",
+            "workpieceId": "wp-1",
+            "contour": [[0, 0], [10, 0], [10, 10]],
+            "matchingContour": [[1, 1], [9, 1], [9, 9]],
+        }
+        workpiece = PaintWorkpieceService(repo).load("storage-1")
+
+        self.assertEqual(workpiece.storage_id, "storage-1")
+        self.assertEqual(workpiece.name, "Paint part")
+        self.assertEqual(workpiece.get_main_contour().tolist(), [[1, 1], [9, 1], [9, 9]])
+
+    def test_load_skips_workpieces_without_contour(self) -> None:
+        repo = MagicMock()
+        repo.load_raw.return_value = {"name": "Incomplete"}
+
+        self.assertIsNone(PaintWorkpieceService(repo).load("storage-1"))
+
     def test_service_handles_repository_failures(self) -> None:
         repo = MagicMock()
         repo.save.side_effect = RuntimeError("save failed")

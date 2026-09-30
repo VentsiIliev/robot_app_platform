@@ -17,10 +17,18 @@
     "Saved workpieces checked: {count}": "Проверени запазени детайли: {count}",
     "Unmatched contours: {count}": "Несъпоставени контури: {count}",
     "Match Workpiece Failed": "Съпоставянето е неуспешно",
+    "The captured contour did not match a saved workpiece.\n\n{details}": "Заснетият контур не съвпада със запазен детайл.\n\n{details}",
+    "No match found.": "Не е намерено съвпадение.",
+    "Matched workpiece has no contour.": "Съпоставеният детайл няма контур.",
+    "The saved workpiece was aligned to the captured contour.": "Запазеният детайл беше подравнен към заснетия контур.",
     "No Process Action": "Няма действие за процес",
     "Prepared process has no executable action.": "Подготвеният процес няма изпълнимо действие.",
     "Process Started": "Процесът е стартиран",
     "Process Failed": "Процесът е неуспешен",
-    "Load Failed": "Зареждането е неуспешно"
+    "Load Failed": "Зареждането е неуспешно",
+    "Paint Selection": "Избор за боядисване",
+    "Paint segments created from the rectangle selection.": "Създадени са сегменти за боядисване от правоъгълната селекция.",
+    "Select at least two neighboring Paint contour points.": "Изберете поне две съседни точки от контура Paint.",
+    "Unknown editor action.": "Непознато действие на редактора."
   }
 }

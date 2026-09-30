@@ -17,6 +17,9 @@ BYPASS_CONTOUR_PREPARATION = False
 # Main production dashboard for monitoring and controlling the paint process.
 PAINT_DASHBOARD_APP = True
 
+# Auxiliary camera preview with manual more/less paint request controls.
+PAINT_ADJUSTMENT_APP = True
+
 # Keep the current camera-first dashboard layout. When False, the camera is
 # omitted, paint/pass controls move into the main content area, and the bottom
 # process buttons expand to the available width.
@@ -57,10 +60,13 @@ USE_TRAY_DRY_DURATION = True
 TRAY_DRY_DURATION_MINUTES = 5
 
 # Lists saved workpieces and provides actions for managing the library.
-WORKPIECE_LIBRARY_APP = False
+WORKPIECE_LIBRARY_APP = True
 
 # Captures, creates, and edits workpiece contours and their paint paths.
 WORKPIECE_EDITOR_APP = True
+
+# Captures contours and compares them with saved paint workpieces.
+CONTOUR_MATCHING_TESTER_APP = True
 
 # Configures the robot, movement groups, calibration, tools, and target frames.
 ROBOT_SETTINGS_APP = True

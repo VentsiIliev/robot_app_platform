@@ -42,6 +42,9 @@ class VisionService(IVisionService, IHealthCheckable,IExposureControl):
     def set_raw_mode(self, enabled: bool) -> None:
         self._vision_system.rawMode = enabled
 
+    def set_camera_flips(self, horizontal: bool, vertical: bool) -> None:
+        self._vision_system.frame_grabber.set_flips(horizontal, vertical)
+
     def capture_calibration_image(self) -> tuple[bool, str]:
         return self._vision_system.captureCalibrationImage()
 

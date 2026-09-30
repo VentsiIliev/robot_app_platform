@@ -8,9 +8,14 @@ from src.engine.core.i_messaging_service import IMessagingService
 from src.engine.robot.interfaces.i_robot_service import IRobotService
 from src.engine.process.base_process import BaseProcess
 from src.engine.process.process_requirements import ProcessRequirements
+from src.shared_contracts.events.process_events import ProcessState
 from src.engine.system.i_system_manager import ISystemManager
 from src.robot_systems.paint.component_ids import ProcessID
 from src.robot_systems.paint.processes.paint.config import PAINT_PROCESS_CONFIG
+from src.robot_systems.paint.processes.paint.incremental_adjustment import (
+    AdjustmentStep,
+    PaintAdjustmentSession,
+)
 
 
 class PaintProcess(BaseProcess):
@@ -41,12 +46,65 @@ class PaintProcess(BaseProcess):
         self._thread: Optional[threading.Thread] = None
         self._stop_thread: Optional[threading.Thread] = None
         self._stopping = False
+        self._manual_single_cycle_requested = False
+        self._adjustment_session: PaintAdjustmentSession | None = None
+        self._pending_adjustment_session: PaintAdjustmentSession | None = None
+
+    def start_adjustment_cycle(self) -> bool:
+        """Start one operator-paced cycle without changing production settings."""
+        with self._lock:
+            if self._state not in (ProcessState.IDLE, ProcessState.STOPPED):
+                return False
+            previous_thread = self._thread
+            session = PaintAdjustmentSession()
+            self._pending_adjustment_session = session
+            try:
+                self._transition(ProcessState.RUNNING, self._on_start)
+            finally:
+                self._pending_adjustment_session = None
+            started = self._thread is not previous_thread and self._state == ProcessState.RUNNING
+            return started
+
+    def paint_next_adjustment_section(self, step: AdjustmentStep) -> bool:
+        session = self._adjustment_session
+        return bool(
+            self.state == ProcessState.RUNNING
+            and session is not None
+            and session.request_next(step)
+        )
+
+    def finish_adjustment_cycle(self) -> bool:
+        session = self._adjustment_session
+        return bool(
+            self.state == ProcessState.RUNNING
+            and session is not None
+            and session.request_finish()
+        )
+
+    def adjustment_status(self) -> tuple[str, float, float]:
+        session = self._adjustment_session
+        return session.snapshot() if session is not None else ("idle", 0.0, 0.0)
+
+    def start_manual_single_cycle(self) -> bool:
+        """Start one calibration-table paint cycle through the normal process state machine."""
+        with self._lock:
+            if self._state not in (ProcessState.IDLE, ProcessState.STOPPED):
+                return False
+            previous_thread = self._thread
+            self._manual_single_cycle_requested = True
+            try:
+                self._transition(ProcessState.RUNNING, self._on_start)
+            finally:
+                self._manual_single_cycle_requested = False
+            return self._thread is not previous_thread and self._state == ProcessState.RUNNING
 
     def _on_start(self) -> None:
         """Start the background worker thread that performs one production cycle."""
         self._stopping = False
+        self._adjustment_session = self._pending_adjustment_session
         self._thread = threading.Thread(
             target=self._run_in_background,
+            args=(self._manual_single_cycle_requested, self._pending_adjustment_session),
             daemon=True,
             name="PaintProcess",
         )
@@ -101,10 +159,23 @@ class PaintProcess(BaseProcess):
         """Clear the internal stop flag so a new run can be started after an error reset."""
         self._stopping = False
 
-    def _run_in_background(self) -> None:
+    def _run_in_background(
+        self,
+        manual_single_cycle: bool = False,
+        adjustment_session: PaintAdjustmentSession | None = None,
+    ) -> None:
         """Execute one production cycle and translate the result into process state transitions."""
         try:
-            success, msg = self._production_service.run_once(lambda: self._stopping)
+            if adjustment_session is not None:
+                success, msg = self._production_service.run_once(
+                    lambda: self._stopping, adjustment_session=adjustment_session
+                )
+            elif manual_single_cycle:
+                success, msg = self._production_service.run_once(
+                    lambda: self._stopping, manual_single_cycle=True
+                )
+            else:
+                success, msg = self._production_service.run_once(lambda: self._stopping)
         except Exception as exc:
             self._logger.exception("Paint process failed")
             if not self._stopping:

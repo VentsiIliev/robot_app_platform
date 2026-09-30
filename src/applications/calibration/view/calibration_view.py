@@ -579,6 +579,29 @@ class CalibrationView(IApplicationView):
             return None
         return next(area_id for label, area_id in options if label == selected_label)
 
+    def prompt_camera_tcp_calibration_area(self, current_area_id: str = "global") -> str | None:
+        options = [(self.tr("Global (shared calibration)"), "global")]
+        options.extend(
+            (definition.label, definition.id)
+            for definition in self._calibration_work_area_definitions
+        )
+        labels = [label for label, _area_id in options]
+        current = next(
+            (index for index, (_label, area_id) in enumerate(options) if area_id == current_area_id),
+            0,
+        )
+        selected_label, accepted = QInputDialog.getItem(
+            self,
+            self.tr("Camera-to-TCP Calibration Area"),
+            self.tr("Select the area for camera-to-TCP calibration:"),
+            labels,
+            current,
+            False,
+        )
+        if not accepted:
+            return None
+        return next(area_id for label, area_id in options if label == selected_label)
+
     @property
     def work_area_definitions(self) -> list[WorkAreaDefinition]:
         return list(self._work_area_definitions)

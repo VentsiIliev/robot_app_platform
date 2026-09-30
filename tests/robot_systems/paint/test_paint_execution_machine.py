@@ -29,11 +29,78 @@ from src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.workflow.pickup_handler import (
     handle_pickup,
 )
+from src.robot_systems.paint.processes.paint.execution_machine.handlers.workflow.preparation_handler import (
+    handle_prepare_workpiece,
+)
+from src.robot_systems.paint.processes.paint.execution_machine.handlers.workflow.plan_handler import (
+    handle_build_execution_plan,
+)
 from src.robot_systems.paint.processes.paint.execute.pickup_executor import (
     PickupPlan,
     pickup_condition_is_active_after_retract,
 )
 from src.robot_systems.paint.processes.paint.magazine_load_service import PaintMagazineLoadService
+
+
+class TestWorkpiecePreparationHandler(unittest.TestCase):
+    def test_unknown_match_publishes_established_dashboard_warning(self):
+        service = MagicMock()
+        service._workpiece_preparation.prepare_workpiece.return_value = (
+            None,
+            "Unknown workpiece",
+        )
+        ctx = PaintExecutionContext(
+            production_service=service,
+            stop_requested=lambda: False,
+            control=PaintExecutionControl(),
+            process_config=PaintProcessConfig(enable_workpiece_matching=True),
+            magazine_config=PaintMagazineLoadConfig(enabled=False),
+        )
+        ctx.snapshot = VisionCaptureSnapshot(
+            frame="frame",
+            contours=[np.array([[[0.0, 0.0]], [[1.0, 0.0]], [[1.0, 1.0]]], dtype=np.float32)],
+            source="paint_process",
+        )
+
+        next_state = handle_prepare_workpiece(ctx)
+
+        self.assertEqual(PaintExecutionState.ERROR, next_state)
+        self.assertEqual("Unknown workpiece", ctx.result_message)
+        service.publish_dashboard_message.assert_called_once_with(
+            "warning",
+            "Unknown Workpiece",
+            "No saved workpiece matched the captured contour. Paint execution was stopped.",
+        )
+
+    def test_build_plan_uses_paint_executor_so_saved_segment_mask_is_attached(self):
+        prepared_plan = object()
+
+        class _PaintExecutor:
+            supports_paint_motion_states = False
+
+            def prepare_workpiece_execution_plan(self, workpiece, skip_debug_plot=False):
+                self.call = (workpiece, skip_debug_plot)
+                return prepared_plan
+
+        executor = _PaintExecutor()
+        service = MagicMock()
+        service._path_executor = executor
+        service._path_debug_plots_enabled.return_value = False
+        ctx = PaintExecutionContext(
+            production_service=service,
+            stop_requested=lambda: False,
+            control=PaintExecutionControl(),
+            process_config=PaintProcessConfig(),
+            magazine_config=PaintMagazineLoadConfig(enabled=False),
+        )
+        ctx.raw_workpiece = {"workpieceId": "saved", "sprayPattern": {"Contour": [{"contour": []}]}}
+
+        next_state = handle_build_execution_plan(ctx)
+
+        self.assertEqual(PaintExecutionState.EXECUTE_PAINT, next_state)
+        self.assertIs(prepared_plan, ctx.execution_plan)
+        self.assertEqual((ctx.raw_workpiece, True), executor.call)
+        service._path_preparation_service.build_execution_plan.assert_not_called()
 
 
 class TestPostRetractPickupVerification(unittest.TestCase):
@@ -146,6 +213,64 @@ class TestCycleStartUnwind(unittest.TestCase):
             acc=18.0,
         )
         ctx.production_service._clear_prepositioned_start_group.assert_not_called()
+
+    def test_skips_unwind_after_prepositioned_partial_segment_rotation(self):
+        robot_service = MagicMock()
+        executor = SimpleNamespace(
+            _robot_service=robot_service,
+            _last_process_start_rz=-30.0,
+            _last_paint_contact_end_rz=-244.0,
+            _paint_process_config=lambda: SimpleNamespace(
+                navigation_return=SimpleNamespace(
+                    unwind_vel_percent=24.0,
+                    unwind_acc_percent=18.0,
+                    unwind_queue_if_busy=True,
+                )
+            ),
+        )
+        service = SimpleNamespace(
+            _path_executor=executor,
+            _prepositioned_start_group="Magazine",
+        )
+        ctx = PaintExecutionContext(
+            production_service=service,
+            stop_requested=lambda: False,
+            control=PaintExecutionControl(),
+        )
+
+        self.assertTrue(unwind_joint6_at_cycle_start(ctx))
+
+        self.assertTrue(ctx.cycle_start_unwind_completed)
+        robot_service.unwind_joint6.assert_not_called()
+
+    def test_keeps_unwind_after_prepositioned_complete_turn(self):
+        robot_service = MagicMock()
+        robot_service.unwind_joint6.return_value = True
+        executor = SimpleNamespace(
+            _robot_service=robot_service,
+            _last_process_start_rz=0.0,
+            _last_paint_contact_end_rz=-360.0,
+            _paint_process_config=lambda: SimpleNamespace(
+                navigation_return=SimpleNamespace(
+                    unwind_vel_percent=24.0,
+                    unwind_acc_percent=18.0,
+                    unwind_queue_if_busy=True,
+                )
+            ),
+        )
+        service = SimpleNamespace(
+            _path_executor=executor,
+            _prepositioned_start_group="Magazine",
+        )
+        ctx = PaintExecutionContext(
+            production_service=service,
+            stop_requested=lambda: False,
+            control=PaintExecutionControl(),
+        )
+
+        self.assertTrue(unwind_joint6_at_cycle_start(ctx))
+
+        robot_service.unwind_joint6.assert_called_once()
 
 
 class TestCalibrationPickupTestMode(unittest.TestCase):

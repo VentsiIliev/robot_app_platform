@@ -13,6 +13,7 @@ class BestMatchResult:
     rotation_diff: Optional[float] = None
     contour_angle: Optional[float] = None
     workpiece_id: Optional[int] = None
+    reflected: bool = False
 
     @property
     def is_match(self) -> bool:

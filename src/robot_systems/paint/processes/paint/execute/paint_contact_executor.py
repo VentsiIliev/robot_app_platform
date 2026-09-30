@@ -28,6 +28,36 @@ from src.robot_systems.paint.timing import timed_block, timed_step
 _logger = logging.getLogger(__name__)
 
 
+def _apply_non_paint_clearance(
+    path: list[list[float]],
+    diagnostics: list[dict[str, float | int]] | None,
+    clearance_profile_mm: list[float],
+    config: PaintSimulationConfig,
+) -> list[list[float]]:
+    """Retract projected poses from the pivot according to the source profile."""
+    if not path or not diagnostics or not clearance_profile_mm:
+        return [list(pose) for pose in path]
+    try:
+        axis_position = config.planar_axes.index(config.translation_axis)
+    except ValueError:
+        return [list(pose) for pose in path]
+    axis_index = config.planar_coordinate_indices[axis_position]
+    profile_indices = np.arange(len(clearance_profile_mm), dtype=float)
+    result: list[list[float]] = []
+    for pose_index, pose in enumerate(path):
+        command = list(pose)
+        diagnostic = diagnostics[min(pose_index, len(diagnostics) - 1)]
+        source_index = float(diagnostic.get("source_index", pose_index))
+        clearance = float(np.interp(source_index, profile_indices, clearance_profile_mm))
+        if len(command) > axis_index:
+            command[axis_index] = (
+                float(command[axis_index])
+                - float(config.direction_sign) * clearance
+            )
+        result.append(command)
+    return result
+
+
 def _remove_projected_local_reversals(
     path: list[list[float]],
     *,
@@ -229,6 +259,7 @@ class PaintContactExecutor:
                         align_start_to_zero_rz=False,
                         anchor_xy=anchor_xy,
                         source_rotation_deg=source_rotation_deg,
+                        enforce_open_path_side=bool(job.get("paint_selection_cut_applied")),
                     )
             if not projected:
                 _logger.debug(
@@ -247,6 +278,12 @@ class PaintContactExecutor:
                     elapsed_s(job_started),
                 )
                 return False, "Pickup succeeded, but paint-contact geometry could not be built", total_waypoints
+            pivot_path = _apply_non_paint_clearance(
+                pivot_path,
+                diagnostics,
+                list(job.get("paint_clearance_profile_mm") or []),
+                owner._contact_motion_config,
+            )
             if (
                 owner._contact_motion_config.motion_plane == "xz_y_ry"
                 and owner._flip_xz_ry_execution_rotation_direction

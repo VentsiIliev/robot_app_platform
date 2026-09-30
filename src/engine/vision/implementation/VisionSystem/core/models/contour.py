@@ -82,6 +82,9 @@ class Contour:
         R = np.array([[cos_a, -sin_a], [sin_a, cos_a]], dtype=np.float32)
         self.contour_points = pts @ R.T + p
 
+    def reflect_horizontal(self, pivot_x):
+        self.contour_points[:, 0] = 2 * pivot_x - self.contour_points[:, 0]
+
     def simplify(self, epsilon_factor=0.01):
         peri = self.getPerimeter()
         epsilon = epsilon_factor * peri

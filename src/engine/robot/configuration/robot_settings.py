@@ -163,6 +163,8 @@ class RobotSettings:
     camera_to_tcp_x_offset: float = 0.0
     camera_to_tcp_y_offset: float = 0.0
     camera_to_tcp_rotation_residuals: List[Dict[str, float]] = field(default_factory=list)
+    camera_to_tcp_mode: str = "global"
+    camera_to_tcp_by_area: Dict[str, Dict] = field(default_factory=dict)
     camera_z_shift_x_per_mm_px: float = 0.0
     camera_z_shift_y_per_mm_px: float = 0.0
     camera_z_shift_x_per_mm: float = 0.0
@@ -175,6 +177,31 @@ class RobotSettings:
     movement_groups: Dict[str, MovementGroup] = field(default_factory=dict)
     safety_limits: SafetyLimits = field(default_factory=SafetyLimits)
     global_motion_settings: GlobalMotionSettings = field(default_factory=GlobalMotionSettings)
+
+    def camera_to_tcp_for_area(self, area_id: str = "") -> tuple[float, float, list[dict]]:
+        values = (
+            self.camera_to_tcp_by_area.get(str(area_id or "").strip(), {})
+            if self.camera_to_tcp_mode == "per_area" else {}
+        )
+        return (
+            float(values.get("x_mm", self.camera_to_tcp_x_offset)),
+            float(values.get("y_mm", self.camera_to_tcp_y_offset)),
+            list(values.get("rotation_residuals", self.camera_to_tcp_rotation_residuals)),
+        )
+
+    def save_camera_to_tcp_for_area(
+        self, area_id: str, x_mm: float, y_mm: float, residuals: list[dict]
+    ) -> None:
+        area = str(area_id or "").strip()
+        if self.camera_to_tcp_mode == "per_area" and area:
+            self.camera_to_tcp_by_area[area] = {
+                "x_mm": float(x_mm), "y_mm": float(y_mm),
+                "rotation_residuals": list(residuals),
+            }
+        else:
+            self.camera_to_tcp_x_offset = float(x_mm)
+            self.camera_to_tcp_y_offset = float(y_mm)
+            self.camera_to_tcp_rotation_residuals = list(residuals)
 
     @classmethod
     def from_dict(cls, data: Dict) -> 'RobotSettings':
@@ -200,6 +227,14 @@ class RobotSettings:
                 for item in (data.get("CAMERA_TO_TCP_ROTATION_RESIDUALS", []) or [])
                 if isinstance(item, dict)
             ],
+            camera_to_tcp_mode=(
+                "per_area" if data.get("CAMERA_TO_TCP_MODE") == "per_area" else "global"
+            ),
+            camera_to_tcp_by_area={
+                str(area).strip(): dict(values)
+                for area, values in (data.get("CAMERA_TO_TCP_BY_AREA", {}) or {}).items()
+                if str(area).strip() and isinstance(values, dict)
+            },
             camera_z_shift_x_per_mm_px=data.get("CAMERA_Z_SHIFT_X_PER_MM_PX", 0.0),
             camera_z_shift_y_per_mm_px=data.get("CAMERA_Z_SHIFT_Y_PER_MM_PX", 0.0),
             camera_z_shift_x_per_mm=data.get("CAMERA_Z_SHIFT_X_PER_MM", 0.0),
@@ -223,6 +258,8 @@ class RobotSettings:
             "CAMERA_TO_TCP_X_OFFSET": self.camera_to_tcp_x_offset,
             "CAMERA_TO_TCP_Y_OFFSET": self.camera_to_tcp_y_offset,
             "CAMERA_TO_TCP_ROTATION_RESIDUALS": self.camera_to_tcp_rotation_residuals,
+            "CAMERA_TO_TCP_MODE": self.camera_to_tcp_mode,
+            "CAMERA_TO_TCP_BY_AREA": self.camera_to_tcp_by_area,
             "CAMERA_Z_SHIFT_X_PER_MM_PX": self.camera_z_shift_x_per_mm_px,
             "CAMERA_Z_SHIFT_Y_PER_MM_PX": self.camera_z_shift_y_per_mm_px,
             "CAMERA_Z_SHIFT_X_PER_MM": self.camera_z_shift_x_per_mm,

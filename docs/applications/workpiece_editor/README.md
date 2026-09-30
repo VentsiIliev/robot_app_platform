@@ -133,4 +133,6 @@ service = WorkpieceEditorService(
 - **`editor_core` is self-contained**: it has no dependency on the service interface or the MVC wrapper. It can be embedded in other applications.
 - **Lazy form schema**: `form_schema` is a callable so glue type and tool lists are re-fetched fresh each time the editor opens — picking up any changes made in ToolSettings or GlueSettings.
 - **Snapshot-first contour capture**: the editor now uses the shared glue capture snapshot service when available, so future pose-coupled editor tools can reuse the same capture path without calling the raw vision service directly.
+- **System-owned capture mapping**: captured geometry is passed through the injected workpiece data adapter before it is loaded. This lets paint show an independent process-contour copy while glue retains its own layer mapping.
+- **Injected custom actions**: robot systems may add toolbar actions through `ContourEditorUiConfig` and handle them through the factory's `custom_action_handler`. The handler receives the action ID and inner editor, keeping robot-system geometry operations outside the shared view.
 - **Vision optional**: contour overlay and `get_contours()` gracefully return empty lists when vision is unavailable.

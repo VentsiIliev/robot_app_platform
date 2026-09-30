@@ -102,7 +102,9 @@ def resolve_target_point(workflow, pickup_px, rz_final, active_mapper):
         rx_degrees=workflow._config.orientation_rx,
         ry_degrees=workflow._config.orientation_ry,
     )
-    return workflow._resolver.resolve(target_request, _pickup_target_point(workflow), mapper=active_mapper)
+    return workflow._resolver.resolve(
+        target_request, _pickup_target_point(workflow), mapper=active_mapper, area_id="pickup"
+    )
 
 
 def _pickup_target_point(workflow):

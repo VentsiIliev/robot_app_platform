@@ -77,6 +77,21 @@ class TestToolSettingsViewSetStatus(unittest.TestCase):
         self._view.set_status("")
         self.assertEqual(self._view._status.text(), "")
 
+    def test_calibration_progress_guides_user_to_next_step(self):
+        self._view.set_calibration_progress(reference_captured=True, candidate_samples=1)
+        self.assertIn("Reference: captured", self._view._reference_state.text())
+        self.assertIn("1 / 3", self._view._candidate_state.text())
+        self.assertTrue(self._view._btn_capture_candidate.isEnabled())
+        self.assertFalse(self._view._btn_solve.isEnabled())
+        self.assertIn("#2E7D32", self._view._btn_capture_reference.styleSheet())
+
+    def test_solve_is_enabled_after_three_samples_and_tool_selection(self):
+        self._view.set_tools([ToolDefinition(7, "PickTool")])
+        self._view._tools_table.selectRow(0)
+        self._view.set_calibration_progress(reference_captured=True, candidate_samples=3)
+        self.assertTrue(self._view._btn_solve.isEnabled())
+        self.assertIn("PickTool", self._view._calibration_guide.text())
+
 
 class TestToolSettingsViewSelectedTool(unittest.TestCase):
 

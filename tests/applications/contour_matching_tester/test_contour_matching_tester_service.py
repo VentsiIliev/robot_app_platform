@@ -10,6 +10,7 @@ from unittest.mock import MagicMock
 
 from src.applications.contour_matching_tester.service.stub_contour_matching_tester_service import StubContourMatchingTesterService
 from src.applications.contour_matching_tester.service.contour_matching_tester_service import ContourMatchingTesterService
+from src.robot_systems.paint.domain.workpieces.service.paint_workpiece_service import PaintWorkpieceService
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -80,12 +81,41 @@ class TestContourMatchingTesterServiceGetWorkpieces(unittest.TestCase):
         # loaded workpieces (mocked) are returned
         self.assertEqual(len(result), 2)
 
+    def test_thumbnail_uses_workpiece_store_contract(self):
+        ws = _make_workpiece_service(["A"])
+        ws.get_thumbnail_bytes.return_value = b"png"
+        svc = ContourMatchingTesterService(workpiece_service=ws)
+
+        svc.get_workpieces()
+
+        self.assertEqual(svc.get_thumbnail(0), b"png")
+        ws.get_thumbnail_bytes.assert_called_once_with("A")
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # ContourMatchingTesterService — run_matching
 # ══════════════════════════════════════════════════════════════════════════════
 
 class TestContourMatchingTesterServiceRunMatching(unittest.TestCase):
+
+    def test_paint_store_uses_same_matching_contract_as_glue(self):
+        repo = MagicMock()
+        repo.list_all.return_value = [{"id": "paint-1", "name": "Paint part"}]
+        repo.load_raw.return_value = {
+            "name": "Paint part",
+            "contour": [[0, 0], [10, 0], [10, 10]],
+        }
+        repo.get_thumbnail_bytes.return_value = b"paint-thumbnail"
+        vision = _make_vision_service()
+        store = PaintWorkpieceService(repo)
+        svc = ContourMatchingTesterService(vision_service=vision, workpiece_service=store)
+
+        workpieces = svc.get_workpieces()
+        svc.run_matching(workpieces, ["captured-contour"])
+
+        self.assertEqual(workpieces[0].name, "Paint part")
+        self.assertEqual(svc.get_thumbnail(0), b"paint-thumbnail")
+        vision.run_matching.assert_called_once_with(workpieces, ["captured-contour"])
 
     def test_no_vision_service_returns_empty_tuple(self):
         svc = ContourMatchingTesterService(vision_service=None)

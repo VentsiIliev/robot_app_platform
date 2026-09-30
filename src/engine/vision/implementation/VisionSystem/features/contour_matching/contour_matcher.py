@@ -10,6 +10,10 @@ from src.engine.vision.implementation.VisionSystem.features.contour_matching.mat
 from src.engine.vision.implementation.VisionSystem.features.contour_matching.matching.strategies.matching_strategy_interface import MatchingStrategy
 from src.engine.vision.implementation.VisionSystem.features.contour_matching.alignment.contour_aligner import _alignContours, prepare_data_for_alignment
 from src.engine.vision.implementation.VisionSystem.features.contour_matching.matching_config import get_settings
+from src.engine.vision.implementation.VisionSystem.features.contour_matching.utils import calculate_mask_overlap
+
+
+_MIN_ALIGNED_OVERLAP = 0.90
 
 
 def _load_ml_model() -> Any:
@@ -64,7 +68,33 @@ def find_matching_workpieces(
 
     matched, no_matches, matched_contours = match_workpieces(workpieces, new_contours, strategy)
     final_matches = _alignContours(prepare_data_for_alignment(matched), debug=debug_align)
-    return final_matches, no_matches, matched_contours
+    return _reject_poor_alignment(final_matches, no_matches, matched_contours)
+
+
+def _reject_poor_alignment(final_matches, no_matches, matched_contours):
+    """Reject shapes whose saved contour did not align with the camera contour."""
+    accepted = {key: [] for key in final_matches}
+    accepted_contours = []
+    for index, aligned_workpiece in enumerate(final_matches["workpieces"]):
+        contour_data = getattr(aligned_workpiece, "contour", None)
+        aligned_points = (
+            contour_data.get("contour")
+            if isinstance(contour_data, dict)
+            else contour_data
+        )
+        if aligned_points is None or np.asarray(aligned_points).size < 6:
+            overlap = 0.0
+        else:
+            overlap = calculate_mask_overlap(
+                aligned_points, matched_contours[index].get()
+            )
+        if overlap < _MIN_ALIGNED_OVERLAP:
+            no_matches.append(matched_contours[index])
+            continue
+        for key in accepted:
+            accepted[key].append(final_matches[key][index])
+        accepted_contours.append(matched_contours[index])
+    return accepted, no_matches, accepted_contours
 
 
 def match_workpieces(
@@ -93,10 +123,10 @@ def match_workpieces(
                 contour_orientation=best.contour_angle,
                 mlConfidence=best.confidence,
                 mlResult=best.result,
+                reflected=best.reflected,
             ))
             matched_contours.append(contour)
         else:
             no_matches.append(contour)
 
     return matched, no_matches, matched_contours
-

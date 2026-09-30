@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from functools import partial
+from threading import Lock
 
 from PyQt6.QtCore import QCoreApplication, QObject, QThread, QTimer, pyqtSignal
 
@@ -16,9 +17,13 @@ from src.robot_systems.paint.applications.dashboard.view.paint_dashboard_view im
     PaintDashboardView,
 )
 from src.robot_systems.paint.applications.dashboard.dashboard_state import DashboardCardState
-from src.robot_systems.paint.processes.paint.dashboard_live_view_events import PaintDashboardLiveViewTopics
+from src.robot_systems.paint.processes.paint.dashboard_live_view_events import (
+    PaintDashboardLiveViewTopics,
+    PaintDashboardMessageTopics,
+)
 from src.shared_contracts.events.robot_events import RobotTopics
 from src.shared_contracts.events.shell_events import ShellTopics
+from src.shared_contracts.events.vision_events import CameraTopics
 
 
 class _Worker(QObject):
@@ -30,6 +35,11 @@ class _Worker(QObject):
 
     def run(self) -> None:
         self.finished.emit(self._fn())
+
+
+class _DashboardNoticeBridge(QObject):
+    info_ready = pyqtSignal(str, str)
+    warning_ready = pyqtSignal(str, str)
 
 
 class PaintDashboardController(
@@ -69,8 +79,19 @@ class PaintDashboardController(
         self._status_timer = QTimer(timer_parent)
         self._status_timer.setInterval(1000)
         self._status_timer.timeout.connect(self._refresh_dashboard_status)
+        self._selected_camera = "primary_vision"
+        self._camera_feed_visible = False
+        self._auxiliary_camera_topic: str | None = None
+        self._camera_frame_lock = Lock()
+        self._latest_camera_frame = None
+        self._camera_display_timer = QTimer(timer_parent)
+        self._camera_display_timer.setInterval(100)
+        self._camera_display_timer.timeout.connect(self._show_selected_camera_frame)
         self._init_dashboard_camera_feed()
         self._init_dashboard_process_state()
+        self._dashboard_notice_bridge = _DashboardNoticeBridge()
+        self._dashboard_notice_bridge.info_ready.connect(self._view.show_info)
+        self._dashboard_notice_bridge.warning_ready.connect(self._view.show_warning_dialog)
         self._view.start_requested.connect(self._on_start)
         self._view.stop_requested.connect(self._on_stop)
         self._view.pause_requested.connect(self._on_pause)
@@ -87,13 +108,17 @@ class PaintDashboardController(
         self._view.drying_mode_requested.connect(self._on_drying_mode)
         self._view.new_tray_requested.connect(self._on_new_tray)
         self._view.remove_plate_placement_requested.connect(self._on_remove_plate_placement)
+        self._view.camera_selected.connect(self._on_camera_selected)
+        self._view.camera_feed_visible.connect(self._on_camera_feed_visible)
 
     def load(self) -> None:
         self._active = True
         self._subscribe_dashboard_camera_feed()
+        self._update_camera_feed_subscription()
         self._subscribe_dashboard_process_state()
         self._subscribe_dashboard_robot_state()
         self._subscribe_dashboard_live_view_state()
+        self._subscribe_dashboard_messages()
         self._view.apply_dashboard_state(self._model.load())
         self._view.set_unmatched_paint_settings(
             self._model.get_unmatched_paint_settings()
@@ -116,6 +141,8 @@ class PaintDashboardController(
         self._dashboard_live_view_paused = False
         self._model.resume_vision_for_dashboard_exit()
         self._status_timer.stop()
+        self._camera_display_timer.stop()
+        self._unsubscribe_auxiliary_camera()
         self._unsubscribe_all()
         for thread, _worker in list(self._workers):
             thread.quit()
@@ -316,17 +343,77 @@ class PaintDashboardController(
     def _subscribe_dashboard_live_view_state(self) -> None:
         self._subscribe(PaintDashboardLiveViewTopics.STATE, self._on_dashboard_live_view_state_raw)
 
+    def _subscribe_dashboard_messages(self) -> None:
+        self._subscribe(PaintDashboardMessageTopics.MESSAGE, self._on_dashboard_message_raw)
+
+    def _on_dashboard_message_raw(self, event: object) -> None:
+        title = self._t(str(getattr(event, "title", "") or ""))
+        message = self._t(str(getattr(event, "message", "") or ""))
+        if str(getattr(event, "level", "info")).lower() == "warning":
+            self._dashboard_notice_bridge.warning_ready.emit(title, message)
+        else:
+            self._dashboard_notice_bridge.info_ready.emit(title, message)
+
     def _on_dashboard_live_view_state_raw(self, event: object) -> None:
         self._dashboard_live_view_paused = bool(getattr(event, "paused", False))
         if not self._dashboard_live_view_paused:
             return
         image = getattr(event, "image", None)
-        if image is None or not self._view_ok():
+        if image is None or not self._view_ok() or self._selected_camera != "primary_vision":
             return
         self._dashboard_camera_bridge.frame_ready.emit({"image": image})
 
     def _dashboard_camera_feed_updates_enabled(self) -> bool:
-        return not self._dashboard_live_view_paused
+        return not self._dashboard_live_view_paused and self._selected_camera == "primary_vision"
+
+    def _on_dashboard_camera_frame(self, image: object) -> None:
+        if self._selected_camera == "primary_vision":
+            super()._on_dashboard_camera_frame(image)
+
+    def _on_camera_selected(self, role: str) -> None:
+        self._selected_camera = str(role)
+        self._update_camera_feed_subscription()
+
+    def _on_camera_feed_visible(self, _visible: bool) -> None:
+        self._camera_feed_visible = bool(_visible)
+        self._update_camera_feed_subscription()
+
+    def _update_camera_feed_subscription(self) -> None:
+        self._unsubscribe_auxiliary_camera()
+        with self._camera_frame_lock:
+            self._latest_camera_frame = None
+        if (
+            self._active
+            and self._selected_camera != "primary_vision"
+            and self._camera_feed_visible
+        ):
+            self._auxiliary_camera_topic = CameraTopics.frame(self._selected_camera)
+            self._broker.subscribe(self._auxiliary_camera_topic, self._on_auxiliary_camera_frame)
+            self._camera_display_timer.start()
+        else:
+            self._camera_display_timer.stop()
+
+    def _unsubscribe_auxiliary_camera(self) -> None:
+        if self._auxiliary_camera_topic is not None:
+            self._broker.unsubscribe(
+                self._auxiliary_camera_topic,
+                self._on_auxiliary_camera_frame,
+            )
+            self._auxiliary_camera_topic = None
+
+    def _on_auxiliary_camera_frame(self, message: object) -> None:
+        if isinstance(message, dict):
+            frame = message.get("image")
+            if frame is not None:
+                with self._camera_frame_lock:
+                    self._latest_camera_frame = frame
+
+    def _show_selected_camera_frame(self) -> None:
+        with self._camera_frame_lock:
+            frame = self._latest_camera_frame
+            self._latest_camera_frame = None
+        if frame is not None and self._view_ok() and self._camera_feed_visible:
+            self._view.set_trajectory_image({"image": frame})
 
     def _on_dashboard_robot_state_raw(self, _event: object) -> None:
         if not self._active:

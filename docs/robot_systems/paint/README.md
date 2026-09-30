@@ -98,6 +98,19 @@ Non-settings storage owned by the paint system:
 - `storage/users/users.csv`
 - `storage/workpieces/`
 
+### Workpiece editor geometry
+
+The paint editor keeps two independent contour representations:
+
+- `contour` / **Workpiece** is the complete captured boundary used for saved-workpiece matching and pickup alignment.
+- `sprayPattern.Contour` / **Paint** is the RTCP process contour. For a new capture or a legacy workpiece with no saved paint sections, the editor initializes this layer with a complete copy of the matching boundary.
+
+Editing the Paint layer therefore does not modify the canonical matching contour. The initial copy also provides the source geometry for the planned rectangle-selection workflow, where operators will turn parts of the complete contour into explicit RTCP paint sections.
+
+To define the executed sections, activate **Rectangle Select** from the editor tools, drag over neighboring contour points, and press the paint-roller action. Each contiguous run selected from the canonical Workpiece outline is copied into `sprayPattern.Contour`. The first selection removes the initial complete Paint copy; later selections append more paint sections. The orange Workpiece contour is retained unchanged.
+
+RTCP still projects one continuous portion of the complete Workpiece contour. Paint segments act as a contact mask: selected regions remain at the configured pivot contact, gaps between them retract 5 mm along the paint axis with a 5 mm transition ramp. Planning starts at the first selected region and cuts the contour after the last selected region, avoiding an unnecessary remainder traversal.
+
 ### Unmatched two-pass painting
 
 Captured contours executed without a library match can run one or two paint passes. Pass one keeps the legacy default velocity, acceleration, and press-offset keys. Pass two either inherits those values dynamically or uses its own overrides.
@@ -279,6 +292,15 @@ Important slices:
 - `test_paint_workpiece_path_executor.py`
 
 These tests are the main safety net for future refactors inside the `align / plan / execute` structure.
+
+When workpiece matching is enabled but no saved workpiece matches the captured contour, the
+dashboard shows an **Unknown Workpiece** warning and stops paint execution. The complete
+captured contour is used only when matching is disabled. A successfully matched workpiece
+without explicit paint segments still uses its complete saved contour as the paint mask.
+For matched workpieces with saved paint segments, production builds the plan through the
+paint executor so those segments become the RTCP contact mask over the main contour.
+Paint selection saving never reorders the main workpiece contour; seam-crossing selections
+are stored as one paint segment while preserving the matching and pickup reference geometry.
 
 ---
 

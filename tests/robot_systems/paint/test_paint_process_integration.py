@@ -22,9 +22,11 @@ from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine
 )
 from src.robot_systems.paint.processes.paint.execution_control import PaintExecutionControl
 from src.robot_systems.paint.processes.paint.execution_machine.context import PaintExecutionContext
+from src.robot_systems.paint.processes.paint.execution_machine.handlers.workflow.capture_handler import handle_capture_workpiece
 from src.robot_systems.paint.processes.paint.execution_machine.state import PaintExecutionState
 from src.robot_systems.paint.processes.paint.paint_process import PaintProcess
 from src.robot_systems.paint.processes.paint.paint_production_service import PaintProductionService
+from src.robot_systems.paint.processes.paint.incremental_adjustment import PaintAdjustmentSession
 from src.robot_systems.paint.processes.paint.plan.workpiece_preparation_service import (
     PaintWorkpiecePreparationService,
 )
@@ -47,6 +49,72 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
             path_preparation_service=MagicMock(),
             path_executor=MagicMock(),
         )
+
+    def test_manual_single_cycle_skips_magazine_and_repeat_even_when_enabled(self):
+        service = self._make_service()
+        config = PaintProcessConfig(
+            magazine_load=PaintMagazineLoadConfig(enabled=True),
+            run_while_workpiece_found=True,
+        )
+        service._get_process_config = MagicMock(return_value=(True, "", config))
+        service._move_to_calibration_before_manual_cycle = MagicMock(return_value=(True, ""))
+        service._run_single_cycle = MagicMock(return_value=(True, "Paint completed"))
+        service._run_magazine_loop = MagicMock()
+        service._run_manual_loop = MagicMock()
+
+        self.assertEqual(service.run_once(manual_single_cycle=True), (True, "Paint completed"))
+        service._move_to_calibration_before_manual_cycle.assert_called_once()
+        service._run_single_cycle.assert_called_once()
+        self.assertIsNone(service._run_single_cycle.call_args.kwargs["magazine_config"])
+        self.assertTrue(service._run_single_cycle.call_args.kwargs["suppress_magazine_load"])
+        self.assertTrue(service._run_single_cycle.call_args.kwargs["retry_capture_until_workpiece"])
+        service._run_magazine_loop.assert_not_called()
+        service._run_manual_loop.assert_not_called()
+
+    def test_manual_single_cycle_capture_retries_empty_frames_then_continues_once(self):
+        service = MagicMock()
+        service._vision_service = None
+        service._pause_dashboard_live_view_after_capture.return_value = False
+        service._capture_snapshot_service.capture_snapshot.side_effect = [
+            SimpleNamespace(contours=[], frame=None),
+            SimpleNamespace(contours=[_square(10)], frame=None),
+        ]
+        session = PaintAdjustmentSession()
+        ctx = PaintExecutionContext(
+            production_service=service,
+            stop_requested=lambda: False,
+            control=PaintExecutionControl(),
+            retry_capture_until_workpiece=True,
+            adjustment_session=session,
+        )
+        def observe_wait(_seconds):
+            self.assertEqual(session.snapshot()[0], "waiting_for_workpiece")
+            return False
+
+        with patch.object(ctx.stop_event, "wait", side_effect=observe_wait) as retry_wait:
+            state = handle_capture_workpiece(ctx)
+        self.assertEqual(state, PaintExecutionState.PREPARE_WORKPIECE)
+        self.assertEqual(session.snapshot()[0], "starting")
+        self.assertEqual(service._capture_snapshot_service.capture_snapshot.call_count, 2)
+        retry_wait.assert_called_once_with(0.5)
+
+    def test_manual_single_cycle_capture_retry_stops_on_request(self):
+        service = MagicMock()
+        service._vision_service = None
+        ctx = PaintExecutionContext(
+            production_service=service,
+            stop_requested=lambda: False,
+            control=PaintExecutionControl(),
+            retry_capture_until_workpiece=True,
+        )
+
+        def capture_empty(*, source):
+            ctx.stop_event.set()
+            return SimpleNamespace(contours=[], frame=None)
+
+        service._capture_snapshot_service.capture_snapshot.side_effect = capture_empty
+        self.assertEqual(handle_capture_workpiece(ctx), PaintExecutionState.STOPPED)
+        service._capture_snapshot_service.capture_snapshot.assert_called_once()
 
     def test_magazine_capture_view_preserves_existing_brightness_lock(self):
         vision = MagicMock()
@@ -1562,6 +1630,25 @@ class TestPaintProcessIntegration(unittest.TestCase):
         messaging = MagicMock()
         process = PaintProcess(production_service=production_service, messaging=messaging)
         return process, production_service, messaging
+
+    def test_manual_single_cycle_starts_through_process_and_rejects_duplicate_start(self):
+        process, production_service, _messaging = self._make_process((True, "Paint completed"))
+        entered = threading.Event()
+        release = threading.Event()
+
+        def run_once(_stop, *, manual_single_cycle=False):
+            entered.set()
+            release.wait(timeout=1.0)
+            return True, "Paint completed"
+
+        production_service.run_once.side_effect = run_once
+        self.assertTrue(process.start_manual_single_cycle())
+        self.assertTrue(entered.wait(timeout=1.0))
+        self.assertFalse(process.start_manual_single_cycle())
+        release.set()
+        process._thread.join(timeout=1.0)
+        self.assertEqual(process.state, ProcessState.STOPPED)
+        self.assertTrue(production_service.run_once.call_args.kwargs["manual_single_cycle"])
 
     def test_successful_run_transitions_process_to_stopped(self):
         process, production_service, messaging = self._make_process((True, "Paint completed"))

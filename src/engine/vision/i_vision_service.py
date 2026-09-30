@@ -24,6 +24,10 @@ class IVisionService(ABC):
         """Resume acquisition/processing and require fresh frames."""
         raise NotImplementedError
 
+    def set_camera_flips(self, horizontal: bool, vertical: bool) -> None:
+        """Apply capture orientation to newly acquired frames."""
+        raise NotImplementedError
+
     @abstractmethod
     def set_raw_mode(self, enabled: bool) -> None: ...
 

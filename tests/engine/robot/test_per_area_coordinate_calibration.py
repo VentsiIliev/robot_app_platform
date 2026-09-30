@@ -8,6 +8,9 @@ from src.engine.robot.targeting.point_registry import PointRegistry
 from src.engine.robot.targeting.target_frame import TargetFrame
 from src.engine.robot.targeting.vision_pose_request import VisionPoseRequest
 from src.engine.robot.targeting.vision_target_resolver import VisionTargetResolver
+from src.engine.robot.targeting.targeting_settings import TargetingSettings
+from src.engine.robot.targeting.remote_tcp_settings import RemoteTcpSettings
+from src.engine.robot.configuration.robot_settings import RobotSettings
 from src.engine.vision.calibration_vision_settings import CoordinateCalibrationProfile
 from src.robot_systems.base_robot_system import BaseRobotSystem
 from src.shared_contracts.declarations import TargetFrameDefinition, WorkAreaDefinition
@@ -92,6 +95,77 @@ class TestPerAreaCoordinateCalibration(unittest.TestCase):
         )
 
         self.assertEqual((76.365, 24.56), system._get_camera_to_tcp_offsets())
+
+    def test_legacy_target_points_become_global_and_local_override_round_trips(self):
+        settings = TargetingSettings.from_dict({"POINTS": [
+            {"name": "camera", "x_mm": 1, "y_mm": 2},
+            {"name": "tool", "x_mm": 5, "y_mm": 6},
+        ]})
+        self.assertEqual(settings.point_mode, "global")
+        settings.point_mode = "per_area"
+        settings.area_points["magazine"] = [RemoteTcpSettings("tool", x_mm=20)]
+        restored = TargetingSettings.from_dict(settings.to_dict())
+        self.assertEqual(restored.points_for_area("magazine")[0].x_mm, 20)
+        self.assertEqual(restored.points_for_area("paint")[0].name, "camera")
+
+    def test_camera_tcp_area_calibration_preserves_global_values(self):
+        config = RobotSettings(camera_to_tcp_x_offset=4, camera_to_tcp_y_offset=5)
+        config.camera_to_tcp_mode = "per_area"
+        config.save_camera_to_tcp_for_area("magazine", 10, 11, [{"angle_deg": 90, "x_mm": 1, "y_mm": 2}])
+        restored = RobotSettings.from_dict(config.to_dict())
+        self.assertEqual(restored.camera_to_tcp_for_area("magazine")[:2], (10, 11))
+        self.assertEqual(restored.camera_to_tcp_for_area("paint")[:2], (4, 5))
+        restored.camera_to_tcp_mode = "global"
+        self.assertEqual(restored.camera_to_tcp_for_area("magazine")[:2], (4, 5))
+
+    def test_system_builds_area_registry_and_manual_tcp_from_local_points(self):
+        system = _RoutingSystem()
+        targeting = TargetingSettings(
+            points=[RemoteTcpSettings("camera"), RemoteTcpSettings("tool", x_mm=5)],
+            point_mode="per_area",
+            area_points={"magazine": [
+                RemoteTcpSettings("camera", x_mm=10),
+                RemoteTcpSettings("tool", x_mm=30),
+            ]},
+        )
+        system._settings_service = MagicMock()
+        system._settings_service.get.return_value = targeting
+        system._robot_config = RobotSettings(use_automatic_camera_to_tcp_offset=False)
+        frames = {"magazine": TargetFrame("magazine", work_area_id="magazine")}
+
+        registry = system._targeting_area_registries(frames)["magazine"]
+        self.assertEqual(registry.by_name("tool").offset_x, 20)
+        self.assertEqual(system._camera_to_tcp_by_area(frames)["magazine"][:2], (20, 0))
+
+    def test_vision_resolver_selects_points_and_tcp_from_frame_area(self):
+        global_registry = PointRegistry([
+            EndEffectorPoint("camera", 0, 0), EndEffectorPoint("nozzle", 10, 0)
+        ])
+        magazine_registry = PointRegistry([
+            EndEffectorPoint("camera", 0, 0), EndEffectorPoint("nozzle", 25, 0)
+        ])
+        resolver = VisionTargetResolver(
+            _Transformer(), global_registry, camera_to_tcp_x_offset=2,
+            frames={"paint": TargetFrame("paint", work_area_id="paint"),
+                    "magazine": TargetFrame("magazine", work_area_id="magazine")},
+            area_registries={"magazine": magazine_registry},
+            area_tcp={"magazine": (9, 0, [])},
+        )
+        points_only = VisionTargetResolver(
+            _Transformer(), global_registry, camera_to_tcp_x_offset=2,
+            frames=resolver._frames, area_registries={"magazine": magazine_registry},
+        )
+        tool = global_registry.by_name("nozzle")
+        rotated = VisionPoseRequest(1, 2, 0, 90, 0, 0)
+        self.assertNotEqual(
+            points_only.resolve(rotated, tool, frame="paint").final_xy,
+            points_only.resolve(rotated, tool, frame="magazine").final_xy,
+        )
+        camera = global_registry.by_name("camera")
+        self.assertNotEqual(
+            resolver.resolve(rotated, camera, frame="paint").final_xy,
+            resolver.resolve(rotated, camera, frame="magazine").final_xy,
+        )
 
 
     def test_global_mode_preserves_existing_mapper(self):

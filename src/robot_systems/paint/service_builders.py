@@ -10,6 +10,23 @@ from src.robot_systems.paint.component_ids import SettingsID
 _logger = logging.getLogger(__name__)
 
 
+def build_paint_vision_service(ctx):
+    """Build paint vision with an explicitly assigned primary camera."""
+    from src.robot_systems.default_service_builders import build_vision_service
+
+    camera_config = ctx.settings.get(SettingsID.CAMERAS)
+    primary = camera_config.get("primary_vision")
+    if primary is None:
+        raise ValueError("Camera configuration has no 'primary_vision' role")
+    return build_vision_service(
+        ctx,
+        camera_device=primary.device,
+        camera_resolution=(primary.width, primary.height),
+        allow_camera_fallback=False,
+        camera_flips=(primary.flip_horizontal, primary.flip_vertical),
+    )
+
+
 def build_vacuum_pump_service(ctx):
     from src.engine.hardware.vacuum_pump.models.vacuum_pump_config import VacuumPumpConfig
     from src.engine.hardware.vacuum_pump.modbus.modbus_vacuum_pump_factory import (

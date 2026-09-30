@@ -3,7 +3,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QApplication, QLabel, QScrollArea
+from PyQt6.QtWidgets import QApplication, QLabel, QScrollArea, QWidget
 
 from src.applications.device_control.controller.device_control_controller import (
     DeviceControlController,
@@ -109,6 +109,44 @@ class TestDeviceControlController(unittest.TestCase):
 
         controller._dryer_controller.stop.assert_called_once_with()
 
+    def test_load_and_stop_manage_extension_panels(self) -> None:
+        controller = self._controller()
+        panel = MagicMock()
+        panel_controller = MagicMock()
+        controller._extra_panels = (("cameras", "Cameras", panel, panel_controller),)
+        controller._dryer_view = None
+        controller._dryer_controller = None
+        controller._model.get_devices.return_value = []
+        controller._model.get_motors.return_value = []
+        controller._model.is_motor_available.return_value = False
+        controller._stop_threads = MagicMock()
+
+        controller.load()
+        controller.stop()
+
+        controller._view.add_custom_tab.assert_called_once_with(
+            "cameras", "Cameras", panel
+        )
+        panel_controller.load.assert_called_once_with()
+        panel_controller.stop.assert_called_once_with()
+
+    def test_extension_panel_for_device_is_embedded_in_its_tab(self) -> None:
+        controller = self._controller()
+        panel = MagicMock()
+        panel_controller = MagicMock()
+        controller._extra_panels = (("paint_head", "Paint Head", panel, panel_controller),)
+        controller._dryer_view = None
+        controller._dryer_controller = None
+        controller._model.get_devices.return_value = [MagicMock(key="paint_head")]
+        controller._model.get_motors.return_value = []
+        controller._model.is_motor_available.return_value = False
+
+        controller.load()
+
+        controller._view.set_device_panel.assert_called_once_with("paint_head", panel)
+        controller._view.add_custom_tab.assert_not_called()
+        panel_controller.load.assert_called_once_with()
+
 
 class TestDeviceControlView(unittest.TestCase):
     @classmethod
@@ -168,6 +206,17 @@ class TestDeviceControlView(unittest.TestCase):
         self.assertEqual(panel.get_values()["pwm_open_vrytka"], 725)
         self.assertAlmostEqual(panel.get_values()["acceleration"], 0.4)
         self.assertFalse(hasattr(panel, "_tabs"))
+
+    def test_custom_panel_is_added_as_a_top_level_tab(self) -> None:
+        view = DeviceControlView()
+        view.setup_devices([])
+        panel = QWidget()
+
+        view.add_custom_tab("cameras", "Cameras", panel)
+
+        self.assertEqual(view._tabs.count(), 1)
+        self.assertEqual(view._tabs.tabText(0), "Cameras")
+        self.assertIs(view._tabs.widget(0), panel)
 
 
 if __name__ == "__main__":

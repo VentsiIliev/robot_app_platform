@@ -8,6 +8,7 @@ from pl_gui.utils.utils_widgets.camera_view import CameraView
 from src.applications.base.app_styles import APP_CAPTION_STYLE, app_state_label_style
 from src.applications.base.i_application_view import IApplicationView
 from src.applications.camera_settings.view.camera_controls_widget import CameraControlsWidget
+from src.applications.camera_settings.view.camera_devices_widget import CameraDevicesWidget
 
 _STATE_COLORS = {
     "IDLE":         ("#8888AA", "#1A1A2E"),
@@ -31,9 +32,11 @@ class CameraSettingsView(IApplicationView):
     def __init__(
         self,
         settings_view: SettingsView,
+        camera_devices_widget: CameraDevicesWidget | None,
         parent=None,
     ):
         self._settings_view = settings_view
+        self._camera_devices_widget = camera_devices_widget
         super().__init__("CameraSettings", parent)
 
     def setup_ui(self) -> None:
@@ -138,3 +141,7 @@ class CameraSettingsView(IApplicationView):
     @property
     def settings_view(self) -> SettingsView:
         return self._settings_view
+
+    @property
+    def camera_devices_widget(self) -> CameraDevicesWidget | None:
+        return self._camera_devices_widget

@@ -9,6 +9,7 @@ from typing import Any, ClassVar, Dict, List, Optional, TYPE_CHECKING
 from src.engine.repositories.interfaces import ISettingsRepository, ISettingsService
 from src.engine.robot.targeting.jog_frame_pose_resolver import JogFramePoseResolver
 from src.engine.robot.targeting.point_registry import PointRegistry
+from src.engine.robot.targeting.end_effector_point import EndEffectorPoint
 from src.engine.robot.targeting.target_frame import TargetFrame
 from src.engine.robot.targeting.vision_target_resolver import VisionTargetResolver
 import logging
@@ -239,7 +240,14 @@ class BaseRobotSystem(ABC):
             return None, None
         point_registry = provider.build_point_registry()
         frames = provider.build_frames()
-        cache_signature = self._shared_vision_resolver_signature(point_registry, frames)
+        self._get_camera_to_tcp_offsets("global")  # refresh the saved robot configuration
+        area_registries = self._targeting_area_registries(frames)
+        area_tcp = self._camera_to_tcp_by_area(frames)
+        cache_signature = (
+            self._shared_vision_resolver_signature(point_registry, frames),
+            tuple(sorted((area, self._point_registry_signature(registry)) for area, registry in area_registries.items())),
+            repr(sorted(area_tcp.items())),
+        )
         cached_transformer = getattr(self, "_vision_base_transformer", None)
         cached_resolver = getattr(self, "_vision_target_resolver", None)
         cached_signature = getattr(self, "_vision_target_resolver_signature", None)
@@ -261,7 +269,7 @@ class BaseRobotSystem(ABC):
         transformer = self._build_shared_base_transformer()
         if transformer is None:
             return None, None
-        tcp_x, tcp_y = self._get_camera_to_tcp_offsets()
+        tcp_x, tcp_y = self._get_camera_to_tcp_offsets("global")
         robot_config = getattr(self, "_robot_config", None)
         resolver = VisionTargetResolver(
             base_transformer=transformer,
@@ -274,6 +282,8 @@ class BaseRobotSystem(ABC):
                 else []
             ),
             frames=frames,
+            area_registries=area_registries,
+            area_tcp=area_tcp,
             **self._build_coordinate_calibration_routing(transformer),
         )
         _logger.info(
@@ -299,7 +309,7 @@ class BaseRobotSystem(ABC):
         point_registry: PointRegistry,
         frames: Dict[str, TargetFrame],
     ) -> tuple:
-        tcp_x, tcp_y = self._get_camera_to_tcp_offsets()
+        tcp_x, tcp_y = self._get_camera_to_tcp_offsets("global")
         robot_config = getattr(self, "_robot_config", None)
         vision_service = getattr(self, "_vision", None)
         matrix_path = str(getattr(vision_service, "camera_to_robot_matrix_path", "") or "")
@@ -415,9 +425,11 @@ class BaseRobotSystem(ABC):
         provider = self.get_targeting_provider()
         if provider is None:
             return None
-        tcp_x, tcp_y = self._get_camera_to_tcp_offsets()
+        area_id = self._active_work_area_id()
+        tcp_x, tcp_y = self._get_camera_to_tcp_offsets(area_id)
+        area_registries = self._targeting_area_registries(provider.build_frames())
         return JogFramePoseResolver(
-            registry=provider.build_point_registry(),
+            registry=area_registries.get(area_id, provider.build_point_registry()),
             camera_to_tcp_x_offset=tcp_x,
             camera_to_tcp_y_offset=tcp_y,
             reference_rz_provider=reference_rz_provider,
@@ -431,7 +443,7 @@ class BaseRobotSystem(ABC):
         if robot_config is None:
             transformer = HomographyResidualTransformer(vision_service.camera_to_robot_matrix_path)
         else:
-            tcp_x, tcp_y = self._get_camera_to_tcp_offsets()
+            tcp_x, tcp_y = self._get_camera_to_tcp_offsets("global")
             transformer = HomographyResidualTransformer(
                 vision_service.camera_to_robot_matrix_path,
                 camera_to_tcp_x_offset=tcp_x,
@@ -555,7 +567,63 @@ class BaseRobotSystem(ABC):
             "global_reference_frame": global_reference_frame,
         }
 
-    def _get_camera_to_tcp_offsets(self) -> tuple[float, float]:
+    def _active_work_area_id(self) -> str:
+        service = getattr(self, "_work_area_service", None)
+        if service is None:
+            return ""
+        return str(service.get_active_area_id() or "").strip()
+
+    def _targeting_area_registries(self, frames: Dict[str, TargetFrame]) -> dict[str, PointRegistry]:
+        settings_service = getattr(self, "_settings_service", None)
+        if settings_service is None:
+            return {}
+        try:
+            settings = settings_service.get(CommonSettingsID.TARGETING)
+        except Exception:
+            return {}
+        if getattr(settings, "point_mode", "global") != "per_area":
+            return {}
+        result = {}
+        for area in {frame.work_area_id for frame in frames.values() if frame.work_area_id}:
+            points = settings.area_points.get(area)
+            if points is None:
+                continue
+            merged = {
+                point.name: point for point in getattr(settings, "points", [])
+            }
+            merged.update({point.name: point for point in points})
+            camera = merged.get("camera")
+            camera_x = float(camera.x_mm) if camera is not None else 0.0
+            camera_y = float(camera.y_mm) if camera is not None else 0.0
+            result[area] = PointRegistry([
+                EndEffectorPoint(point.name, float(point.x_mm) - camera_x, float(point.y_mm) - camera_y)
+                for point in merged.values()
+            ])
+        return result
+
+    def _camera_to_tcp_by_area(self, frames: Dict[str, TargetFrame]) -> dict[str, tuple[float, float, list[dict]]]:
+        config = getattr(self, "_robot_config", None)
+        if config is None:
+            return {}
+        if not getattr(config, "use_automatic_camera_to_tcp_offset", True):
+            registries = self._targeting_area_registries(frames)
+            result = {}
+            for area, registry in registries.items():
+                try:
+                    tool = registry.by_name("tool")
+                    result[area] = (float(tool.offset_x), float(tool.offset_y), [])
+                except ValueError:
+                    continue
+            return result
+        if getattr(config, "camera_to_tcp_mode", "global") != "per_area":
+            return {}
+        return {
+            area: config.camera_to_tcp_for_area(area)
+            for area in {frame.work_area_id for frame in frames.values() if frame.work_area_id}
+            if area in config.camera_to_tcp_by_area
+        }
+
+    def _get_camera_to_tcp_offsets(self, area_id: str = "") -> tuple[float, float]:
         robot_config = getattr(self, "_robot_config", None)
         settings_service = getattr(self, "_settings_service", None)
         if settings_service is not None:
@@ -573,7 +641,9 @@ class BaseRobotSystem(ABC):
             provider = self.get_targeting_provider()
             if provider is not None:
                 try:
-                    tool_point = provider.build_point_registry().by_name("tool")
+                    area = str(area_id or self._active_work_area_id()).strip()
+                    registry = self._targeting_area_registries(provider.build_frames()).get(area)
+                    tool_point = (registry or provider.build_point_registry()).by_name("tool")
                     offsets = float(tool_point.offset_x), float(tool_point.offset_y)
                     _logger.info(
                         "[TARGETING] Using manual camera-to-TCP offset from "
@@ -588,10 +658,10 @@ class BaseRobotSystem(ABC):
                         "stored automatic offset",
                         exc_info=True,
                     )
-        return (
-            float(getattr(robot_config, "camera_to_tcp_x_offset", 0.0)),
-            float(getattr(robot_config, "camera_to_tcp_y_offset", 0.0)),
-        )
+        if hasattr(robot_config, "camera_to_tcp_for_area"):
+            return robot_config.camera_to_tcp_for_area(area_id or self._active_work_area_id())[:2]
+        return (float(getattr(robot_config, "camera_to_tcp_x_offset", 0.0)),
+                float(getattr(robot_config, "camera_to_tcp_y_offset", 0.0)))
 
     @classmethod
     def package_root(cls) -> str:

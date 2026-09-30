@@ -13,17 +13,29 @@ class CameraInitializer:
         self.width = width
         self.height = height
 
-    def initializeCameraWithRetry(self, camera_index, max_retries=10, retry_delay=1.0, should_cancel=None):
+    def initializeCameraWithRetry(
+        self,
+        camera_device,
+        max_retries=10,
+        retry_delay=1.0,
+        should_cancel=None,
+        allow_fallback=True,
+    ):
         for attempt in range(max_retries):
             if should_cancel is not None and should_cancel():
                 self._logger.info("Camera initialization cancelled")
                 return None, None
             try:
-                self._logger.info(f"Attempting camera {camera_index} (attempt {attempt + 1}/{max_retries})")
+                self._logger.info(f"Attempting camera {camera_device} (attempt {attempt + 1}/{max_retries})")
                 if attempt > 0 and self._sleep_cancelable(retry_delay, should_cancel):
                     self._logger.info("Camera initialization cancelled")
                     return None, None
-                test_camera = Camera(camera_index, self.width, self.height, fps=30)
+                test_camera = Camera(
+                    width=self.width,
+                    height=self.height,
+                    device=camera_device,
+                    fps=30,
+                )
                 if should_cancel is not None and should_cancel():
                     test_camera.close()
                     self._logger.info("Camera initialization cancelled")
@@ -31,17 +43,25 @@ class CameraInitializer:
                 if test_camera.cap.isOpened():
                     ret, frame = test_camera.cap.read()
                     if ret and frame is not None:
-                        self._logger.info(f"Camera {camera_index} initialised on attempt {attempt + 1}")
-                        return test_camera, camera_index
+                        self._logger.info(f"Camera {camera_device} initialised on attempt {attempt + 1}")
+                        return test_camera, camera_device
                     test_camera.close()
-                    self._logger.warning(f"Camera {camera_index} opened but cannot capture frames")
+                    self._logger.warning(f"Camera {camera_device} opened but cannot capture frames")
                 else:
                     test_camera.close()
-                    self._logger.warning(f"Camera {camera_index} failed to open on attempt {attempt + 1}")
+                    self._logger.warning(f"Camera {camera_device} failed to open on attempt {attempt + 1}")
             except Exception as e:
                 self._logger.error(f"Error on attempt {attempt + 1}: {e}")
 
-        self._logger.warning(f"Camera {camera_index} failed after {max_retries} attempts — searching alternatives")
+        if not allow_fallback:
+            self._logger.error(
+                "Configured camera %s failed after %d attempts; fallback discovery is disabled",
+                camera_device,
+                max_retries,
+            )
+            return None, None
+
+        self._logger.warning(f"Camera {camera_device} failed after {max_retries} attempts — searching alternatives")
         return self._findAndInitializeCamera(should_cancel=should_cancel)
 
     def _findAndInitializeCamera(self, should_cancel=None):

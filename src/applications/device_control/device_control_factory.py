@@ -13,8 +13,9 @@ from src.applications.device_control.dryer.view import DryerControlPanel
 
 class DeviceControlFactory(ApplicationFactory):
 
-    def __init__(self, dryer_control_service=None) -> None:
+    def __init__(self, dryer_control_service=None, extra_panels=()) -> None:
         self._dryer_control_service = dryer_control_service
+        self._extra_panels = tuple(extra_panels)
 
     def _create_model(self, service: IDeviceControlService) -> IApplicationModel:
         return DeviceControlModel(service)
@@ -36,4 +37,5 @@ class DeviceControlFactory(ApplicationFactory):
             view,
             dryer_view=dryer_view,
             dryer_controller=dryer_controller,
+            extra_panels=self._extra_panels,
         )

@@ -645,6 +645,34 @@ def scale_paint_process_accelerations(config: PaintProcessConfig) -> PaintProces
     if scale == 1.0:
         return config
 
+    def is_acceleration_name(name: object) -> bool:
+        normalized = str(name)
+        return (
+            "acceleration" in normalized
+            or normalized.startswith("acc_")
+            or "_acc_" in normalized
+        )
+
+    def scaled_container(value):
+        if isinstance(value, dict):
+            return {
+                key: (
+                    float(current) * scale
+                    if (
+                        isinstance(current, (int, float))
+                        and not isinstance(current, bool)
+                        and is_acceleration_name(key)
+                    )
+                    else scaled_container(current)
+                )
+                for key, current in value.items()
+            }
+        if isinstance(value, list):
+            return [scaled_container(current) for current in value]
+        if isinstance(value, tuple):
+            return tuple(scaled_container(current) for current in value)
+        return value
+
     def scaled_dataclass(value):
         updates = {}
         for item in fields(value):
@@ -656,14 +684,15 @@ def scale_paint_process_accelerations(config: PaintProcessConfig) -> PaintProces
                 updates[item.name] = scaled_dataclass(current)
             elif (
                 isinstance(current, (int, float))
+                and not isinstance(current, bool)
                 and item.name != "paint_process_acceleration_scale_percent"
-                and (
-                    "acceleration" in item.name
-                    or item.name.startswith("acc_")
-                    or "_acc_" in item.name
-                )
+                and is_acceleration_name(item.name)
             ):
                 updates[item.name] = float(current) * scale
+            elif isinstance(current, (dict, list, tuple)):
+                scaled = scaled_container(current)
+                if scaled != current:
+                    updates[item.name] = scaled
         return replace(value, **updates) if updates else value
 
     return scaled_dataclass(config)

@@ -9,6 +9,8 @@
   "CalibrationView": {
     "Global (shared calibration)": "Global (shared calibration)",
     "Robot Calibration Area": "Robot Calibration Area",
+    "Camera-to-TCP Calibration Area": "Camera-to-TCP Calibration Area",
+    "Select the area for camera-to-TCP calibration:": "Select the area for camera-to-TCP calibration:",
     "Select the area to calibrate:": "Select the area to calibrate:",
     "not configured": "not configured"
   }

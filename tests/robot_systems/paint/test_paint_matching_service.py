@@ -1,4 +1,7 @@
 import unittest
+import json
+import tempfile
+from pathlib import Path
 
 import numpy as np
 
@@ -41,6 +44,25 @@ class TestPickLargestContour(unittest.TestCase):
 
 
 class TestPaintWorkpieceMatchingService(unittest.TestCase):
+
+    def test_matcher_prefers_preserved_camera_contour_over_editable_contour(self):
+        raw = _raw_workpiece()
+        raw["matchingContour"] = _square(12.0).tolist()
+        seen = {}
+
+        def run_matching(workpieces, contours):
+            seen["saved"] = workpieces[0].get_main_contour()
+            return {"workpieces": []}, 1, [], contours
+
+        service = PaintWorkpieceMatchingService(
+            list_saved_workpieces_fn=lambda: [{"id": "stored-1"}],
+            load_saved_workpiece_fn=lambda _storage_id: raw,
+            run_matching_fn=run_matching,
+        )
+
+        service.match_saved_workpieces(_square(12.0))
+
+        np.testing.assert_allclose(_square(12.0), seen["saved"])
 
     def test_can_match_saved_workpieces_requires_all_dependencies(self):
         service = PaintWorkpieceMatchingService()
@@ -106,6 +128,28 @@ class TestPaintWorkpieceMatchingService(unittest.TestCase):
         self.assertFalse(ok)
         self.assertIsNone(payload)
         self.assertEqual(msg, "No match found. Saved workpieces checked: 1")
+
+    def test_no_match_writes_contour_comparison_debug_bundle(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            service = PaintWorkpieceMatchingService(
+                list_saved_workpieces_fn=lambda: [{"id": "stored-1"}],
+                load_saved_workpiece_fn=lambda _storage_id: _raw_workpiece(),
+                run_matching_fn=lambda workpieces, contours: ({"workpieces": []}, 1, [], contours),
+                debug_dump_dir=tmp_dir,
+            )
+
+            ok, _payload, _msg = service.match_saved_workpieces(_square(12.0))
+
+            self.assertFalse(ok)
+            output_dir = Path(tmp_dir) / "workpiece_matching"
+            json_files = list(output_dir.glob("match_*_no_match.json"))
+            png_files = list(output_dir.glob("match_*_no_match.png"))
+            self.assertEqual(1, len(json_files))
+            self.assertEqual(1, len(png_files))
+            debug_data = json.loads(json_files[0].read_text(encoding="utf-8"))
+            self.assertEqual(4, debug_data["captured"]["point_count"])
+            self.assertEqual("stored-1", debug_data["candidates"][0]["storage_id"])
+            self.assertIn("geometric_similarity_percent", debug_data["candidates"][0])
 
     def test_run_matching_caches_snapshot_and_skips_when_no_contours(self):
         snapshot = VisionCaptureSnapshot(frame="frame", contours=[], source="matching")

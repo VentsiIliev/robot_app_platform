@@ -57,5 +57,25 @@
       "pause_off": 0
     },
     "statuses": {}
+  },
+  "paint_head": {
+    "enabled": true,
+    "slave_id": 10,
+    "inputs": {
+      "position": "2"
+    },
+    "outputs": {
+      "position": "2"
+    },
+    "commands": {
+      "min_value": 45,
+      "max_value": 235,
+      "preset_spacing": 38,
+      "preset_count": 6,
+      "degree_units_numerator": 94,
+      "degree_units_denominator": 90,
+      "more_paint_sign": -1
+    },
+    "statuses": {}
   }
 }

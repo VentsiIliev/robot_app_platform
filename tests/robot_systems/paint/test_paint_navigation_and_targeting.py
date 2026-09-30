@@ -1,6 +1,6 @@
 import unittest
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 from src.engine.common_service_ids import CommonServiceID
 from src.engine.common_settings_ids import CommonSettingsID
@@ -99,6 +99,33 @@ class TestPaintNavigationService(unittest.TestCase):
 
         self.assertFalse(ok)
         self.assertIn("X differs by 40.0 mm", message)
+
+    def test_validate_active_capture_area_uses_canonical_observer_pose(self):
+        class ObserverNavigation:
+            def get_group_position(self, _group_name):
+                return [100.0, 200.0, 300.0, 180.0, 0.0, 90.0]
+
+            def get_current_observer_position(self, _group_name, *, fresh=False):
+                self.fresh = fresh
+                return [100.0, 200.0, 300.0, 180.0, 0.0, 90.0]
+
+        navigation = ObserverNavigation()
+        robot_system = SimpleNamespace(
+            _navigation=navigation,
+            get_target_frame_for_work_area=MagicMock(
+                return_value=SimpleNamespace(target_navigation_group="Magazine")
+            ),
+            get_optional_service=MagicMock(return_value=None),
+        )
+
+        ok, message = application_wiring._validate_active_capture_area(
+            robot_system,
+            "magazine",
+            [140.0, 200.0, 300.0, 180.0, 0.0, 90.0],
+        )
+
+        self.assertTrue(ok, message)
+        self.assertTrue(navigation.fresh)
 
     def test_move_home_uses_capture_offset_and_sets_pickup_area(self):
         navigation = MagicMock()
@@ -210,6 +237,65 @@ class TestPaintNavigationService(unittest.TestCase):
             motion_type="ptp",
             blendR=0.0,
         )
+
+    def test_calibration_move_uses_calibration_tool_then_restores_configured_tool(self):
+        navigation = MagicMock()
+        navigation.move_to_group.return_value = True
+        robot = MagicMock()
+        robot.unwind_joint6.return_value = True
+        robot.set_active_tool.return_value = True
+        service = PaintNavigationService(
+            navigation,
+            robot_service=robot,
+            calibration_tool_id=1,
+            configured_tool_getter=lambda: 7,
+        )
+
+        self.assertTrue(service.move_to_calibration_position())
+
+        self.assertEqual(
+            [call(1), call(7)],
+            robot.set_active_tool.call_args_list,
+        )
+        self.assertEqual(1, navigation.move_to_group.call_args.kwargs["tool"])
+
+    def test_magazine_move_restores_configured_tool_when_move_fails(self):
+        navigation = MagicMock()
+        navigation.move_to_group.return_value = False
+        robot = MagicMock()
+        robot.set_active_tool.return_value = True
+        service = PaintNavigationService(
+            navigation,
+            robot_service=robot,
+            calibration_tool_id=1,
+            configured_tool_getter=lambda: 4,
+        )
+
+        self.assertFalse(service.move_to_group("Magazine"))
+
+        self.assertEqual(
+            [call(1), call(4)],
+            robot.set_active_tool.call_args_list,
+        )
+        self.assertEqual(1, navigation.move_to_group.call_args.kwargs["tool"])
+
+    def test_observer_pose_is_read_in_calibration_tool_frame_then_restored(self):
+        navigation = MagicMock()
+        robot = MagicMock()
+        robot.set_active_tool.return_value = True
+        robot.get_current_position_fresh.return_value = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+        service = PaintNavigationService(
+            navigation,
+            robot_service=robot,
+            calibration_tool_id=1,
+            configured_tool_getter=lambda: 2,
+        )
+
+        pose = service.get_current_observer_position("Magazine", fresh=True)
+
+        self.assertEqual([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], pose)
+        self.assertEqual([call(1), call(2)], robot.set_active_tool.call_args_list)
+        robot.get_current_position_fresh.assert_called_once_with()
 
     def test_get_group_position_returns_none_on_lookup_or_parse_failure(self):
         navigation = MagicMock()

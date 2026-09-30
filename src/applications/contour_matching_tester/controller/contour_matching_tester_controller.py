@@ -1,4 +1,5 @@
 import logging
+from functools import partial
 from typing import Callable, List, Optional, Tuple
 
 import cv2
@@ -59,6 +60,7 @@ class ContourMatchingTesterController(IApplicationController):
         self._paused          = False
         self._latest_frame:   Optional[np.ndarray] = None
         self._captured_frame: Optional[np.ndarray] = None
+        self._match_overlay: Optional[Tuple[dict, List, List]] = None
         self._threads:        List[Tuple[QThread, _Worker]] = []
         self._logger          = logging.getLogger(self.__class__.__name__)
 
@@ -105,11 +107,18 @@ class ContourMatchingTesterController(IApplicationController):
             return
         self._latest_frame = frame
         if not self._paused:
-            self._view.update_camera_view(frame)
+            if self._match_overlay is None:
+                self._view.update_camera_view(frame)
+            else:
+                result, matched, unmatched = self._match_overlay
+                self._view.update_camera_view(
+                    self._draw_match_overlay(frame, result, matched, unmatched)
+                )
 
     # ── Capture / Resume ──────────────────────────────────────────────────────
 
     def _on_capture_clicked(self) -> None:
+        self._match_overlay = None
         if self._paused:
             self._paused         = False
             self._captured_frame = None
@@ -131,29 +140,51 @@ class ContourMatchingTesterController(IApplicationController):
     # ── Workpiece selection → thumbnail ──────────────────────────────────────
 
     def _on_workpiece_selected(self, row: int) -> None:
+        self._match_overlay = None
         workpieces = self._model.workpieces
-        if row < 0 or row >= len(workpieces):
-            return
-        wp = workpieces[row]
-        name = getattr(wp, "name", "")
-        thumb = self._model.get_thumbnail(row)  # ← row index, not workpieceId
-        self._view.show_thumbnail(name, thumb)
+        selected = self._model.select_workpiece(row)
+        self._view.set_selected_workpiece(row if selected else -1)
+        self._view.clear_match_results()
+        if selected:
+            wp = workpieces[row]
+            name = getattr(wp, "name", "")
+            thumb = self._model.get_thumbnail(row)  # ← row index, not workpieceId
+            self._view.show_thumbnail(name, thumb)
+        base = self._captured_frame if self._captured_frame is not None else self._latest_frame
+        if base is not None:
+            image = (
+                self._draw_capture_overlay(base, self._model.captured_contours)
+                if self._model.is_captured else base
+            )
+            self._view.update_camera_view(image)
 
     # ── Load workpieces ───────────────────────────────────────────────────────
 
     def _on_load_workpieces(self) -> None:
+        self._match_overlay = None
         workpieces = self._model.load_workpieces()
         self._view.set_workpieces(workpieces)
+        base = self._captured_frame if self._captured_frame is not None else self._latest_frame
+        if base is not None:
+            image = (
+                self._draw_capture_overlay(base, self._model.captured_contours)
+                if self._model.is_captured else base
+            )
+            self._view.update_camera_view(image)
 
     # ── Match (async) ─────────────────────────────────────────────────────────
 
     def _on_match_requested(self) -> None:
+        selected_index = self._model.selected_index
+        if selected_index is None:
+            return
         self._threads = [(t, w) for t, w in self._threads if t.isRunning()]
         self._view.set_matching_busy(True)
-        self._run_async(self._model.run_matching, self._on_match_done)
+        self._run_async(partial(self._model.run_matching, selected_index), self._on_match_done)
 
     def _on_match_done(self, payload) -> None:
         result, no_match_count, matched_contours, unmatched_contours = payload
+        self._match_overlay = (result, matched_contours, unmatched_contours)
         self._view.set_matching_busy(False)
         self._view.set_match_results(result, no_match_count)
         base = self._captured_frame if self._captured_frame is not None else self._latest_frame

@@ -7,6 +7,7 @@ from src.applications.base.keyboard_settings_view import (
     build_with_keyboard_setting_handlers,
 )
 from src.applications.camera_settings.view.camera_settings_view import CameraSettingsView
+from src.applications.camera_settings.view.camera_devices_widget import CameraDevicesWidget
 from src.applications.camera_settings.view.camera_settings_schema import (
     ARUCO_GROUP,
     BRIGHTNESS_GROUP,
@@ -27,6 +28,7 @@ def _keyboard_collapsible_group(schema) -> CollapsibleGroup:
 def camera_tab_factory(
     mapper: Callable,
     parent=None,
+    show_camera_devices: bool = False,
 ) -> Tuple[CameraSettingsView, SettingsView]:
     settings_view = KeyboardSettingsView(
         component_name="CameraSettings",
@@ -36,10 +38,14 @@ def camera_tab_factory(
     settings_view.add_tab("Core", [CORE_GROUP])
     settings_view.add_tab("Detection", [CONTOUR_GROUP, PREPROCESSING_GROUP])
     settings_view.add_tab("ArUco", [ARUCO_GROUP])
+    camera_devices_widget = None
+    if show_camera_devices:
+        camera_devices_widget = CameraDevicesWidget()
+        settings_view.add_raw_tab("Devices", camera_devices_widget)
 
     brightness_group_widget = _keyboard_collapsible_group(BRIGHTNESS_GROUP)
     brightness_group_widget.value_changed.connect(settings_view._on_group_value_changed)
     settings_view._groups.append(brightness_group_widget)
     settings_view.add_raw_tab("Brightness", brightness_group_widget)
-    view = CameraSettingsView(settings_view)
+    view = CameraSettingsView(settings_view, camera_devices_widget)
     return view, settings_view

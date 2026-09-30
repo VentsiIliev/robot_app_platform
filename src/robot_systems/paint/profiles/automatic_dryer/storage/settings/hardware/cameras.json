@@ -1,0 +1,20 @@
+{
+  "cameras": {
+    "primary_vision": {
+      "device": "/dev/v4l/by-path/pci-0000:00:14.0-usb-0:5:1.0-video-index0",
+      "width": 1280,
+      "height": 720,
+      "required": true,
+      "flip_horizontal": false,
+      "flip_vertical": false
+    },
+    "auxiliary": {
+      "device": "/dev/v4l/by-path/pci-0000:00:14.0-usb-0:9:1.0-video-index0",
+      "width": 1280,
+      "height": 720,
+      "required": false,
+      "flip_horizontal": false,
+      "flip_vertical": false
+    }
+  }
+}

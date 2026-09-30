@@ -15,6 +15,7 @@ class PaintNavigationService:
     _GROUP_HOME        = "HOME"
     _GROUP_LOGIN       = "LOGIN"
     _GROUP_CALIBRATION = "CALIBRATION"
+    _GROUP_MAGAZINE    = "Magazine"
 
     def __init__(
         self,
@@ -31,6 +32,8 @@ class PaintNavigationService:
         calibration_move_motion_type: str | None = None,
         calibration_move_blendR: float | None = None,
         paint_process_config_service: object | None = None,
+        calibration_tool_id: int | None = None,
+        configured_tool_getter: Callable[[], int] | None = None,
     ):
         self._nav = navigation
         self._vision = vision
@@ -52,6 +55,10 @@ class PaintNavigationService:
             None if calibration_move_blendR is None else float(calibration_move_blendR)
         )
         self._paint_process_config_service = paint_process_config_service
+        self._calibration_tool_id = (
+            None if calibration_tool_id is None else int(calibration_tool_id)
+        )
+        self._configured_tool_getter = configured_tool_getter
         self._observed_area_by_group = {
             str(group_id).strip(): str(area_id).strip()
             for group_id, area_id in (observed_area_by_group or {}).items()
@@ -120,7 +127,14 @@ class PaintNavigationService:
     ) -> bool:
         ok = (
             self._move_with_z_offset(group_name, z_offset, wait_cancelled=wait_cancelled)
-            if z_offset else self._nav.move_to_group(group_name, wait_cancelled=wait_cancelled)
+            if z_offset else self._run_observer_move(
+                group_name,
+                lambda tool: self._nav.move_to_group(
+                    group_name,
+                    wait_cancelled=wait_cancelled,
+                    **({"tool": tool} if tool is not None else {}),
+                ),
+            )
         )
         if ok:
             self._set_observed_area_for_group(group_name)
@@ -141,13 +155,17 @@ class PaintNavigationService:
         motion_type: str | None = None,
         blendR: float | None = None,
     ) -> bool:
-        ok = self._nav.move_to_group(
+        ok = self._run_observer_move(
             group_name,
-            wait_cancelled=wait_cancelled,
-            velocity=velocity,
-            acceleration=acceleration,
-            motion_type=motion_type,
-            blendR=blendR,
+            lambda tool: self._nav.move_to_group(
+                group_name,
+                wait_cancelled=wait_cancelled,
+                velocity=velocity,
+                acceleration=acceleration,
+                motion_type=motion_type,
+                blendR=blendR,
+                **({"tool": tool} if tool is not None else {}),
+            ),
         )
         if ok:
             self._set_observed_area_for_group(group_name)
@@ -187,11 +205,15 @@ class PaintNavigationService:
             }.items()
             if value is not None
         }
-        ok = self._nav.move_to_position(
-            position,
+        ok = self._run_observer_move(
             group_name,
-            wait_cancelled=wait_cancelled,
-            **motion_options,
+            lambda tool: self._nav.move_to_position(
+                position,
+                group_name,
+                wait_cancelled=wait_cancelled,
+                **({"tool": tool} if tool is not None else {}),
+                **motion_options,
+            ),
         )
         if ok:
             self._set_observed_area_for_group(group_name)
@@ -206,6 +228,49 @@ class PaintNavigationService:
             position = group.parse_position()
             return list(position) if position is not None else None
         except Exception:
+            return None
+
+    def get_current_observer_position(self, group_name: str, *, fresh: bool = False) -> list[float] | None:
+        """Read an observer pose using the same calibration TCP as its taught group."""
+        if group_name not in {self._GROUP_CALIBRATION, self._GROUP_MAGAZINE}:
+            return self._read_robot_position(fresh=fresh)
+        if (
+            self._robot is None
+            or self._configured_tool_getter is None
+            or self._calibration_tool_id is None
+        ):
+            return self._read_robot_position(fresh=fresh)
+
+        previous_tool = int(self._configured_tool_getter())
+        if not self._robot.set_active_tool(self._calibration_tool_id):
+            _logger.error(
+                "[NAV] Observer pose read %s could not activate calibration tool %d",
+                group_name,
+                self._calibration_tool_id,
+            )
+            return None
+        pose = None
+        try:
+            pose = self._read_robot_position(fresh=fresh)
+        finally:
+            if not self._robot.set_active_tool(previous_tool):
+                _logger.error(
+                    "[NAV] Observer pose read %s could not restore configured tool %d",
+                    group_name,
+                    previous_tool,
+                )
+                pose = None
+        return pose
+
+    def _read_robot_position(self, *, fresh: bool) -> list[float] | None:
+        if self._robot is None:
+            return None
+        try:
+            getter = self._robot.get_current_position_fresh if fresh else self._robot.get_current_position
+            pose = getter()
+            return list(pose) if pose is not None else None
+        except Exception:
+            _logger.exception("[NAV] Failed to read robot position")
             return None
 
     @timed_step(_logger, "move_with_z_offset", label_arg="group_name")
@@ -233,10 +298,14 @@ class PaintNavigationService:
                 move_options["blendR"],
             )
         if not z_offset:
-            return self._nav.move_to_group(
+            return self._run_observer_move(
                 group_name,
-                wait_cancelled=wait_cancelled,
-                **move_options,
+                lambda tool: self._nav.move_to_group(
+                    group_name,
+                    wait_cancelled=wait_cancelled,
+                    **({"tool": tool} if tool is not None else {}),
+                    **move_options,
+                ),
             )
         try:
             group = self._nav._get_group(group_name)
@@ -245,16 +314,51 @@ class PaintNavigationService:
                 return False
             position = list(position)
             position[2] += z_offset
-            return self._nav.move_to_position(
-                position,
+            return self._run_observer_move(
                 group_name,
-                wait_cancelled=wait_cancelled,
-                **move_options,
+                lambda tool: self._nav.move_to_position(
+                    position,
+                    group_name,
+                    wait_cancelled=wait_cancelled,
+                    **({"tool": tool} if tool is not None else {}),
+                    **move_options,
+                ),
             )
         except Exception:
             import traceback
             traceback.print_exc()
             return False
+
+    def _run_observer_move(self, group_name: str, move: Callable[[int | None], bool]) -> bool:
+        if group_name not in {self._GROUP_CALIBRATION, self._GROUP_MAGAZINE}:
+            return bool(move(None))
+        if (
+            self._robot is None
+            or self._configured_tool_getter is None
+            or self._calibration_tool_id is None
+        ):
+            return bool(move(None))
+
+        previous_tool = int(self._configured_tool_getter())
+        if not self._robot.set_active_tool(self._calibration_tool_id):
+            _logger.error(
+                "[NAV] Observer move %s could not activate calibration tool %d",
+                group_name,
+                self._calibration_tool_id,
+            )
+            return False
+        move_ok = False
+        try:
+            move_ok = bool(move(self._calibration_tool_id))
+        finally:
+            restored = bool(self._robot.set_active_tool(previous_tool))
+            if not restored:
+                _logger.error(
+                    "[NAV] Observer move %s could not restore configured tool %d",
+                    group_name,
+                    previous_tool,
+                )
+        return move_ok and restored
 
 
     def _set_area(self, area: str) -> None:

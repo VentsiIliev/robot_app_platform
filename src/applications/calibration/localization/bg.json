@@ -9,6 +9,8 @@
   "CalibrationView": {
     "Global (shared calibration)": "Глобална (споделена калибрация)",
     "Robot Calibration Area": "Зона за калибрация на робота",
+    "Camera-to-TCP Calibration Area": "Зона за калибрация камера към TCP",
+    "Select the area for camera-to-TCP calibration:": "Изберете зона за калибрация камера към TCP:",
     "Select the area to calibrate:": "Изберете зоната за калибриране:",
     "not configured": "не е конфигурирана"
   }

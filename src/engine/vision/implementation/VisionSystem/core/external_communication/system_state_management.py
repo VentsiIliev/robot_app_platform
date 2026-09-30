@@ -3,7 +3,7 @@ import threading
 from dataclasses import dataclass
 from enum import Enum
 
-from src.shared_contracts.events.vision_events import VisionTopics
+from src.shared_contracts.events.vision_events import CameraTopics, VisionTopics
 
 _logger = logging.getLogger(__name__)
 
@@ -58,6 +58,12 @@ class MessagePublisher:
 
     def publish_latest_image(self,image):
         self.messaging_service.publish(self.latest_image_topic, {"image": image})
+
+    def publish_camera_frame(self, image):
+        self.messaging_service.publish(
+            CameraTopics.frame("primary_vision"),
+            {"image": image, "camera": "primary_vision"},
+        )
 
     def publish_calibration_image_captured(self,calibration_images):
         self.messaging_service.publish(self.calibration_image_captured_topic, calibration_images)

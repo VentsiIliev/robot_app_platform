@@ -579,6 +579,27 @@ class TestPlateLayoutDropoff(unittest.TestCase):
         self.assertAlmostEqual(0.006, poses["dropoff"][5])
         self.assertAlmostEqual(0.004, poses["next_start"][5])
 
+    def test_distributed_unwind_does_not_unwind_partial_selected_segment_turn(self) -> None:
+        executor = MagicMock()
+        executor._contact_motion_config.rotation_index = 5
+        executor._last_process_start_rz = -30.0
+        executor._last_paint_contact_end_rz = -244.0
+        executor._last_process_end_pose = [0, 0, 0, 180, 0, -244.0]
+        executor._robot_service.get_current_position_fresh.return_value = [0, 0, 0, 180, 0, -244.0]
+
+        poses = _plate_route_poses_with_distributed_unwind(
+            executor,
+            entry_gate_pose=[1, 2, 3, 180, 0, 0],
+            exit_gate_pose=[11, 12, 13, 180, 0, 0],
+            center_pose=[4, 5, 6, 180, 0, 0],
+            dropoff_pose=[7, 8, 9, 180, 0, 0.006],
+            next_start_pose=[10, 11, 12, 180, 0, 0.004],
+            use_center_waypoint=False,
+        )
+
+        self.assertAlmostEqual(-359.994, poses["dropoff"][5])
+        self.assertAlmostEqual(-359.996, poses["next_start"][5])
+
     def test_combined_paint_chain_builds_plate_entry_through_release(self) -> None:
         service = PlateLayoutService()
         config = PaintProcessConfig(dropoff=PaintDropoffConfig(
@@ -641,10 +662,45 @@ class TestPlateLayoutDropoff(unittest.TestCase):
         segments, final_pose, error = build_plate_entry_segments_for_paint_chain(executor)
 
         self.assertEqual("", error)
+        self.assertEqual(3, len(segments))
         self.assertEqual(270.0, segments[0].position[5])
+        self.assertEqual(180.0, segments[1].position[5])
         self.assertGreater(segments[0].profile.blend_radius, 0.0)
         self.assertEqual(90.0, final_pose[5])
         self.assertEqual(90.0, segments[-1].position[5])
+
+    def test_combined_paint_chain_does_not_schedule_unwind_for_partial_turn(self) -> None:
+        service = PlateLayoutService()
+        config = PaintProcessConfig(dropoff=PaintDropoffConfig(
+            strategy="plate_layout",
+            plate_corners=_corners(),
+            plate_passage_gate_pose=[200, 100, 180, 180, 0, 0],
+            plate_use_entry_gate_as_detach_pose=True,
+            plate_distribute_unwind=True,
+            plate_use_center_waypoint=False,
+            plate_auto_center_near_corner=False,
+        ))
+        reservation, error = service.reserve(
+            config.dropoff,
+            width_mm=20.0,
+            height_mm=30.0,
+            calibration_pose=[0.0, 0.0, 0.0, 180.0, 0.0, 0.0],
+            workpiece_rz_at_calibration_deg=0.0,
+            pose_calculator=calculate_workpiece_dropoff_pose,
+        )
+        self.assertEqual("", error)
+        executor = MagicMock()
+        executor._paint_process_config.return_value = config
+        executor._plate_layout_service = service
+        executor._last_process_start_rz = -30.0
+        executor._last_paint_contact_end_rz = -244.0
+        executor._optimized_plate_entry_gate_pose = [200, 100, 180, 180, 0, -153.0]
+
+        segments, final_pose, error = build_plate_entry_segments_for_paint_chain(executor)
+
+        self.assertEqual("", error)
+        self.assertEqual(float(reservation.release_pose[5]), final_pose[5])
+        self.assertEqual(float(reservation.release_pose[5]), segments[-1].position[5])
 
     def test_optimized_entry_continues_remaining_half_on_exit(self) -> None:
         executor = MagicMock()

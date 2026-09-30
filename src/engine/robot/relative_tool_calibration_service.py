@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import logging
 import math
 from collections.abc import Sequence
 
 from src.engine.robot.tool_transform import inverse_rotate, rotation_matrix, rotate
+
+
+_logger = logging.getLogger(__name__)
 
 
 class RelativeToolCalibrationService:
@@ -23,6 +27,14 @@ class RelativeToolCalibrationService:
         self._reference_point = [float(flange_pose[i]) + tcp_in_base[i] for i in range(3)]
         self._reference_transform = [float(value) for value in tool_transform]
         self._candidate_translations.clear()
+        _logger.info(
+            "[TOOL_CALIBRATION] reference_captured flange_pose=%s reference_tool_transform=%s "
+            "tcp_vector_in_base=%s fixed_contact_point=%s",
+            _rounded(flange_pose),
+            _rounded(tool_transform),
+            _rounded(tcp_in_base),
+            _rounded(self._reference_point),
+        )
 
     def capture_candidate(self, flange_pose: Sequence[float]) -> list[float]:
         self._validate_pose(flange_pose, "flange_pose")
@@ -31,6 +43,14 @@ class RelativeToolCalibrationService:
         delta_base = [self._reference_point[i] - float(flange_pose[i]) for i in range(3)]
         candidate = inverse_rotate(rotation_matrix(*flange_pose[3:6]), delta_base)
         self._candidate_translations.append(candidate)
+        _logger.info(
+            "[TOOL_CALIBRATION] candidate_captured sample=%d flange_pose=%s "
+            "contact_minus_flange_base=%s candidate_tcp_local=%s",
+            len(self._candidate_translations),
+            _rounded(flange_pose),
+            _rounded(delta_base),
+            _rounded(candidate),
+        )
         return list(candidate)
 
     def solve(self) -> dict:
@@ -52,6 +72,24 @@ class RelativeToolCalibrationService:
         absolute = mean + [float(value) for value in ref[3:6]]
         relative_base = [mean[i] - float(ref[i]) for i in range(3)]
         relative_local = inverse_rotate(rotation_matrix(*ref[3:6]), relative_base)
+        residual_vectors = [
+            [sample[axis] - mean[axis] for axis in range(3)]
+            for sample in self._candidate_translations
+        ]
+        _logger.info(
+            "[TOOL_CALIBRATION] solved samples=%d candidate_tcp_local=%s mean_absolute_tcp=%s "
+            "residual_vectors=%s residual_norms_mm=%s max_spread_mm=%.6f "
+            "reference_tool_transform=%s relative_base=%s relative_local=%s",
+            len(self._candidate_translations),
+            [_rounded(sample) for sample in self._candidate_translations],
+            _rounded(mean),
+            [_rounded(residual) for residual in residual_vectors],
+            [round(value, 6) for value in deviations],
+            max(deviations, default=0.0),
+            _rounded(ref),
+            _rounded(relative_base),
+            _rounded(relative_local),
+        )
         return {
             "absolute_transform": absolute,
             "relative_transform": relative_local + [0.0, 0.0, 0.0],
@@ -60,6 +98,11 @@ class RelativeToolCalibrationService:
         }
 
     def clear(self) -> None:
+        _logger.info(
+            "[TOOL_CALIBRATION] cleared reference_captured=%s candidate_samples=%d",
+            self._reference_point is not None,
+            len(self._candidate_translations),
+        )
         self._reference_point = None
         self._reference_transform = None
         self._candidate_translations.clear()
@@ -70,3 +113,7 @@ class RelativeToolCalibrationService:
             raise ValueError(f"{label} must contain six values")
         if not all(math.isfinite(float(value)) for value in values):
             raise ValueError(f"{label} must contain finite values")
+
+
+def _rounded(values: Sequence[float]) -> list[float]:
+    return [round(float(value), 6) for value in values]

@@ -12,7 +12,9 @@ class ServiceID(str, Enum):
 
 
 class SettingsID(str, Enum):
+    CAMERAS = "cameras"
     PAINT_PROCESS_CONFIG = "paint_process_config"
+    PAINT_ADJUSTMENT_SETTINGS = "paint_adjustment_settings"
     DRYER_CONFIG = "dryer_config"
     PERIPHERALS = "peripherals"
 

@@ -17,10 +17,25 @@ def handle_build_execution_plan(ctx: PaintExecutionContext) -> PaintExecutionSta
     service = ctx.production_service
     phase_start = perf_counter()
     try:
-        ctx.execution_plan = service._path_preparation_service.build_execution_plan(
-            ctx.raw_workpiece,
-            skip_debug_plot=not service._path_debug_plots_enabled(),
+        skip_debug_plot = not service._path_debug_plots_enabled()
+        prepare_paint_plan = getattr(
+            type(service._path_executor),
+            "prepare_workpiece_execution_plan",
+            None,
         )
+        if callable(prepare_paint_plan):
+            # The paint executor adds the saved paint-segment mask and clearance
+            # profile to the generic workpiece plan. Bypassing this method makes
+            # every point on the main contour a contact point.
+            ctx.execution_plan = service._path_executor.prepare_workpiece_execution_plan(
+                ctx.raw_workpiece,
+                skip_debug_plot=skip_debug_plot,
+            )
+        else:
+            ctx.execution_plan = service._path_preparation_service.build_execution_plan(
+                ctx.raw_workpiece,
+                skip_debug_plot=skip_debug_plot,
+            )
     except Exception as exc:
         _logger.exception("Paint production plan generation failed")
         ctx.set_result(False, f"Plan generation failed: {exc}")

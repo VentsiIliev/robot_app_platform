@@ -48,6 +48,7 @@ class RobotSettingsModel(IApplicationModel):
 
         if targeting_data is not None:
             self._service.save_targeting_definitions(targeting_data)
+            self._config = self._service.load_config()
             self._targeting_definitions = targeting_data
             self._logger.debug("Targeting definitions saved")
 
@@ -58,6 +59,15 @@ class RobotSettingsModel(IApplicationModel):
         """Reload config changed by another application."""
         self._config = self._service.load_config()
         return self._config
+
+    def save_targeting_definitions(self, targeting_data: dict) -> None:
+        self._service.save_targeting_definitions(targeting_data)
+        self._config = self._service.load_config()
+        self._targeting_definitions = targeting_data
+
+    def reload_targeting_definitions(self) -> dict | None:
+        self._targeting_definitions = self._service.load_targeting_definitions()
+        return self._targeting_definitions
 
     def get_slot_info(self) -> List[Tuple[int, str]]:
         return self._service.get_slot_info()

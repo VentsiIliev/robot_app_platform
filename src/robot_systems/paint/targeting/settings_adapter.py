@@ -79,6 +79,11 @@ def to_editor_dict(
 
     return {
         "points": points,
+        "point_mode": targeting.point_mode,
+        "area_points": {
+            area: [point.to_dict() for point in area_items]
+            for area, area_items in targeting.area_points.items()
+        },
         "frames": frames,
         "protected_points": [definition.name for definition in point_definitions],
         "protected_frames": [definition.name for definition in frame_definitions],
@@ -179,5 +184,11 @@ def from_editor_dict(
 
     settings.points = extra_points + declared_points
     settings.frames = extra_frames + declared_frames
+    settings.point_mode = str(data.get("point_mode", settings.point_mode))
+    settings.area_points = {
+        str(area).strip(): [RemoteTcpSettings.from_dict(item) for item in items if isinstance(item, dict)]
+        for area, items in (data.get("area_points", {}) or {}).items()
+        if str(area).strip() and isinstance(items, list)
+    }
     settings.ensure_defaults()
     return settings

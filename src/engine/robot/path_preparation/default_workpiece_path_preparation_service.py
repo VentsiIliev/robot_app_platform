@@ -131,6 +131,34 @@ def _pose_path_from_xy(xy_points: np.ndarray, reference_path: list[list[float]])
     ]
 
 
+def _cut_closed_contour_at_saved_selection_start(
+    contour: np.ndarray,
+    selection_payloads: list[dict],
+) -> tuple[np.ndarray, int | None]:
+    """Start a closed contour at the first explicit paint-segment point.
+
+    Only the starting index changes; winding is never reversed. Doing this
+    before interpolation and robot-frame conversion keeps pickup and RTCP
+    orientation consistent and preserves the configured motion direction.
+    """
+    points = np.asarray(contour, dtype=np.float64).reshape(-1, 2)
+    if len(points) < 3:
+        return points, None
+    for payload in selection_payloads:
+        settings = dict(payload.get("settings", {}) or {})
+        if settings.get("paint_selection_source"):
+            continue
+        selection = _contour_points_array(payload.get("contour"))
+        if len(selection) < 2:
+            continue
+        first_paint_point = np.asarray(selection[0], dtype=np.float64).reshape(2)
+        start_index = int(np.argmin(np.linalg.norm(points - first_paint_point, axis=1)))
+        if start_index == 0:
+            return points, 0
+        return np.concatenate((points[start_index:], points[:start_index]), axis=0), start_index
+    return points, None
+
+
 
 @dataclass(frozen=True)
 class WorkpieceExecutionPlan:
@@ -407,7 +435,12 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
         resolver = self._current_resolver()
         if resolver is not None and resolved_name:
             try:
-                point = resolver.registry.by_name(resolved_name)
+                registry_for_frame = getattr(type(resolver), "registry_for_frame", None)
+                registry = (
+                    registry_for_frame(resolver, frame_name)
+                    if callable(registry_for_frame) else resolver.registry
+                )
+                point = registry.by_name(resolved_name)
                 offset_x = float(getattr(point, "offset_x", 0.0))
                 offset_y = float(getattr(point, "offset_y", 0.0))
             except Exception:
@@ -469,11 +502,13 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
             # raise ValueError("No spray patterns found — draw Contour or Fill paths first")
 
         robot_paths = []
+        process_selection_paths_mm: list[list[list[float]]] = []
         pickup_px = self._extract_pickup_pixel(original_pickup_source)
         pickup_xy = None
         pickup_rz = 0.0
         pickup_camera_xy = None
         pickup_rz_source_path: list[list[float]] | None = None
+        selection_cut_applied = False
 
         if use_workpiece_layer:
             self._logger.debug(f"USING WORKPIECE LAYER")
@@ -496,6 +531,16 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
                     if config._CANONICALIZE_WORKPIECE_LAYER_CONTOUR
                     else raw_pts_px
                 )
+                source_before_bezier_px, selection_cut_index = _cut_closed_contour_at_saved_selection_start(
+                    source_before_bezier_px,
+                    list(spray_pattern.get("Contour", []) or []),
+                )
+                if selection_cut_index is not None:
+                    selection_cut_applied = True
+                    self._logger.info(
+                        "[PAINT_SELECTION] Anchored canonical contour start to the first saved paint point at index %d before path preparation",
+                        selection_cut_index,
+                    )
                 source_settings = dict(settings)
                 source_settings["_skip_debug_plot"] = bool(skip_debug_plot)
                 pts_px = self._process_source_contour(
@@ -522,6 +567,22 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
                 robot_pts = self._transform_to_robot(pts_px, settings)
                 if robot_pts:
                     robot_paths.append((robot_pts, settings, "Workpiece", pts_px, source_before_bezier_px))
+                    for pattern in spray_pattern.get("Contour", []):
+                        pattern_settings = dict(pattern.get("settings", {}) or {})
+                        if pattern_settings.get("paint_selection_source"):
+                            continue
+                        selection_arr = _contour_points_array(pattern.get("contour"))
+                        if selection_arr.size == 0:
+                            continue
+                        selection_px = np.asarray(selection_arr.reshape(-1, 2), dtype=np.float64)
+                        selection_settings = {**settings, **pattern_settings}
+                        selection_robot = self._transform_to_robot(selection_px, selection_settings)
+                        if selection_robot:
+                            process_selection_paths_mm.append([list(point) for point in selection_robot])
+                    self._logger.info(
+                        "[PAINT_SELECTION] Loaded %d saved paint segment(s) for the workpiece contour mask",
+                        len(process_selection_paths_mm),
+                    )
         else:
             self._logger.debug(f"USING SPRAY PATTERN")
             for pattern_type in ("Contour", "Fill"):
@@ -673,7 +734,22 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
                     frame_name=calibration_frame_name,
                 )
 
-                if use_workpiece_layer and len(prepared_xy) >= 3:
+                if use_workpiece_layer and process_selection_paths_mm:
+                    pickup_rz = compute_pickup_rz_from_initial_paint_segment(
+                        process_selection_paths_mm[0],
+                        pickup_reference_rz,
+                    )
+                    self._logger.info(
+                        "[PICKUP_RZ] method=initial_saved_paint_segment pickup_px=(%.3f, %.3f) pickup_camera_xy=(%.3f, %.3f) pickup_rz=%.3f reference_rz=%.3f segment_pts=%d",
+                        float(pickup_px[0]),
+                        float(pickup_px[1]),
+                        float(pickup_camera_xy[0]),
+                        float(pickup_camera_xy[1]),
+                        float(pickup_rz),
+                        float(pickup_reference_rz),
+                        len(process_selection_paths_mm[0]),
+                    )
+                elif use_workpiece_layer and len(prepared_xy) >= 3:
                     pickup_rz = compute_pickup_rz_from_min_rect_long_axis(
                         prepared_xy,
                         pickup_reference_rz,
@@ -773,6 +849,11 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
                     "execution_target_offset_x": float(execution_target_offset_x),
                     "execution_target_offset_y": float(execution_target_offset_y),
                     "execution_reference_rz": float(execution_reference_rz),
+                    "process_selection_paths_mm": [
+                        [list(point) for point in path]
+                        for path in process_selection_paths_mm
+                    ] if use_workpiece_layer else [],
+                    "paint_selection_cut_applied": bool(selection_cut_applied),
                 }
             )
 

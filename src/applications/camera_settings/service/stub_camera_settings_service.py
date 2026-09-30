@@ -1,6 +1,10 @@
 import logging
 from src.applications.camera_settings.camera_settings_data import CameraSettingsData
-from src.applications.camera_settings.service.i_camera_settings_service import ICameraSettingsService
+from src.applications.camera_settings.service.i_camera_settings_service import (
+    CameraDeviceOption,
+    CameraDevicesState,
+    ICameraSettingsService,
+)
 
 _logger = logging.getLogger(__name__)
 
@@ -31,3 +35,26 @@ class StubCameraSettingsService(ICameraSettingsService):
     def get_work_area(self, area_type: str) -> tuple[bool, str, list]:
         _logger.info("StubCameraSettingsService: get_work_area area_type=%s", area_type)
         return True, "Stub: work area retrieved", []
+
+    def load_camera_devices(self) -> CameraDevicesState:
+        return CameraDevicesState(
+            assignments={
+                "primary_vision": "/dev/video0",
+                "auxiliary": "/dev/video2",
+            },
+            options=(
+                CameraDeviceOption("/dev/video0", "/dev/video0", True),
+                CameraDeviceOption("/dev/video2", "/dev/video2", True),
+            ),
+            flips={
+                "primary_vision": (False, False),
+                "auxiliary": (False, False),
+            },
+        )
+
+    def save_camera_devices(
+        self,
+        assignments: dict[str, str],
+        flips: dict[str, tuple[bool, bool]],
+    ) -> None:
+        _logger.info("StubCameraSettingsService: camera assignments=%s flips=%s", assignments, flips)

@@ -87,7 +87,9 @@ class MessageBroker(IMessagingService):
 
         for callback in live_callbacks:
             try:
-                self.logger.debug(f"Publishing to topic: '{topic}' message: {message}")
+                # Frame messages can contain multi-megabyte NumPy arrays.
+                # Never stringify payloads on the publish hot path.
+                self.logger.debug("Publishing to topic '%s'", topic)
                 callback(message)
                 successful_calls += 1
             except Exception as e:

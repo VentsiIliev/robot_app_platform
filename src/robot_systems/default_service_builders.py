@@ -65,7 +65,14 @@ def build_tool_service(ctx):
     )
 
 
-def build_vision_service(ctx):
+def build_vision_service(
+    ctx,
+    *,
+    camera_device: int | str | None = None,
+    camera_resolution: tuple[int, int] | None = None,
+    allow_camera_fallback: bool = True,
+    camera_flips: tuple[bool, bool] = (False, False),
+):
     """Build the standard vision service from common camera settings."""
 
     from src.engine.vision.implementation.VisionSystem.VisionSystem import VisionSystem
@@ -86,6 +93,10 @@ def build_vision_service(ctx):
         messaging_service=ctx.messaging_service,
         service=service,
         work_area_service=work_area_service,
+        camera_device=camera_device,
+        camera_resolution=camera_resolution,
+        allow_camera_fallback=allow_camera_fallback,
+        camera_flips=camera_flips,
     )
     return VisionService(vision_system, work_area_service=work_area_service)
 

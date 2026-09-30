@@ -3,8 +3,8 @@
   "ROBOT_TOOL": 2,
   "ROBOT_USER": 1,
   "USE_AUTOMATIC_CAMERA_TO_TCP_OFFSET": true,
-  "CAMERA_TO_TCP_X_OFFSET": 75.275,
-  "CAMERA_TO_TCP_Y_OFFSET": 24.539,
+  "CAMERA_TO_TCP_X_OFFSET": 74.353,
+  "CAMERA_TO_TCP_Y_OFFSET": 6.2,
   "CAMERA_TO_TCP_ROTATION_RESIDUALS": [
     {
       "angle_deg": 0.0,
@@ -13,24 +13,53 @@
     },
     {
       "angle_deg": 5.0,
-      "x_mm": -0.0703142348907896,
-      "y_mm": -0.42518168858584443
+      "x_mm": -0.12529922911145586,
+      "y_mm": -0.08852948190737535
     },
     {
       "angle_deg": 50.0,
-      "x_mm": -0.5739433767544458,
-      "y_mm": -1.1757710659295784
+      "x_mm": -0.3406449858881717,
+      "y_mm": -0.16328648003026985
     },
     {
       "angle_deg": 90.0,
-      "x_mm": 1.3012837154041828,
-      "y_mm": 2.0291000494178792
+      "x_mm": 1.0911770585263754,
+      "y_mm": 0.00020983455028228198
     }
   ],
+  "CAMERA_TO_TCP_MODE": "per_area",
+  "CAMERA_TO_TCP_BY_AREA": {
+    "magazine": {
+      "x_mm": 76.1860664716849,
+      "y_mm": 6.390192566252366,
+      "rotation_residuals": [
+        {
+          "angle_deg": 0.0,
+          "x_mm": 0.0,
+          "y_mm": 0.0
+        },
+        {
+          "angle_deg": 5.0,
+          "x_mm": -0.03955183336265419,
+          "y_mm": -0.044977812048575774
+        },
+        {
+          "angle_deg": 50.0,
+          "x_mm": 0.14961404476075896,
+          "y_mm": 0.0028048531398338983
+        },
+        {
+          "angle_deg": 90.0,
+          "x_mm": 0.0016598860695888665,
+          "y_mm": -0.5849693703279943
+        }
+      ]
+    }
+  },
   "CAMERA_Z_SHIFT_X_PER_MM_PX": 0.0,
   "CAMERA_Z_SHIFT_Y_PER_MM_PX": 0.0,
-  "CAMERA_Z_SHIFT_X_PER_MM": -0.018411,
-  "CAMERA_Z_SHIFT_Y_PER_MM": 0.0402,
+  "CAMERA_Z_SHIFT_X_PER_MM": 0.0,
+  "CAMERA_Z_SHIFT_Y_PER_MM": 0.0,
   "TCP_X_STEP_DISTANCE": 50.0,
   "TCP_X_STEP_OFFSET": 0.1,
   "TCP_Y_STEP_DISTANCE": 50.0,

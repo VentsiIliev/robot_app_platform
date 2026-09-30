@@ -47,6 +47,7 @@ class WorkpieceEditorController(IApplicationController):
         self._latest_frame_shape = None
         self._latest_frame_bgr = None
         self._captured_pickup_point = None
+        self._captured_matching_contour = None
         self._loaded_raw_workpiece = None
 
     def load(self) -> None:
@@ -119,17 +120,33 @@ class WorkpieceEditorController(IApplicationController):
         # Stop live camera feed so the captured frame stays visible
         self._camera_active = False
         self._captured_pickup_point = self._compute_contour_centroid(largest)
+        # Preserve the exact vision contour independently of anything the
+        # editor may close, split, simplify, or resample before saving.
+        self._captured_matching_contour = self._normalize_contour_points(largest).tolist()
         self._save_pickup_debug_image(largest, self._captured_pickup_point)
         self._clear_verification_overlay()
 
-        known_raw = self._try_prepare_known_workpiece_capture(largest)
+        known_raw, match_payload, match_message = self._try_prepare_known_workpiece_capture(largest)
         if known_raw is not None:
             try:
                 self._load_raw_into_editor(known_raw, storage_id=None)
                 self._view._editor.set_verification_contours([self._normalize_contour_points(largest)])
+                show_info(
+                    self._view,
+                    self._t("Matched Workpiece"),
+                    self._capture_match_summary(match_payload or {}),
+                )
                 return [largest]
             except Exception:
                 self._logger.exception("Capture: failed to load matched workpiece")
+        elif match_message:
+            show_warning(
+                self._view,
+                self._t("Match Workpiece"),
+                self._t("The captured contour did not match a saved workpiece.\n\n{details}").format(
+                    details=match_message,
+                ),
+            )
 
         try:
             self._load_capture_contour_into_editor(largest)
@@ -216,7 +233,16 @@ class WorkpieceEditorController(IApplicationController):
 
     def _on_custom_action(self, action_id: str) -> None:
         if self._custom_action_handler is not None:
-            self._custom_action_handler(action_id)
+            inner = self._view._editor.contourEditor.editor_with_rulers.editor
+            ok, message = self._custom_action_handler(action_id, inner)
+            try:
+                self._view._editor.pointManagerWidget.refresh_points()
+            except (AttributeError, RuntimeError):
+                pass
+            if ok:
+                show_info(self._view, self._t("Paint Selection"), self._t(message))
+            else:
+                show_warning(self._view, self._t("Paint Selection"), self._t(message))
 
     def _set_verification_overlay_from_raw(self, raw: dict) -> None:
         try:
@@ -381,6 +407,7 @@ class WorkpieceEditorController(IApplicationController):
                 "form_data": form_data,
                 "editor_data": editor_data,
                 "loaded_raw_workpiece": copy.deepcopy(self._loaded_raw_workpiece),
+                "captured_matching_contour": copy.deepcopy(self._captured_matching_contour),
             }
         except Exception:
             self._logger.debug("Failed to capture editor snapshot", exc_info=True)
@@ -399,6 +426,9 @@ class WorkpieceEditorController(IApplicationController):
                 if hasattr(form, "set_field_value"):
                     form.set_field_value(key, value)
         self._loaded_raw_workpiece = copy.deepcopy(snapshot.get("loaded_raw_workpiece"))
+        self._captured_matching_contour = copy.deepcopy(
+            snapshot.get("captured_matching_contour")
+        )
         try:
             self._view._editor.pointManagerWidget.refresh_points()
             inner.update()
@@ -887,20 +917,22 @@ class WorkpieceEditorController(IApplicationController):
         if self._captured_pickup_point is not None and not enriched.get("pickupPoint"):
             enriched[
                 "pickupPoint"] = f"{float(self._captured_pickup_point[0]):.3f},{float(self._captured_pickup_point[1]):.3f}"
+        if self._captured_matching_contour:
+            enriched["matchingContour"] = copy.deepcopy(self._captured_matching_contour)
         enriched["height_mm"] = self._safe_float(enriched.get("height_mm"), _DEFAULT_WORKPIECE_HEIGHT_MM)
         return enriched
 
     def _load_capture_contour_into_editor(self, contour) -> None:
-        from src.applications.workpiece_editor.editor_core.handlers.CaptureDataHandler import CaptureDataHandler
-
         editor_frame = self._view._editor
         inner = editor_frame.contourEditor.editor_with_rulers.editor
         wm = inner.workpiece_manager
 
         wm.clear_workpiece()
-        editor_data = CaptureDataHandler.from_capture_data(
-            contours=contour,
-            metadata={"source": "camera_capture"},
+        # Let the injected system adapter establish its editor layers.  Paint,
+        # for example, keeps the captured matching boundary in Workpiece and
+        # creates an independent complete RTCP process contour in Paint.
+        editor_data = self._model.get_workpiece_data_adapter().from_raw(
+            {"contour": contour}
         )
         wm.load_editor_data(editor_data, close_contour=True)
         editor_frame.pointManagerWidget.refresh_points()
@@ -918,6 +950,13 @@ class WorkpieceEditorController(IApplicationController):
         self._view._editor.contourEditor.data = raw
         self._prefill_form_from_raw(raw)
         self._model.set_editing(storage_id)
+        if storage_id is not None or self._captured_matching_contour is None:
+            matching_contour = raw.get("matchingContour")
+            if matching_contour is None:
+                matching_contour = raw.get("contour")
+            self._captured_matching_contour = self._extract_raw_contour_points(
+                {"contour": matching_contour}
+            ).tolist()
         if raw.get("pickupPoint"):
             self._captured_pickup_point = self._parse_pickup_point(raw.get("pickupPoint"))
 
@@ -1011,26 +1050,50 @@ class WorkpieceEditorController(IApplicationController):
     def _restore_live_feed(self) -> None:
         self._camera_active = True
 
-    def _try_prepare_known_workpiece_capture(self, captured_contour) -> dict | None:
+    def _try_prepare_known_workpiece_capture(
+        self,
+        captured_contour,
+    ) -> tuple[dict | None, dict | None, str]:
         if not self._model.can_match_saved_workpieces():
-            return None
+            return None, None, ""
         try:
-            ok, payload, _msg = self._model.match_saved_workpieces(captured_contour)
+            ok, payload, message = self._model.match_saved_workpieces(captured_contour)
             if not ok or not payload:
-                return None
+                self._logger.warning("Capture: saved-workpiece match failed: %s", message)
+                return None, None, str(message or self._t("No match found."))
 
             matched_raw = copy.deepcopy(payload.get("raw") or {})
             if not matched_raw.get("contour"):
-                return None
-            self._save_workpiece_alignment_debug_plot(matched_raw, matched_raw)
+                return None, None, self._t("Matched workpiece has no contour.")
+            self._save_workpiece_alignment_debug_plot(
+                {"contour": self._normalize_contour_points(captured_contour).tolist()},
+                matched_raw,
+            )
             self._logger.info(
                 "Capture: recognized known workpiece %s and loaded aligned saved contour",
                 payload.get("workpieceId") or "(no id)",
             )
-            return matched_raw
-        except Exception:
+            return matched_raw, payload, ""
+        except Exception as exc:
             self._logger.exception("Capture: known-workpiece detection failed")
-            return None
+            return None, None, str(exc)
+
+    def _capture_match_summary(self, payload: dict) -> str:
+        lines = [
+            self._t("Matched: {workpiece_id}").format(
+                workpiece_id=payload.get("workpieceId") or self._t("(no id)"),
+            )
+        ]
+        if payload.get("name"):
+            lines.append(self._t("Name: {name}").format(name=payload["name"]))
+        if payload.get("confidence") is not None:
+            lines.append(
+                self._t("Confidence: {confidence:.2f}").format(
+                    confidence=float(payload["confidence"]),
+                )
+            )
+        lines.append(self._t("The saved workpiece was aligned to the captured contour."))
+        return "\n".join(lines)
 
     def _connect_segment_added(self) -> None:
         try:

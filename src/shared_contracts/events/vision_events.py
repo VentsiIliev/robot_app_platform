@@ -15,3 +15,11 @@ class VisionTopics:
     AUTO_BRIGHTNESS_START = "vison-auto-brightness"
     AUTO_BRIGHTNESS_STOP = "vison-auto-brightness"
     TRANSFORM_TO_CAMERA_POINT = "vision-vision_service/transform-to-camera-point"
+
+
+class CameraTopics:
+    """Named raw camera streams published by their single hardware owner."""
+
+    @staticmethod
+    def frame(role: str) -> str:
+        return f"camera/{role}/frame"

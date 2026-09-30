@@ -47,10 +47,13 @@ class ToolSettingsController(IApplicationController):
         self._model = model
         self._view  = view
         self._active = []
+        self._reference_captured = False
+        self._candidate_samples = 0
 
     def load(self) -> None:
         self._connect_signals()
         self._refresh()
+        self._update_calibration_progress()
 
     def stop(self) -> None:
         for thread, _worker in list(self._active):
@@ -184,10 +187,14 @@ class ToolSettingsController(IApplicationController):
             show_warning(self._view, "Tool Offsets", msg)
 
     def _on_capture_reference(self) -> None:
-        self._run_blocking(self._model.capture_reference_contact, self._show_simple_result)
+        self._run_blocking(
+            self._model.capture_reference_contact, self._show_reference_result
+        )
 
     def _on_capture_candidate(self) -> None:
-        self._run_blocking(self._model.capture_tool_contact, self._show_calibration_result)
+        self._run_blocking(
+            self._model.capture_tool_contact, self._show_candidate_result
+        )
 
     def _on_solve_calibration(self, tool_id: int) -> None:
         self._run_blocking(
@@ -220,6 +227,31 @@ class ToolSettingsController(IApplicationController):
             show_warning(self._view, "Tools & Magazine", msg)
         else:
             self._refresh()
+
+    def _show_reference_result(self, result) -> None:
+        ok, msg = result[:2]
+        self._view.set_status(msg)
+        if not ok:
+            show_warning(self._view, "Tool Calibration", msg)
+            return
+        self._reference_captured = True
+        self._candidate_samples = 0
+        self._update_calibration_progress()
+
+    def _show_candidate_result(self, result) -> None:
+        ok, msg = result[:2]
+        self._view.set_status(msg)
+        if not ok:
+            show_warning(self._view, "Tool Calibration", msg)
+            return
+        self._candidate_samples += 1
+        self._update_calibration_progress()
+
+    def _update_calibration_progress(self) -> None:
+        self._view.set_calibration_progress(
+            reference_captured=self._reference_captured,
+            candidate_samples=self._candidate_samples,
+        )
 
     def _show_calibration_result(self, result) -> None:
         ok, msg = result[:2]

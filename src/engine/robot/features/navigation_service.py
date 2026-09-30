@@ -32,6 +32,8 @@ class NavigationService:
         acceleration: float | None = None,
         motion_type: str | None = None,
         blendR: float | None = None,
+        tool: int | None = None,
+        user: int | None = None,
     ) -> bool:
         try:
             config = self._get_robot_config()
@@ -43,8 +45,8 @@ class NavigationService:
             return self._move_position_with_group_motion_type(
                 position=list(position),
                 group=group,
-                tool=config.robot_tool,
-                user=config.robot_user,
+                tool=config.robot_tool if tool is None else int(tool),
+                user=config.robot_user if user is None else int(user),
                 velocity=velocity,
                 acceleration=acceleration,
                 motion_type=motion_type,
@@ -124,6 +126,8 @@ class NavigationService:
         acceleration: float | None = None,
         motion_type: str | None = None,
         blendR: float | None = None,
+        tool: int | None = None,
+        user: int | None = None,
     ) -> bool:
         """Move to an explicit position using the velocity/acceleration of the named group."""
         try:
@@ -132,8 +136,8 @@ class NavigationService:
             return self._move_position_with_group_motion_type(
                 position=list(position),
                 group=group,
-                tool=config.robot_tool,
-                user=config.robot_user,
+                tool=config.robot_tool if tool is None else int(tool),
+                user=config.robot_user if user is None else int(user),
                 velocity=velocity,
                 acceleration=acceleration,
                 motion_type=motion_type,

@@ -1,8 +1,14 @@
 import logging
+from pathlib import Path
+from typing import Callable
 from typing import List, Optional, Tuple
 from src.applications.camera_settings.camera_settings_data import CameraSettingsData
 from src.applications.camera_settings.mapper import CameraSettingsMapper
-from src.applications.camera_settings.service.i_camera_settings_service import ICameraSettingsService
+from src.applications.camera_settings.service.i_camera_settings_service import (
+    CameraDeviceOption,
+    CameraDevicesState,
+    ICameraSettingsService,
+)
 from src.engine.common_settings_ids import CommonSettingsID
 from src.engine.repositories.interfaces.i_settings_service import ISettingsService
 from src.engine.vision.i_vision_service import IVisionService
@@ -15,10 +21,14 @@ class CameraSettingsApplicationService(ICameraSettingsService):
         settings_service: ISettingsService,
         vision_service: IVisionService,
         work_area_service=None,
+        camera_devices_settings_key=None,
+        camera_flip_setter: Callable[[str, bool, bool], None] | None = None,
     ):
         self._settings_service = settings_service
         self._vision_service   = vision_service
         self._work_area_service = work_area_service
+        self._camera_devices_settings_key = camera_devices_settings_key
+        self._camera_flip_setter = camera_flip_setter
         self._settings_id      = CommonSettingsID.VISION_CAMERA_SETTINGS
         self._logger           = logging.getLogger(self.__class__.__name__)
         self._hardware_auto_exposure: bool | None = None
@@ -65,3 +75,92 @@ class CameraSettingsApplicationService(ICameraSettingsService):
         if isinstance(result, tuple) and len(result) == 3:
             return result
         return True, "ok", list(result)
+
+    def load_camera_devices(self) -> CameraDevicesState:
+        if self._camera_devices_settings_key is None:
+            return CameraDevicesState(assignments={}, options=())
+        config = self._settings_service.get(self._camera_devices_settings_key)
+        assignments = {
+            role: str(spec.device)
+            for role, spec in config.cameras.items()
+        }
+        discovered: dict[str, CameraDeviceOption] = {}
+        for path in sorted(Path("/dev/v4l/by-path").glob("*-video-index0")):
+            try:
+                capture_node = str(path.resolve(strict=True))
+            except OSError:
+                continue
+            discovered[str(path)] = CameraDeviceOption(
+                device=str(path),
+                capture_node=capture_node,
+                connected=True,
+            )
+        for device in assignments.values():
+            if device in discovered:
+                continue
+            path = Path(device)
+            discovered[device] = CameraDeviceOption(
+                device=device,
+                capture_node=str(path.resolve()) if path.exists() else "",
+                connected=path.exists(),
+            )
+        return CameraDevicesState(
+            assignments=assignments,
+            options=tuple(discovered.values()),
+            flips={
+                role: (spec.flip_horizontal, spec.flip_vertical)
+                for role, spec in config.cameras.items()
+            },
+        )
+
+    def save_camera_devices(
+        self,
+        assignments: dict[str, str],
+        flips: dict[str, tuple[bool, bool]],
+    ) -> None:
+        if self._camera_devices_settings_key is None:
+            raise RuntimeError("Camera device settings are not configured")
+        from src.engine.vision.camera_device_settings import (
+            CameraDeviceSpec,
+            CameraDevicesConfig,
+        )
+
+        current = self._settings_service.get(self._camera_devices_settings_key)
+        cameras = dict(current.cameras)
+        for role, device in assignments.items():
+            existing = cameras.get(role)
+            horizontal, vertical = flips.get(
+                role,
+                (False, False) if existing is None else (
+                    existing.flip_horizontal,
+                    existing.flip_vertical,
+                ),
+            )
+            if not isinstance(horizontal, bool) or not isinstance(vertical, bool):
+                raise ValueError("Camera flip settings must be true or false")
+            if existing is None:
+                cameras[role] = CameraDeviceSpec(
+                    device=device,
+                    flip_horizontal=horizontal,
+                    flip_vertical=vertical,
+                )
+            else:
+                cameras[role] = CameraDeviceSpec(
+                    device=device,
+                    width=existing.width,
+                    height=existing.height,
+                    required=existing.required,
+                    flip_horizontal=horizontal,
+                    flip_vertical=vertical,
+                )
+        self._settings_service.save(
+            self._camera_devices_settings_key,
+            CameraDevicesConfig(cameras=cameras),
+        )
+        if self._camera_flip_setter is not None:
+            for role, spec in cameras.items():
+                self._camera_flip_setter(
+                    role,
+                    spec.flip_horizontal,
+                    spec.flip_vertical,
+                )

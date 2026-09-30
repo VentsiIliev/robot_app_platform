@@ -1,6 +1,7 @@
 import threading
 import time
 import logging
+import cv2
 from collections import deque
 from dataclasses import dataclass
 
@@ -27,6 +28,8 @@ class FrameGrabber:
         restart_max_cooldown_s=10.0,
         post_restart_settle_s=0.2,
         stale_frame_timeout_s=1.0,
+        flip_horizontal=False,
+        flip_vertical=False,
     ):
         """
         Threaded camera grabber.
@@ -54,6 +57,8 @@ class FrameGrabber:
         self._restart_cooldown_s = self._base_restart_cooldown_s
         self.post_restart_settle_s = float(post_restart_settle_s)
         self.stale_frame_timeout_s = float(stale_frame_timeout_s)
+        self._flip_horizontal = bool(flip_horizontal)
+        self._flip_vertical = bool(flip_vertical)
         self._consecutive_failures = 0
         self._last_restart_at = 0.0
         self._last_frame_at = 0.0
@@ -85,6 +90,9 @@ class FrameGrabber:
                 self._restart_cooldown_s = self._base_restart_cooldown_s
                 captured_at = time.time()
                 with self.lock:
+                    if self._flip_horizontal or self._flip_vertical:
+                        flip_code = -1 if self._flip_horizontal and self._flip_vertical else (1 if self._flip_horizontal else 0)
+                        frame = cv2.flip(frame, flip_code)
                     self._frame_sequence += 1
                     self.buffer.append(
                         FrameSnapshot(
@@ -100,6 +108,14 @@ class FrameGrabber:
                 if self._should_restart_stream():
                     self._restart_stream()
                 time.sleep(0.001)  # avoid busy loop if capture fails
+
+    def set_flips(self, horizontal: bool, vertical: bool) -> None:
+        with self._frame_available:
+            self._flip_horizontal = bool(horizontal)
+            self._flip_vertical = bool(vertical)
+            self.buffer.clear()
+            self._last_frame_at = 0.0
+            self._frame_available.notify_all()
 
     def _should_restart_stream(self) -> bool:
         if self._consecutive_failures < self.restart_after_failures:

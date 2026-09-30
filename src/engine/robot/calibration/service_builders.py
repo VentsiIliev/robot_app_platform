@@ -84,6 +84,17 @@ class _CalibrationArtifactVisionProxy:
             os.makedirs(parent, exist_ok=True)
         return resolved
 
+    def matrix_path_for_area(self, area_id: str) -> str:
+        """Read the matrix assigned to an area, including a shared global profile."""
+        settings = self._settings_service.get(CommonSettingsID.CALIBRATION_VISION_SETTINGS)
+        area = str(area_id or "global").strip()
+        if area == "global" or getattr(settings, "coordinate_calibration_mode", "global") != "per_area":
+            return self._vision_service.camera_to_robot_matrix_path
+        profile_id = (getattr(settings, "work_area_calibration_profiles", {}) or {}).get(area)
+        if profile_id == "global":
+            return self._vision_service.camera_to_robot_matrix_path
+        return self._resolve_matrix_path(area)
+
 
 def build_calibration_artifact_vision_proxy(vision_service, settings_service):
     """Route calibration artifacts using the currently selected destination."""
