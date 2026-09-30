@@ -10,6 +10,8 @@ from src.applications.base.widgets.custom_virtual_keyboard import (
     KeyboardLineEdit,
     KeyboardSpinBox,
 )
+from src.applications.base.widgets.keyboard_number_field import KeyboardNumberField
+from src.applications.base.widgets.card_checkbox import CardCheckBox
 
 
 _KEYBOARD_WIDGET_TYPES = ("line_edit", "spinbox", "double_spinbox")
@@ -27,6 +29,19 @@ QLineEdit, QSpinBox, QDoubleSpinBox {{
 QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus {{
     border-color: {PRIMARY};
 }}
+"""
+
+_CARD_INPUT_STYLE = f"""
+QLineEdit {{
+    background: white;
+    color: {TEXT_COLOR};
+    border: 1px solid {BORDER};
+    border-radius: 10px;
+    padding: 0 12px;
+    font-size: 12pt;
+    min-height: 48px;
+}}
+QLineEdit:focus {{ border-color: {PRIMARY}; }}
 """
 
 
@@ -102,12 +117,68 @@ def restore_setting_handlers(handlers: dict[str, WidgetHandler]) -> None:
     widget_factory._REGISTRY.update(handlers)
 
 
-def build_with_keyboard_setting_handlers(fn: Callable[[], None]) -> None:
+def build_with_keyboard_setting_handlers(fn: Callable[[], Any]) -> Any:
     original = install_keyboard_setting_handlers()
     try:
-        fn()
+        return fn()
     finally:
         restore_setting_handlers(original)
+
+
+def build_with_keyboard_card_handlers(fn: Callable[[], Any]) -> Any:
+    """Use compact keyboard fields and plus/minus controls for a card form."""
+    original = install_keyboard_setting_handlers()
+    original_checkbox = widget_factory._REGISTRY.get("checkbox_string")
+
+    def make_line(field: SettingField, emit: Callable[[Any], None]):
+        widget = _make_keyboard_line_edit(field, emit)
+        widget.setStyleSheet(_CARD_INPUT_STYLE)
+        return widget
+
+    def make_number(field: SettingField, emit: Callable[[Any], None]):
+        decimal = field.widget_type == "double_spinbox"
+        widget = KeyboardNumberField(decimal=decimal)
+        widget.setRange(field.min_val, field.max_val)
+        if decimal:
+            widget.setDecimals(int(field.decimals))
+        widget.setSingleStep(field.step)
+        widget.setSuffix(field.suffix)
+        if field.default is not None:
+            widget.setValue(field.default)
+        widget.valueChanged.connect(emit)
+        return widget
+
+    def make_checkbox(field: SettingField, emit: Callable[[Any], None]):
+        widget = CardCheckBox(field.label)
+        widget.setChecked(str(field.default).lower() == "true")
+        widget.toggled.connect(lambda checked: emit("True" if checked else "False"))
+        return widget
+
+    widget_factory._REGISTRY["line_edit"] = WidgetHandler(
+        create=make_line,
+        get_value=lambda widget: widget.text(),
+        set_value=lambda widget, value: widget.setText(str(value)),
+    )
+    for widget_type, converter in (("spinbox", int), ("double_spinbox", float)):
+        widget_factory._REGISTRY[widget_type] = WidgetHandler(
+            create=make_number,
+            get_value=lambda widget: widget.value(),
+            set_value=lambda widget, value, cast=converter: widget.setValue(cast(value)),
+        )
+    widget_factory._REGISTRY["checkbox_string"] = WidgetHandler(
+        create=make_checkbox,
+        get_value=lambda widget: "True" if widget.isChecked() else "False",
+        set_value=lambda widget, value: widget.setChecked(str(value).lower() == "true"),
+        full_width=True,
+    )
+    try:
+        return fn()
+    finally:
+        restore_setting_handlers(original)
+        if original_checkbox is None:
+            widget_factory._REGISTRY.pop("checkbox_string", None)
+        else:
+            widget_factory._REGISTRY["checkbox_string"] = original_checkbox
 
 
 def install_keyboard_setting_handlers_permanently() -> None:

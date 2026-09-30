@@ -3,20 +3,35 @@ from PyQt6.QtWidgets import QLabel, QScrollArea, QVBoxLayout, QWidget
 
 from src.applications.base.i_application_view import IApplicationView
 from src.shared_contracts.declarations import MovementGroupDefinition
-from src.applications.base.keyboard_settings_view import KeyboardSettingsView
+from src.applications.base.keyboard_settings_view import (
+    KeyboardSettingsView,
+    build_with_keyboard_card_handlers,
+)
 from src.applications.robot_settings.model.mapper import RobotSettingsMapper
 from src.applications.robot_settings.view.movement_groups_tab import MovementGroupsTab
 from src.applications.robot_settings.view.targeting_definitions_tab import TargetingDefinitionsTab
+from pl_gui.settings.settings_view.settings_view import SettingsView
 from pl_gui.settings.settings_view.styles import TOUCH_SCROLL_AREA_STYLE
 
 from src.applications.robot_settings.view.robot_settings_schema import (
     CALIBRATION_ADAPTIVE_GROUP, CALIBRATION_AXIS_MAPPING_GROUP, CALIBRATION_CAMERA_TCP_GROUP, CALIBRATION_MARKER_GROUP,
-    GLOBAL_MOTION_GROUP, OFFSET_DIRECTION_GROUP, ROBOT_INFO_GROUP,
-    SAFETY_LIMITS_GROUP, TCP_STEP_GROUP,
+    CAMERA_TCP_GROUP, CAMERA_Z_SHIFT_GROUP, GLOBAL_MOTION_GROUP,
+    OFFSET_DIRECTION_GROUP, ORIENTATION_LIMITS_GROUP, POSITION_LIMITS_GROUP,
+    ROBOT_INFO_GROUP, TCP_STEP_GROUP,
 )
 
 
 _SHOW_LEGACY_CALIBRATION_TAB = False
+
+
+class _RobotCardSettingsView(KeyboardSettingsView):
+    """Use open section cards while retaining shared virtual keyboard fields."""
+
+    def _build_schema_tab_widget(self, groups):
+        def build():
+            return SettingsView._build_schema_tab_widget(self, groups)
+
+        return build_with_keyboard_card_handlers(build)
 
 
 class RobotSettingsView(IApplicationView):
@@ -26,6 +41,7 @@ class RobotSettingsView(IApplicationView):
     JOG_FRAME_SELECTOR_ENABLED = True
 
     save_requested = pyqtSignal(dict)
+    discard_requested = pyqtSignal()
     value_changed = pyqtSignal(str, object, str)
     movement_changed = pyqtSignal(str, object)
     targeting_changed = pyqtSignal()
@@ -49,12 +65,16 @@ class RobotSettingsView(IApplicationView):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        self._settings_view = KeyboardSettingsView(
+        self._settings_view = _RobotCardSettingsView(
             component_name="RobotSettings",
             mapper=RobotSettingsMapper.to_flat_dict,
         )
-        self._settings_view.add_tab("General",             [ROBOT_INFO_GROUP, GLOBAL_MOTION_GROUP, TCP_STEP_GROUP, OFFSET_DIRECTION_GROUP])
-        self._settings_view.add_tab("Safety", [SAFETY_LIMITS_GROUP])
+        self._settings_view.enable_change_controls()
+        self._settings_view.add_tab("General", [
+            ROBOT_INFO_GROUP, CAMERA_TCP_GROUP, CAMERA_Z_SHIFT_GROUP,
+            GLOBAL_MOTION_GROUP, TCP_STEP_GROUP, OFFSET_DIRECTION_GROUP,
+        ])
+        self._settings_view.add_tab("Safety", [POSITION_LIMITS_GROUP, ORIENTATION_LIMITS_GROUP])
         self._add_lazy_raw_tab("Movement Groups")
         self._add_lazy_raw_tab("Targeting")
         if _SHOW_LEGACY_CALIBRATION_TAB:
@@ -70,6 +90,7 @@ class RobotSettingsView(IApplicationView):
         layout.addWidget(self._settings_view)
 
         self._settings_view.save_requested.connect(self._on_inner_save)
+        self._settings_view.discard_requested.connect(self._on_inner_discard)
         self._settings_view.value_changed_signal.connect(self._on_inner_value_changed)
         self._settings_view._tabs.currentChanged.connect(self._on_tab_changed)
 
@@ -124,11 +145,19 @@ class RobotSettingsView(IApplicationView):
     def _on_inner_save(self, values: dict) -> None:
         self.save_requested.emit(values)
 
+    def _on_inner_discard(self) -> None:
+        self.discard_requested.emit()
+
     def _on_inner_value_changed(self, key: str, value, component: str) -> None:
+        self._settings_view.set_dirty(True)
         self.value_changed.emit(key, value, component)
 
     def _on_inner_movement_changed(self, key: str, value) -> None:
+        self._settings_view.set_dirty(True)
         self.movement_changed.emit(key, value)
+
+    def mark_saved(self) -> None:
+        self._settings_view.set_dirty(False)
 
     def load_config(self, flat: dict) -> None:
         self._cached_flat_config = dict(flat)
@@ -174,11 +203,13 @@ class RobotSettingsView(IApplicationView):
 
     def add_movement_group(self, name: str, defn, group) -> None:
         self._cached_movement_groups[name] = group
+        self._settings_view.set_dirty(True)
         if self._movement_tab is not None:
             self._movement_tab.add_group(name, defn, group)
 
     def remove_movement_group(self, name: str) -> None:
         self._cached_movement_groups.pop(name, None)
+        self._settings_view.set_dirty(True)
         if self._movement_tab is not None:
             self._movement_tab.remove_group(name)
 

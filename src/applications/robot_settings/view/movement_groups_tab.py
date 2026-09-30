@@ -1,9 +1,9 @@
 from typing import Callable, Dict, List, Optional
 
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import QCoreApplication, QEvent, QSize, Qt, QTimer, pyqtSignal
 from PyQt6.QtWidgets import (
     QDialog, QGridLayout, QHBoxLayout, QLabel, QLineEdit,
-    QListWidget, QListWidgetItem, QPushButton, QSizePolicy,
+    QListWidget, QListWidgetItem, QPushButton, QButtonGroup, QSizePolicy, QStackedWidget,
     QScrollArea, QVBoxLayout, QWidget, QFrame, QComboBox,
 )
 
@@ -15,14 +15,20 @@ from src.shared_contracts.declarations import (
 
 from pl_gui.settings.settings_view.styles import (
     ACTION_BTN_STYLE, BG_COLOR, BORDER, GHOST_BTN_STYLE,
-    GROUP_STYLE, LABEL_STYLE, PRIMARY, PRIMARY_DARK, PRIMARY_LIGHT, TEXT_COLOR,
+    GROUP_STYLE, LABEL_STYLE, PRIMARY, PRIMARY_DARK, PRIMARY_LIGHT,
+    SECONDARY_BG, TEXT_COLOR,
 )
 from src.applications.base.widgets.custom_virtual_keyboard import KeyboardDoubleSpinBox
+from src.applications.base.widgets.keyboard_number_field import KeyboardNumberField
 from pl_gui.utils.utils_widgets.touch_spinbox import TouchSpinBox
 
 
 _ACTION_BTN_STYLE = ACTION_BTN_STYLE
 _GHOST_BTN_STYLE  = GHOST_BTN_STYLE
+
+
+def _t(text: str) -> str:
+    return QCoreApplication.translate("RobotSettings", text) or text
 
 # ── Styles ────────────────────────────────────────────────────────────────────
 
@@ -37,6 +43,25 @@ QListWidget {{
 QListWidget::item:selected {{
     background: {PRIMARY_LIGHT};
     color: {PRIMARY_DARK};
+}}
+"""
+
+_GROUP_NAV_STYLE = f"""
+QListWidget {{
+    background: white;
+    border: 1px solid {BORDER};
+    border-radius: 12px;
+    padding: 4px;
+    font-size: 11pt;
+}}
+QListWidget::item {{
+    border-left: 4px solid transparent;
+    padding-left: 12px;
+}}
+QListWidget::item:selected {{
+    background: {PRIMARY_LIGHT};
+    color: {PRIMARY_DARK};
+    border-left: 4px solid {PRIMARY};
 }}
 """
 
@@ -256,11 +281,15 @@ class MovementGroupWidget(QWidget):
         self._def      = definition
         self._name     = definition.id
         self._expanded = False
+        self._card_mode = False
+        self._position_section = None
+        self._coordinate_fields: list[KeyboardNumberField] = []
 
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         self.setStyleSheet("background: transparent;")
 
         outer = QVBoxLayout(self)
+        self._outer_layout = outer
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
 
@@ -293,16 +322,28 @@ class MovementGroupWidget(QWidget):
         outer.addWidget(self._body)
 
         # initialise optional widget references before _build_body
-        self._velocity_spin:     Optional[TouchSpinBox] = None
-        self._acceleration_spin: Optional[TouchSpinBox] = None
+        self._velocity_spin:     Optional[KeyboardNumberField] = None
+        self._acceleration_spin: Optional[KeyboardNumberField] = None
         self._motion_type_combo: Optional[QComboBox] = None
         self._iterations_spin:   Optional[TouchSpinBox] = None
         self._position_display:  Optional[QLineEdit]    = None
         self._points_list:       Optional[QListWidget]  = None
 
         self._build_body()
+        outer.addStretch()
 
     def _update_header_style(self, expanded: bool) -> None:
+        if self._card_mode:
+            self._header.setText(f"  {(self._def.label or self._name).upper()} · {_t('Speed').upper()}")
+            self._header.setStyleSheet(f"""
+                QPushButton {{
+                    background: {SECONDARY_BG}; color: {PRIMARY};
+                    border: 1px solid {BORDER}; border-radius: 12px 12px 0 0;
+                    text-align: left; padding-left: 12px;
+                    font-size: 10pt; font-weight: bold;
+                }}
+            """)
+            return
         arrow = "▲" if expanded else "▼"
         title = self._def.label or self._def.id
         self._header.setText(f"  {arrow}   {title}")
@@ -347,15 +388,67 @@ class MovementGroupWidget(QWidget):
             self._body_layout.addLayout(rm_row)
 
         self._body_layout.addWidget(self._build_vel_acc_row())
+        self._body_layout.addWidget(self._build_speed_step_row())
         self._body_layout.addWidget(self._build_motion_type_row())
 
         if self._def.has_iterations:
             self._body_layout.addWidget(self._build_iterations_row())
 
         if self._def.group_type == MovementGroupType.SINGLE_POSITION:
-            self._body_layout.addWidget(self._build_single_position_section())
+            self._position_section = self._build_single_position_section()
+            self._body_layout.addWidget(self._position_section)
         elif self._def.group_type == MovementGroupType.MULTI_POSITION:
-            self._body_layout.addWidget(self._build_multi_position_section())
+            self._position_section = self._build_multi_position_section()
+            self._body_layout.addWidget(self._position_section)
+
+    def use_card_layout(self) -> None:
+        if self._card_mode:
+            return
+        self._card_mode = True
+        self._header.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        self._update_header_style(True)
+        if self._position_section is None:
+            return
+        self._body_layout.removeWidget(self._position_section)
+        card = QFrame()
+        card.setObjectName("movementPositionCard")
+        card.setStyleSheet(f"""
+            QFrame#movementPositionCard {{
+                background: white; border: 1px solid {BORDER}; border-radius: 12px;
+            }}
+            QLabel#positionCardTitle {{
+                background: {SECONDARY_BG}; color: {PRIMARY};
+                padding: 10px 16px; font-size: 10pt; font-weight: bold;
+            }}
+        """)
+        card_layout = QVBoxLayout(card)
+        card_layout.setContentsMargins(0, 0, 0, 0)
+        card_layout.setSpacing(0)
+        self._position_card_title = QLabel()
+        self._position_card_title.setObjectName("positionCardTitle")
+        self._retranslate_card_title()
+        card_layout.addWidget(self._position_card_title)
+        body = QWidget()
+        body_layout = QVBoxLayout(body)
+        body_layout.setContentsMargins(16, 14, 16, 16)
+        body_layout.addWidget(self._position_section)
+        card_layout.addWidget(body)
+        self._outer_layout.insertWidget(self._outer_layout.count() - 1, card)
+        if hasattr(self, "_position_label"):
+            self._position_label.hide()
+
+    def _retranslate_card_title(self) -> None:
+        section_name = "Points" if self._def.group_type == MovementGroupType.MULTI_POSITION else "Position"
+        self._position_card_title.setText(
+            f"{(self._def.label or self._name).upper()} · {_t(section_name).upper()}"
+        )
+
+    def changeEvent(self, event) -> None:
+        if event.type() == QEvent.Type.LanguageChange and getattr(self, "_card_mode", False):
+            self._update_header_style(self._expanded)
+            if hasattr(self, "_position_card_title"):
+                self._retranslate_card_title()
+        super().changeEvent(event)
 
 
     def _build_vel_acc_row(self) -> QWidget:
@@ -366,10 +459,9 @@ class MovementGroupWidget(QWidget):
         layout.setSpacing(16)
 
         vel_cell = self._labeled_cell("Velocity")
-        self._velocity_spin = TouchSpinBox(
-            min_val=0, max_val=1000, initial=0,
-            step=1, decimals=0, suffix=" %", step_options=[1, 5, 10, 50],
-        )
+        self._velocity_spin = KeyboardNumberField()
+        self._velocity_spin.setRange(0, 1000)
+        self._velocity_spin.setSuffix(" %")
         self._velocity_spin.valueChanged.connect(
             lambda v: self.velocity_changed.emit(self._name, int(v))
         )
@@ -377,10 +469,9 @@ class MovementGroupWidget(QWidget):
         layout.addWidget(vel_cell)
 
         acc_cell = self._labeled_cell("Acceleration")
-        self._acceleration_spin = TouchSpinBox(
-            min_val=0, max_val=1000, initial=0,
-            step=1, decimals=0, suffix=" %", step_options=[1, 5, 10, 50],
-        )
+        self._acceleration_spin = KeyboardNumberField()
+        self._acceleration_spin.setRange(0, 1000)
+        self._acceleration_spin.setSuffix(" %")
         self._acceleration_spin.valueChanged.connect(
             lambda v: self.acceleration_changed.emit(self._name, int(v))
         )
@@ -388,6 +479,36 @@ class MovementGroupWidget(QWidget):
         layout.addWidget(acc_cell)
 
         return row
+
+    def _build_speed_step_row(self) -> QWidget:
+        row = QWidget()
+        layout = QHBoxLayout(row)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        layout.addStretch()
+        label = QLabel(_t("Step"))
+        label.setStyleSheet(f"color: {PRIMARY}; font-size: 9pt; margin-right: 8px;")
+        layout.addWidget(label)
+        self._speed_step_buttons = QButtonGroup(row)
+        self._speed_step_buttons.setExclusive(True)
+        for step in (1, 5, 10, 50):
+            button = QPushButton(str(step))
+            button.setCheckable(True)
+            button.setChecked(step == 1)
+            button.setMinimumSize(44, 36)
+            button.setCursor(Qt.CursorShape.PointingHandCursor)
+            button.setStyleSheet(f"""
+                QPushButton {{ background: white; color: {PRIMARY}; border: 1px solid {BORDER}; }}
+                QPushButton:checked {{ background: {PRIMARY}; color: white; border-color: {PRIMARY}; }}
+            """)
+            button.clicked.connect(lambda _checked, value=step: self._set_speed_step(value))
+            self._speed_step_buttons.addButton(button)
+            layout.addWidget(button)
+        return row
+
+    def _set_speed_step(self, step: int) -> None:
+        self._velocity_spin.setSingleStep(step)
+        self._acceleration_spin.setSingleStep(step)
 
     def _build_motion_type_row(self) -> QWidget:
         row = QWidget()
@@ -437,9 +558,25 @@ class MovementGroupWidget(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(8)
 
-        lbl = QLabel("Position")
-        lbl.setStyleSheet(LABEL_STYLE)
-        layout.addWidget(lbl)
+        self._position_label = QLabel("Position")
+        self._position_label.setStyleSheet(LABEL_STYLE)
+        layout.addWidget(self._position_label)
+
+        coordinates = QGridLayout()
+        coordinates.setHorizontalSpacing(12)
+        coordinates.setVerticalSpacing(12)
+        for index, axis in enumerate(("X", "Y", "Z", "RX", "RY", "RZ")):
+            cell = self._labeled_cell(axis)
+            field = KeyboardNumberField(decimal=True, button_width=38)
+            field.setRange(-2000 if index < 3 else -180, 2000 if index < 3 else 180)
+            field.setDecimals(3 if index < 3 else 2)
+            field.setSingleStep(1 if index < 3 else 0.1)
+            field.setSuffix(" mm" if index < 3 else " °")
+            field.valueChanged.connect(self._on_coordinate_changed)
+            cell.layout().addWidget(field)
+            self._coordinate_fields.append(field)
+            coordinates.addWidget(cell, index // 4, index % 4)
+        layout.addLayout(coordinates)
 
         row = QWidget()
         row.setStyleSheet("background: transparent;")
@@ -448,16 +585,11 @@ class MovementGroupWidget(QWidget):
         row_layout.setSpacing(8)
 
         self._position_display = QLineEdit()
+        self._position_display.hide()
         self._position_display.setReadOnly(True)
         self._position_display.setStyleSheet(_POSITION_STYLE)
         self._position_display.setPlaceholderText("No position set")
-        row_layout.addWidget(self._position_display, stretch=1)
-
-        edit_btn = QPushButton("Edit")
-        edit_btn.setStyleSheet(_GHOST_BTN_STYLE)
-        edit_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        edit_btn.clicked.connect(self._on_edit_single_position)
-        row_layout.addWidget(edit_btn)
+        row_layout.addWidget(self._position_display)
 
         set_btn = QPushButton("Set Current")
         set_btn.setStyleSheet(_ACTION_BTN_STYLE)
@@ -471,8 +603,22 @@ class MovementGroupWidget(QWidget):
         move_btn.clicked.connect(self._on_move_to_clicked)
         row_layout.addWidget(move_btn)
 
+        row_layout.addStretch()
+
         layout.addWidget(row)
         return section
+
+    def _on_coordinate_changed(self, _value) -> None:
+        position = "[" + ", ".join(f"{field.value():.3f}" for field in self._coordinate_fields) + "]"
+        self._position_display.setText(position)
+        self.position_changed.emit(self._name, position)
+
+    def _set_coordinate_fields(self, position_str: str) -> None:
+        values = PositionEditorDialog._parse(position_str)
+        for field, value in zip(self._coordinate_fields, values):
+            field.blockSignals(True)
+            field.setValue(value)
+            field.blockSignals(False)
 
     def _build_multi_position_section(self) -> QWidget:
         section = QWidget()
@@ -628,8 +774,8 @@ class MovementGroupWidget(QWidget):
     def load(self, group: MovementGroup) -> None:
         """Populate all widgets from a model — no signals emitted."""
         for spin, val in [
-            (self._velocity_spin,     float(group.velocity)),
-            (self._acceleration_spin, float(group.acceleration)),
+            (self._velocity_spin,     int(group.velocity)),
+            (self._acceleration_spin, int(group.acceleration)),
         ]:
             if spin:
                 spin.blockSignals(True)
@@ -648,8 +794,9 @@ class MovementGroupWidget(QWidget):
             self._motion_type_combo.setCurrentIndex(max(0, index))
             self._motion_type_combo.blockSignals(False)
 
-        if self._position_display and group.position is not None:
-            self._position_display.setText(group.position)
+        if self._position_display is not None:
+            self._position_display.setText(group.position or "")
+            self._set_coordinate_fields(group.position or "")
 
         if self._points_list is not None:
             self._points_list.clear()
@@ -672,6 +819,7 @@ class MovementGroupWidget(QWidget):
         """Called by controller after handling set_current_requested."""
         if self._position_display is not None:
             self._position_display.setText(position_str)
+            self._set_coordinate_fields(position_str)
             self.position_changed.emit(self._name, position_str)
 
     def add_point(self, point_str: str) -> None:
@@ -688,7 +836,7 @@ class MovementGroupWidget(QWidget):
 
 class MovementGroupsTab(QWidget):
     """
-    Scrollable list of MovementGroupWidgets driven by RobotConfig.movement_groups.
+    Group selector and editor driven by RobotConfig.movement_groups.
 
     Usage:
         tab = MovementGroupsTab()
@@ -713,11 +861,29 @@ class MovementGroupsTab(QWidget):
         self._widgets: Dict[str, MovementGroupWidget] = {}
         self._definitions: Dict[str, MovementGroupDefinition] = {}
 
-        self._layout = QVBoxLayout(self)
+        self._layout = QHBoxLayout(self)
         self._layout.setContentsMargins(16, 16, 16, 16)
-        self._layout.setSpacing(16)
+        self._layout.setSpacing(14)
 
-        self._layout.addStretch()
+        self._group_list = QListWidget()
+        self._group_list.setFixedWidth(270)
+        self._group_list.setStyleSheet(_GROUP_NAV_STYLE)
+        self._group_list.setSpacing(2)
+        self._group_list.currentRowChanged.connect(self._show_group)
+        self._layout.addWidget(self._group_list)
+
+        self._group_pages = QStackedWidget()
+        self._layout.addWidget(self._group_pages, 1)
+
+    def _show_group(self, index: int) -> None:
+        if index < 0:
+            return
+        self._group_pages.setCurrentIndex(index)
+        widget = self._group_pages.currentWidget()
+        if isinstance(widget, MovementGroupWidget) and not widget._expanded:
+            widget._toggle()
+        if isinstance(widget, MovementGroupWidget):
+            widget.use_card_layout()
 
     def load(
         self,
@@ -734,14 +900,21 @@ class MovementGroupsTab(QWidget):
                 self._definitions[name] = inferred
                 ordered_names.append(name)
 
+        for name in list(self._widgets):
+            if name not in ordered_names:
+                self.remove_group(name)
+
         for name in ordered_names:
             group = groups.get(name, self._definitions[name].build_default_group())
             if name not in self._widgets:
                 widget = MovementGroupWidget(self._definitions[name])
                 self._connect_widget(widget)
                 self._widgets[name] = widget
-                self._layout.insertWidget(self._layout.count() - 1, widget)
+                self._group_pages.addWidget(widget)
+                self._add_group_item(self._definitions[name].label or name)
             self._widgets[name].load(group)
+        if self._group_list.currentRow() < 0 and self._group_list.count():
+            self._group_list.setCurrentRow(0)
 
     def get_values(self) -> Dict[str, MovementGroup]:
         return {name: w.get_values() for name, w in self._widgets.items()}
@@ -756,16 +929,26 @@ class MovementGroupsTab(QWidget):
         self._connect_widget(widget)
         self._widgets[name] = widget
         self._definitions[name] = defn
-        self._layout.insertWidget(self._layout.count() - 1, widget)  # before stretch
+        self._group_pages.addWidget(widget)
+        self._add_group_item(defn.label or name)
         widget.load(group)
+        if self._group_list.currentRow() < 0:
+            self._group_list.setCurrentRow(0)
 
     def remove_group(self, name: str) -> None:
         widget = self._widgets.pop(name, None)
         if widget is not None:
-            self._layout.removeWidget(widget)
+            index = self._group_pages.indexOf(widget)
+            self._group_pages.removeWidget(widget)
+            self._group_list.takeItem(index)
             widget.deleteLater()
 
     # ── Private ───────────────────────────────────────────────────────────
+
+    def _add_group_item(self, label: str) -> None:
+        item = QListWidgetItem(label)
+        item.setSizeHint(QSize(0, 54))
+        self._group_list.addItem(item)
 
     @staticmethod
     def _infer_def(name: str, group: MovementGroup) -> MovementGroupDefinition:

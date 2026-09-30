@@ -6,7 +6,8 @@
       "height": 720,
       "required": true,
       "flip_horizontal": false,
-      "flip_vertical": false
+      "flip_vertical": false,
+      "rotate_degrees": 0
     },
     "auxiliary": {
       "device": "/dev/v4l/by-path/pci-0000:00:14.0-usb-0:9:1.0-video-index0",
@@ -14,7 +15,8 @@
       "height": 720,
       "required": false,
       "flip_horizontal": false,
-      "flip_vertical": false
+      "flip_vertical": false,
+      "rotate_degrees": 0
     }
   }
 }

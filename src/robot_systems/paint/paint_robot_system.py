@@ -552,6 +552,7 @@ class PaintRobotSystem(BaseRobotSystem):
         from src.robot_systems.paint.processes.paint.config import PAINT_PROCESS_CONFIG
         from src.robot_systems.paint.processes.paint.paint_process_config_service import PaintProcessConfigService
         from src.robot_systems.paint.processes.paint.paint_production_service import PaintProductionService
+        from src.robot_systems.paint.domain.workpieces.matching_selection import PaintMatchingSelection
 
         self._robot = self.get_service(CommonServiceID.ROBOT)
         self.register_managed_resource(self._robot)
@@ -635,6 +636,7 @@ class PaintRobotSystem(BaseRobotSystem):
                 height=camera_spec.height,
                 flip_horizontal=camera_spec.flip_horizontal,
                 flip_vertical=camera_spec.flip_vertical,
+                rotate_degrees=camera_spec.rotate_degrees,
             )
             publisher.start()
             self.register_managed_resource(publisher)
@@ -673,6 +675,9 @@ class PaintRobotSystem(BaseRobotSystem):
         )
 
         self._paint_workpiece_editor_service = application_wiring._build_paint_workpiece_editor_service(self)
+        self._paint_matching_selection = PaintMatchingSelection(
+            self.storage_path("settings", "paint", "matching_selection.json")
+        )
         self._paint_capture_snapshot_service = application_wiring._build_capture_snapshot_service(self)
         self._paint_path_preparation_service = application_wiring._build_paint_path_preparation_service(self)
         self._dryer_release_coordinator = application_wiring._build_dryer_release_coordinator(self)
@@ -734,6 +739,7 @@ class PaintRobotSystem(BaseRobotSystem):
             ),
             production_start_guard=self._production_start_guard,
             paint_process_config_service=self._paint_process_config_service,
+            matching_selection=self._paint_matching_selection,
             plate_layout_service=self._paint_path_executor._plate_layout_service,
             target_point_name="camera",
             frame_name="calibration",
@@ -780,14 +786,20 @@ class PaintRobotSystem(BaseRobotSystem):
         self._robot.stop_motion()
         self._robot.disable_robot()
 
-    def apply_camera_flips(self, role: str, horizontal: bool, vertical: bool) -> None:
+    def apply_camera_orientation(
+        self,
+        role: str,
+        horizontal: bool,
+        vertical: bool,
+        rotate_degrees: int = 0,
+    ) -> None:
         if role == "primary_vision":
             if self._vision is not None:
-                self._vision.set_camera_flips(horizontal, vertical)
+                self._vision.set_camera_orientation(horizontal, vertical, rotate_degrees)
             return
         publisher = self._camera_stream_publishers.get(role)
         if publisher is not None:
-            publisher.set_flips(horizontal, vertical)
+            publisher.set_orientation(horizontal, vertical, rotate_degrees)
 
 
 class AutomaticDryerPaintRobotSystem(PaintRobotSystem):

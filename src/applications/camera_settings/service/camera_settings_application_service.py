@@ -7,10 +7,12 @@ from src.applications.camera_settings.mapper import CameraSettingsMapper
 from src.applications.camera_settings.service.i_camera_settings_service import (
     CameraDeviceOption,
     CameraDevicesState,
+    CameraOrientation,
     ICameraSettingsService,
 )
 from src.engine.common_settings_ids import CommonSettingsID
 from src.engine.repositories.interfaces.i_settings_service import ISettingsService
+from src.engine.vision.frame_orientation import normalize_rotation
 from src.engine.vision.i_vision_service import IVisionService
 
 
@@ -22,13 +24,13 @@ class CameraSettingsApplicationService(ICameraSettingsService):
         vision_service: IVisionService,
         work_area_service=None,
         camera_devices_settings_key=None,
-        camera_flip_setter: Callable[[str, bool, bool], None] | None = None,
+        camera_orientation_setter: Callable[[str, bool, bool, int], None] | None = None,
     ):
         self._settings_service = settings_service
         self._vision_service   = vision_service
         self._work_area_service = work_area_service
         self._camera_devices_settings_key = camera_devices_settings_key
-        self._camera_flip_setter = camera_flip_setter
+        self._camera_orientation_setter = camera_orientation_setter
         self._settings_id      = CommonSettingsID.VISION_CAMERA_SETTINGS
         self._logger           = logging.getLogger(self.__class__.__name__)
         self._hardware_auto_exposure: bool | None = None
@@ -107,8 +109,12 @@ class CameraSettingsApplicationService(ICameraSettingsService):
         return CameraDevicesState(
             assignments=assignments,
             options=tuple(discovered.values()),
-            flips={
-                role: (spec.flip_horizontal, spec.flip_vertical)
+            orientation={
+                role: CameraOrientation(
+                    flip_horizontal=spec.flip_horizontal,
+                    flip_vertical=spec.flip_vertical,
+                    rotate_degrees=spec.rotate_degrees,
+                )
                 for role, spec in config.cameras.items()
             },
         )
@@ -116,7 +122,7 @@ class CameraSettingsApplicationService(ICameraSettingsService):
     def save_camera_devices(
         self,
         assignments: dict[str, str],
-        flips: dict[str, tuple[bool, bool]],
+        orientation: dict[str, CameraOrientation],
     ) -> None:
         if self._camera_devices_settings_key is None:
             raise RuntimeError("Camera device settings are not configured")
@@ -129,20 +135,28 @@ class CameraSettingsApplicationService(ICameraSettingsService):
         cameras = dict(current.cameras)
         for role, device in assignments.items():
             existing = cameras.get(role)
-            horizontal, vertical = flips.get(
-                role,
-                (False, False) if existing is None else (
-                    existing.flip_horizontal,
-                    existing.flip_vertical,
-                ),
-            )
-            if not isinstance(horizontal, bool) or not isinstance(vertical, bool):
+            requested = orientation.get(role)
+            if requested is None:
+                requested = (
+                    CameraOrientation()
+                    if existing is None
+                    else CameraOrientation(
+                        flip_horizontal=existing.flip_horizontal,
+                        flip_vertical=existing.flip_vertical,
+                        rotate_degrees=existing.rotate_degrees,
+                    )
+                )
+            if not isinstance(requested.flip_horizontal, bool) or not isinstance(
+                requested.flip_vertical, bool
+            ):
                 raise ValueError("Camera flip settings must be true or false")
+            rotate_degrees = normalize_rotation(requested.rotate_degrees)
             if existing is None:
                 cameras[role] = CameraDeviceSpec(
                     device=device,
-                    flip_horizontal=horizontal,
-                    flip_vertical=vertical,
+                    flip_horizontal=requested.flip_horizontal,
+                    flip_vertical=requested.flip_vertical,
+                    rotate_degrees=rotate_degrees,
                 )
             else:
                 cameras[role] = CameraDeviceSpec(
@@ -150,17 +164,19 @@ class CameraSettingsApplicationService(ICameraSettingsService):
                     width=existing.width,
                     height=existing.height,
                     required=existing.required,
-                    flip_horizontal=horizontal,
-                    flip_vertical=vertical,
+                    flip_horizontal=requested.flip_horizontal,
+                    flip_vertical=requested.flip_vertical,
+                    rotate_degrees=rotate_degrees,
                 )
         self._settings_service.save(
             self._camera_devices_settings_key,
             CameraDevicesConfig(cameras=cameras),
         )
-        if self._camera_flip_setter is not None:
+        if self._camera_orientation_setter is not None:
             for role, spec in cameras.items():
-                self._camera_flip_setter(
+                self._camera_orientation_setter(
                     role,
                     spec.flip_horizontal,
                     spec.flip_vertical,
+                    spec.rotate_degrees,
                 )

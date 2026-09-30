@@ -284,7 +284,11 @@ class TestPaintApplicationWiring(unittest.TestCase):
         factory.build.assert_called_once_with(service, messaging=messaging, jog_service="jog")
 
     def test_build_workpiece_library_application_wires_repository_service_and_factory(self):
-        robot_system = SimpleNamespace(workpieces_storage_path=MagicMock(return_value="/tmp/workpieces"))
+        selection = MagicMock()
+        robot_system = SimpleNamespace(
+            workpieces_storage_path=MagicMock(return_value="/tmp/workpieces"),
+            _paint_matching_selection=selection,
+        )
         messaging = object()
         built_widget = object()
         repository = object()
@@ -308,7 +312,27 @@ class TestPaintApplicationWiring(unittest.TestCase):
         repo_cls.assert_called_once_with("/tmp/workpieces")
         svc_cls.assert_called_once_with(repository)
         lib_cls.assert_called_once_with(workpiece_service)
-        factory.build.assert_called_once_with(library_service, messaging, jog_service="jog")
+        factory.build.assert_called_once_with(
+            library_service, messaging, jog_service="jog", selection=selection,
+        )
+
+    def test_build_matching_service_receives_saved_selection(self):
+        selection = MagicMock()
+        robot_system = SimpleNamespace(
+            _paint_matching_selection=selection,
+            get_optional_service=MagicMock(return_value=SimpleNamespace(run_matching=MagicMock())),
+        )
+        workpiece_service = MagicMock()
+        with (
+            patch("src.robot_systems.paint.processes.paint.match.workpiece_matching_service.PaintWorkpieceMatchingService") as matching_cls,
+            patch("src.robot_systems.paint.application_wiring._build_capture_snapshot_service", return_value="capture"),
+        ):
+            application_wiring._build_paint_matching_service(robot_system, workpiece_service)
+
+        self.assertIs(
+            matching_cls.call_args.kwargs["selected_workpiece_ids_fn"],
+            selection.get_selected_ids,
+        )
 
     def test_build_user_management_application_wires_roles_permissions_and_factory(self):
         role_policy = SimpleNamespace(

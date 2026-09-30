@@ -57,8 +57,23 @@ class StubPaintAdjustmentService(IPaintAdjustmentService):
         self._position = target
         return PaintHeadCommandResult(target, 2, wrote=True, relative=True)
 
+    def adjust_paint_by_register_units(self, direction: str, units: int) -> PaintHeadCommandResult:
+        if direction not in {"more", "less"} or isinstance(units, bool) or not isinstance(units, int) or units < 1:
+            raise ValueError("Invalid paint adjustment request")
+        target = self._position + units * (1 if direction == "more" else -1)
+        if not 45 <= target <= 235:
+            raise ValueError("Paint-head target is outside the calibrated range")
+        self._position = target
+        return PaintHeadCommandResult(target, 2, wrote=True, relative=True)
+
     def go_to_setting(self, setting: int) -> PaintHeadCommandResult:
         if isinstance(setting, bool) or not isinstance(setting, int) or not 1 <= setting <= 6:
             raise ValueError("Paint-head setting must be 1..6")
         self._position = 45 + 38 * (6 - setting)
         return PaintHeadCommandResult(self._position, 2, wrote=True, relative=False)
+
+    def go_to_position(self, position: int) -> PaintHeadCommandResult:
+        if isinstance(position, bool) or not isinstance(position, int) or not 45 <= position <= 235:
+            raise ValueError("Paint-head target is outside the calibrated range")
+        self._position = position
+        return PaintHeadCommandResult(position, 2, wrote=True, relative=False)

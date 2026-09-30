@@ -14,6 +14,11 @@
     "Paint-head settings saved and applied immediately.": "Настройките на бояджийската глава са запазени и приложени веднага."
   },
   "PaintAdjustmentView": {
+    "No camera image yet": "Все още няма картина от камерата",
+    "Live view of the painted section appears here": "Тук се показва картина на боядисания участък",
+    "Adjust paint · register units": "Боя · регистрови единици",
+    "Start adjustment": "Започни настройката",
+    "Inspect along paint axis (mm)": "Оглед по оста на боядисване (мм)",
     "Start paint adjustment": "Започни настройка на боядисването",
     "Paint next length": "Боядисай следващата дължина",
     "Finish / Dropoff": "Завърши / Остави детайла",
@@ -33,14 +38,13 @@
     "Paint-head position": "Позиция на бояджийската глава",
     "Read position": "Прочети позицията",
     "Reading paint-head position…": "Четене на позицията на бояджийската глава…",
-    "Position read failed: {error}": "Неуспешно четене на позицията: {error}",
+    "Paint-head communication issue. It may be unplugged or missing.": "Проблем с връзката към бояджийската глава. Може да е изключена или да липсва.",
     "Dry-run preview: {value} (not moved)": "Преглед без запис: {value} (без движение)",
     "Last confirmed position: {value}": "Последна потвърдена позиция: {value}",
     "Device disabled; position not read": "Устройството е изключено; позицията не е прочетена",
     "Position unknown": "Позицията е неизвестна",
     "Paint Adjustment — Auxiliary Camera": "Настройка на боядисването — помощна камера",
     "Move by (degrees)": "Преместване с (градуси)",
-    "Go to setting": "Отиди на настройка",
     "Setting {number}": "Настройка {number}",
     "− Less paint": "− По-малко боя",
     "+ More paint": "+ Повече боя",
@@ -48,8 +52,7 @@
     "Ready": "Готово",
     "Sending paint-head command…": "Изпращане на команда към бояджийската глава…",
     "Paint-head position: {value}": "Позиция на бояджийската глава: {value}",
-    "Dry run: register {register} delta {value:+d}; no write.": "Симуляция: регистър {register}, промяна {value:+d}; без запис.",
-    "Dry run: would write {value} to register {register}.": "Симуляция: би записало {value} в регистър {register}.",
+    "Dry run: command simulated; no write.": "Симулация на командата; без запис.",
     "Paint-head command failed: {error}": "Командата към бояджийската глава е неуспешна: {error}",
     "Waiting for auxiliary camera…": "Изчакване на помощната камера…",
     "Live auxiliary camera": "Картина от помощната камера"
@@ -67,6 +70,8 @@
   },
   "PaintQuickAccessPanel": {
     "Quick Controls": "Бързи команди",
+    "All": "Всички",
+    "Workpieces": "Детайли",
     "Relieve Cable": "Освобождаване на кабела",
     "Auto Dry": "Автоматично сушене",
     "Tray Dry": "Сушене в тава",
@@ -126,6 +131,14 @@
     "Demo Alternate": "Демо редуване"
   },
   "PaintDashboard": {
+    "PAINTING STOPPED": "БОЯДИСВАНЕТО Е СПРЯНО",
+    "Workpiece not recognized": "Детайлът не е разпознат",
+    "No stored workpiece matches the part in front of the camera.": "Нито един записан детайл не съвпада с детайла пред камерата.",
+    "Check that the part is positioned correctly, then scan again. If this is a new part, add it in the workpiece library.": "Проверете дали детайлът е позициониран правилно, след което сканирайте отново. Ако е нов, добавете го в библиотеката с детайли.",
+    "PAINTING: STOPPED": "БОЯДИСВАНЕ: СПРЯНО",
+    "Scan again": "Сканирай отново",
+    "Open library": "Отвори библиотеката",
+    "Dismiss": "Затвори",
     "Painting": "Боядисване",
     "Paint process settings are not available.": "Настройките на процеса за боядисване не са налични.",
     "Stop the paint process before changing unmatched paint settings.": "Спрете процеса за боядисване, преди да промените настройките без съпоставяне.",
@@ -408,11 +421,13 @@
     "Return near the reference position if needed, rotate around the desired paint rotation axis, then capture.": "Върнете се близо до референтната позиция при нужда, завъртете около желаната paint ос на въртене, след това заснемете."
   },
   "PaintDashboardController": {
+    "Scan again unavailable": "Повторното сканиране не е налично",
+    "The workpiece is no longer ready for recapture.": "Детайлът вече не е готов за повторно сканиране.",
     "All Magazines Empty": "Всички магазини са празни",
     "No workpieces were found in any configured magazine. Refill the magazines and start again.": "Не са намерени детайли в нито един конфигуриран магазин. Заредете магазините и стартирайте отново.",
     "Magazine is empty": "Магазинът е празен",
     "Unknown Workpiece": "Непознат детайл",
-    "No saved workpiece matched the captured contour. Paint execution was stopped.": "Няма запазен детайл, съответстващ на заснетия контур. Боядисването беше спряно."
+    "No matching workpiece. Painting stopped.": "Няма съвпадащ детайл. Боядисването е спряно."
   },
   "PaintMotionRecipe": {
     "Recipe Saved": "Рецептата е запазена",

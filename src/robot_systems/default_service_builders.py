@@ -71,7 +71,7 @@ def build_vision_service(
     camera_device: int | str | None = None,
     camera_resolution: tuple[int, int] | None = None,
     allow_camera_fallback: bool = True,
-    camera_flips: tuple[bool, bool] = (False, False),
+    camera_orientation: tuple[bool, bool, int] = (False, False, 0),
 ):
     """Build the standard vision service from common camera settings."""
 
@@ -96,7 +96,7 @@ def build_vision_service(
         camera_device=camera_device,
         camera_resolution=camera_resolution,
         allow_camera_fallback=allow_camera_fallback,
-        camera_flips=camera_flips,
+        camera_orientation=camera_orientation,
     )
     return VisionService(vision_system, work_area_service=work_area_service)
 

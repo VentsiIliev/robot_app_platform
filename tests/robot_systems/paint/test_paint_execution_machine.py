@@ -69,7 +69,7 @@ class TestWorkpiecePreparationHandler(unittest.TestCase):
         service.publish_dashboard_message.assert_called_once_with(
             "warning",
             "Unknown Workpiece",
-            "No saved workpiece matched the captured contour. Paint execution was stopped.",
+            "No matching workpiece. Painting stopped.",
         )
 
     def test_build_plan_uses_paint_executor_so_saved_segment_mask_is_attached(self):

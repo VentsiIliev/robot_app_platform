@@ -2,8 +2,8 @@ import logging
 from typing import List, Optional
 
 import qtawesome as qta
-from PyQt6.QtCore import pyqtSignal, Qt, QSize
-from PyQt6.QtGui import QFont, QPixmap
+from PyQt6.QtCore import QEvent, QTimer, pyqtSignal, Qt, QSize
+from PyQt6.QtGui import QFont, QIcon, QPixmap
 from PyQt6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QTableWidget, QTableWidgetItem,
@@ -42,10 +42,20 @@ class WorkpieceLibraryView(IApplicationView):
     selection_changed = pyqtSignal(object)  # WorkpieceRecord | None
     edit_requested = pyqtSignal(object, dict)  # record, {key: new_value}
     open_in_editor_requested = pyqtSignal(object)  # WorkpieceRecord
+    selection_requested = pyqtSignal(object)  # tuple of storage IDs, or None for all
+    show_selected_changed = pyqtSignal(bool)
+    visible_thumbnails_requested = pyqtSignal(object)  # storage IDs in viewport
 
-    def __init__(self, schema: WorkpieceSchema, parent=None):
+    def __init__(self, schema: WorkpieceSchema, parent=None, *, selection_enabled: bool = False,
+                 show_thumbnails: bool = False):
         self._schema = schema
         self._edit_widgets: dict = {}
+        self._selection_enabled = selection_enabled
+        self._show_thumbnails = show_thumbnails
+        self._thumbnail_items: dict[str, QTableWidgetItem] = {}
+        self._checked_ids: set[str] = set()
+        self._all_record_ids: set[str] = set()
+        self._loading_records = False
         super().__init__("Workpiece Library", parent)
 
     # ── IApplicationView ─────────────────────────────────────────────
@@ -82,17 +92,82 @@ class WorkpieceLibraryView(IApplicationView):
 
     def set_records(self, records: List[WorkpieceRecord]) -> None:
         fields = self._schema.get_table_fields()
+        self._loading_records = True
         self._table.setSortingEnabled(False)
         self._table.clearContents()
+        self._thumbnail_items.clear()
         self._table.setRowCount(len(records))
         for row, record in enumerate(records):
+            self._table.setRowHeight(row, 58)
+            offset = 0
+            if self._selection_enabled:
+                storage_id = str(record.get_id(self._schema.id_key))
+                check = QTableWidgetItem()
+                check.setData(Qt.ItemDataRole.UserRole, record)
+                check.setFlags(
+                    Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled
+                    | Qt.ItemFlag.ItemIsUserCheckable
+                )
+                check.setCheckState(
+                    Qt.CheckState.Checked if storage_id in self._checked_ids
+                    else Qt.CheckState.Unchecked
+                )
+                self._table.setItem(row, 0, check)
+                offset = 1
+            if self._show_thumbnails:
+                storage_id = str(record.get_id(self._schema.id_key))
+                preview = QTableWidgetItem()
+                preview.setData(Qt.ItemDataRole.UserRole, record)
+                preview.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
+                self._table.setItem(row, offset, preview)
+                self._thumbnail_items[storage_id] = preview
+                offset += 1
             for col, fd in enumerate(fields):
                 item = QTableWidgetItem(str(record.get(fd.key, "")))
                 item.setData(Qt.ItemDataRole.UserRole, record)
                 item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
-                self._table.setItem(row, col, item)
+                self._table.setItem(row, col + offset, item)
         self._table.setSortingEnabled(True)
+        self._loading_records = False
         self._table.viewport().update()
+        self._schedule_visible_thumbnails()
+
+    def set_table_thumbnail(self, storage_id: str, image_bytes: Optional[bytes]) -> None:
+        item = self._thumbnail_items.get(storage_id)
+        if item is None or not image_bytes:
+            return
+        pixmap = QPixmap()
+        if pixmap.loadFromData(image_bytes):
+            item.setIcon(QIcon(pixmap))
+
+    def set_selection(self, ids: tuple[str, ...] | None) -> None:
+        self._checked_ids = self._all_record_ids.copy() if ids is None else set(ids)
+        self._loading_records = True
+        for row in range(self._table.rowCount()):
+            item = self._table.item(row, 0)
+            if item is not None:
+                record = item.data(Qt.ItemDataRole.UserRole)
+                storage_id = str(record.get_id(self._schema.id_key))
+                item.setCheckState(
+                    Qt.CheckState.Checked if storage_id in self._checked_ids
+                    else Qt.CheckState.Unchecked
+                )
+        self._loading_records = False
+        self._update_selection_label()
+
+    def set_available_ids(self, ids: list[str]) -> None:
+        self._all_record_ids = set(ids)
+
+    def checked_ids(self) -> set[str]:
+        return self._checked_ids.copy()
+
+    def _update_selection_label(self) -> None:
+        if not self._selection_enabled:
+            return
+        count = len(self._checked_ids)
+        self._selection_count.setText(
+            self.tr("{count} selected").format(count=count)
+        )
 
     def set_detail(self, record: Optional[WorkpieceRecord]) -> None:
         while self._detail_layout.count():
@@ -217,6 +292,13 @@ class WorkpieceLibraryView(IApplicationView):
         self._search.setMinimumHeight(36)
         self._search.textChanged.connect(self.search_changed)
         layout.addWidget(self._search, stretch=1)
+        if self._selection_enabled:
+            self._show_selected = QPushButton(self.tr("Show Selected"))
+            self._show_selected.setCheckable(True)
+            self._show_selected.setMinimumHeight(36)
+            self._show_selected.setCursor(Qt.CursorShape.PointingHandCursor)
+            self._show_selected.toggled.connect(self.show_selected_changed)
+            layout.addWidget(self._show_selected)
 
         btn_refresh = QPushButton()
         btn_refresh.setIcon(qta.icon("fa5s.sync-alt", color="white"))
@@ -230,11 +312,30 @@ class WorkpieceLibraryView(IApplicationView):
         group = QGroupBox("Workpieces")
         layout = QVBoxLayout(group)
 
-        self._table = make_table(self._schema.get_table_headers(),
+        headers = self._schema.get_table_headers()
+        if self._selection_enabled:
+            headers = [self.tr("Select"), *headers]
+        if self._show_thumbnails:
+            headers.insert(int(self._selection_enabled), self.tr("Shape"))
+        self._table = make_table(headers,
                                  sortable=True, min_height=300)
         self._table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        if self._selection_enabled:
+            self._table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
+            self._table.setColumnWidth(0, 82)
+        if self._show_thumbnails:
+            thumb_col = int(self._selection_enabled)
+            self._table.horizontalHeader().setSectionResizeMode(thumb_col, QHeaderView.ResizeMode.Fixed)
+            self._table.setColumnWidth(thumb_col, 76)
+            self._table.setIconSize(QSize(48, 48))
+            self._thumbnail_timer = QTimer(self)
+            self._thumbnail_timer.setSingleShot(True)
+            self._thumbnail_timer.timeout.connect(self._request_visible_thumbnails)
+            self._table.verticalScrollBar().valueChanged.connect(self._schedule_visible_thumbnails)
         self._table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self._table.itemSelectionChanged.connect(self._on_selection_changed)
+        if self._selection_enabled:
+            self._table.itemChanged.connect(self._on_selection_item_changed)
 
         layout.addWidget(self._table)
         return group
@@ -269,6 +370,9 @@ class WorkpieceLibraryView(IApplicationView):
 
         scroll.setWidget(container)
         outer.addWidget(scroll, stretch=1)
+        self._detail_actions = QVBoxLayout()
+        self._detail_actions.setSpacing(8)
+        outer.addLayout(self._detail_actions)
         return group
 
     def _build_action_bar(self) -> QWidget:
@@ -276,7 +380,23 @@ class WorkpieceLibraryView(IApplicationView):
         layout = QHBoxLayout(w)
         layout.setContentsMargins(0, 4, 0, 0)
         layout.setSpacing(8)
-        layout.addStretch()
+        if self._selection_enabled:
+            self._selection_count = QLabel()
+            layout.addWidget(self._selection_count)
+            self._btn_match_all = QPushButton(self.tr("Select All"))
+            self._btn_match_all.setMinimumHeight(44)
+            self._btn_match_all.setCursor(Qt.CursorShape.PointingHandCursor)
+            self._btn_match_all.clicked.connect(self._on_match_all)
+            layout.addWidget(self._btn_match_all)
+            self._btn_clear_selection = QPushButton(self.tr("Clear Selection"))
+            self._btn_clear_selection.setMinimumHeight(44)
+            self._btn_clear_selection.setCursor(Qt.CursorShape.PointingHandCursor)
+            self._btn_clear_selection.clicked.connect(self._on_clear_selection)
+            layout.addWidget(self._btn_clear_selection)
+            layout.addStretch()
+            self._update_selection_label()
+        else:
+            layout.addStretch()
 
         self._btn_save = QPushButton(
             qta.icon("fa5s.save", color="white"), "  Save"
@@ -303,17 +423,42 @@ class WorkpieceLibraryView(IApplicationView):
         self._btn_open.setEnabled(False)
         self._btn_open.clicked.connect(self._on_open_in_editor)
 
-        layout.addWidget(self._btn_open)
-        layout.addWidget(self._btn_save)
-        layout.addWidget(self._btn_delete)
+        self._detail_actions.addWidget(self._btn_open)
+        edit_row = QHBoxLayout()
+        edit_row.setSpacing(8)
+        edit_row.addWidget(self._btn_save)
+        edit_row.addWidget(self._btn_delete)
+        self._detail_actions.addLayout(edit_row)
         return w
 
     def set_schema(self, schema: WorkpieceSchema) -> None:
         self._schema = schema
         if hasattr(self, "_table"):
             headers = self._schema.get_table_headers()
+            if self._selection_enabled:
+                headers = [self.tr("Select"), *headers]
+            if self._show_thumbnails:
+                headers.insert(int(self._selection_enabled), self.tr("Shape"))
             self._table.setColumnCount(len(headers))
             self._table.setHorizontalHeaderLabels(headers)
+
+    def _schedule_visible_thumbnails(self, _value: int = 0) -> None:
+        if self._show_thumbnails:
+            self._thumbnail_timer.start(80)
+
+    def _request_visible_thumbnails(self) -> None:
+        first = max(0, self._table.rowAt(0))
+        last = self._table.rowAt(self._table.viewport().height() - 1)
+        if last < first:
+            last = min(self._table.rowCount() - 1, first + 20)
+        ids = []
+        for row in range(first, last + 1):
+            item = self._table.item(row, 0)
+            if item is not None:
+                record = item.data(Qt.ItemDataRole.UserRole)
+                ids.append(str(record.get_id(self._schema.id_key)))
+        if ids:
+            self.visible_thumbnails_requested.emit(ids)
 
     # ── Internal slots ────────────────────────────────────────────────
 
@@ -321,6 +466,48 @@ class WorkpieceLibraryView(IApplicationView):
         record = self.selected_record()
         if record:
             self.open_in_editor_requested.emit(record)
+
+    def _on_selection_item_changed(self, item: QTableWidgetItem) -> None:
+        if self._loading_records or item.column() != 0:
+            return
+        record = item.data(Qt.ItemDataRole.UserRole)
+        storage_id = str(record.get_id(self._schema.id_key))
+        if item.checkState() == Qt.CheckState.Checked:
+            self._checked_ids.add(storage_id)
+        else:
+            self._checked_ids.discard(storage_id)
+        self._update_selection_label()
+        self._emit_selection()
+
+    def _emit_selection(self) -> None:
+        ids = None if self._checked_ids == self._all_record_ids else tuple(sorted(self._checked_ids))
+        self.selection_requested.emit(ids)
+
+    def _on_match_all(self) -> None:
+        self.set_selection(None)
+        self._emit_selection()
+
+    def _on_clear_selection(self) -> None:
+        self.set_selection(())
+        self._emit_selection()
+
+    def retranslateUi(self) -> None:
+        if not self._selection_enabled or not hasattr(self, "_btn_match_all"):
+            return
+        self._btn_match_all.setText(self.tr("Select All"))
+        self._btn_clear_selection.setText(self.tr("Clear Selection"))
+        self._show_selected.setText(self.tr("Show Selected"))
+        self._table.setHorizontalHeaderItem(0, QTableWidgetItem(self.tr("Select")))
+        if self._show_thumbnails:
+            self._table.setHorizontalHeaderItem(
+                int(self._selection_enabled), QTableWidgetItem(self.tr("Shape"))
+            )
+        self._update_selection_label()
+
+    def changeEvent(self, event: QEvent) -> None:
+        if event.type() == QEvent.Type.LanguageChange:
+            self.retranslateUi()
+        super().changeEvent(event)
 
     def _on_selection_changed(self) -> None:
         record = self.selected_record()

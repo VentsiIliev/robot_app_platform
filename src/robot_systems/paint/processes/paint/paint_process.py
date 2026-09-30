@@ -47,6 +47,7 @@ class PaintProcess(BaseProcess):
         self._stop_thread: Optional[threading.Thread] = None
         self._stopping = False
         self._manual_single_cycle_requested = False
+        self._retry_unmatched_workpiece_requested = False
         self._adjustment_session: PaintAdjustmentSession | None = None
         self._pending_adjustment_session: PaintAdjustmentSession | None = None
 
@@ -98,13 +99,35 @@ class PaintProcess(BaseProcess):
                 self._manual_single_cycle_requested = False
             return self._thread is not previous_thread and self._state == ProcessState.RUNNING
 
+    def retry_unmatched_workpiece(self) -> bool:
+        """Restart at paint capture only after an unmatched-workpiece error."""
+        with self._lock:
+            if (
+                self._state != ProcessState.ERROR
+                or not self._production_service.can_retry_unmatched_workpiece()
+            ):
+                return False
+            self._transition(ProcessState.IDLE, self._on_reset_errors)
+            if self._state != ProcessState.IDLE:
+                return False
+            self._retry_unmatched_workpiece_requested = True
+            try:
+                self._transition(ProcessState.RUNNING, self._on_start)
+            finally:
+                self._retry_unmatched_workpiece_requested = False
+            return self._state == ProcessState.RUNNING
+
     def _on_start(self) -> None:
         """Start the background worker thread that performs one production cycle."""
         self._stopping = False
         self._adjustment_session = self._pending_adjustment_session
         self._thread = threading.Thread(
             target=self._run_in_background,
-            args=(self._manual_single_cycle_requested, self._pending_adjustment_session),
+            args=(
+                self._manual_single_cycle_requested,
+                self._pending_adjustment_session,
+                self._retry_unmatched_workpiece_requested,
+            ),
             daemon=True,
             name="PaintProcess",
         )
@@ -163,10 +186,15 @@ class PaintProcess(BaseProcess):
         self,
         manual_single_cycle: bool = False,
         adjustment_session: PaintAdjustmentSession | None = None,
+        retry_unmatched_workpiece: bool = False,
     ) -> None:
         """Execute one production cycle and translate the result into process state transitions."""
         try:
-            if adjustment_session is not None:
+            if retry_unmatched_workpiece:
+                success, msg = self._production_service.run_once(
+                    lambda: self._stopping, retry_unmatched_workpiece=True
+                )
+            elif adjustment_session is not None:
                 success, msg = self._production_service.run_once(
                     lambda: self._stopping, adjustment_session=adjustment_session
                 )

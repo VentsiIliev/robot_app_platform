@@ -3,6 +3,13 @@
     "display_name": "English"
   },
   "RobotSettings": {
+    "Speed": "Speed",
+    "Position": "Position",
+    "Points": "Points",
+    "Camera-to-TCP Offset": "Camera-to-TCP Offset",
+    "Camera Z Shift": "Camera Z Shift",
+    "Position Limits": "Position Limits",
+    "Orientation Limits": "Orientation Limits",
     "Use Automatic Camera-to-TCP Offset": "Use Automatic Camera-to-TCP Offset",
     "Set Current Position": "Set Current Position",
     "Could not read robot position.\nMake sure the robot is connected.": "Could not read robot position.\nMake sure the robot is connected.",

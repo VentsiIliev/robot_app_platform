@@ -106,6 +106,34 @@ class _FakeDashboardWidget(QWidget):
 
 
 class TestPaintDashboardUi(unittest.TestCase):
+    def test_compact_select_workpieces_follows_matching_setting_and_emits_action(self) -> None:
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        app = QApplication.instance() or QApplication([])
+        self.assertIsNotNone(app)
+        view = PaintDashboardView(
+            config=PaintDashboardConfig(),
+            action_buttons=PAINT_DASHBOARD_ACTIONS,
+            cards=[],
+            auxiliary_toggles=[],
+            ui_config=PaintDashboardUiConfig(show_camera_preview=False),
+        )
+        button = view._quick_access._select_workpieces
+        actions = []
+        view.action_requested.connect(actions.append)
+
+        self.assertTrue(button.isHidden())
+        view.set_unmatched_paint_settings({"matching_enabled": True, "selected_workpiece_count": 2})
+        self.assertFalse(button.isHidden())
+        self.assertEqual(button.text(), "Workpieces(2)")
+        button.click()
+        self.assertEqual(actions, ["select_workpieces"])
+        view.set_unmatched_paint_settings({"matching_enabled": False})
+        self.assertTrue(button.isHidden())
+        view.set_unmatched_paint_settings({"matching_enabled": True, "selected_workpiece_count": None})
+        self.assertEqual(button.text(), "Workpieces(All)")
+        view.set_workpiece_selection_indicator(True, 0)
+        self.assertEqual(button.text(), "Workpieces(0)")
+
     def test_magazine_order_table_reorders_and_disables_available_groups(self) -> None:
         emitted = []
         table = _MagazineOrderTable(emitted.append)
@@ -1015,7 +1043,7 @@ class TestPaintDashboardUi(unittest.TestCase):
         self.assertEqual(view._messages[1]["level"], "warning")
         self.assertEqual(view._messages[1]["message"], "blocked")
 
-    def test_warning_dialog_uses_shared_styled_message_box_and_keeps_queue_entry(self) -> None:
+    def test_unknown_workpiece_dialog_uses_action_warning_and_keeps_queue_entry(self) -> None:
         with (
             patch(
                 "src.robot_systems.paint.applications.dashboard.view.paint_dashboard_view.DashboardWidget",
@@ -1031,13 +1059,19 @@ class TestPaintDashboardUi(unittest.TestCase):
                 cards=[],
             )
 
-            view.show_warning_dialog("Unknown Workpiece", "Paint execution was stopped.")
+            show_warning.return_value = "open_library"
+            selected_actions = []
+            view.action_requested.connect(selected_actions.append)
+            view.show_unknown_workpiece_dialog("Unknown Workpiece", "Painting stopped.")
 
-        show_warning.assert_called_once_with(
-            view,
-            "Unknown Workpiece",
-            "Paint execution was stopped.",
+        self.assertEqual(show_warning.call_args.args[0], view)
+        self.assertEqual(show_warning.call_args.args[1], "Workpiece not recognized")
+        self.assertEqual(show_warning.call_args.kwargs["heading"], "PAINTING STOPPED")
+        self.assertEqual(
+            [action.key for action in show_warning.call_args.kwargs["actions"]],
+            ["scan_again", "open_library", "dismiss"],
         )
+        self.assertEqual(selected_actions, ["select_workpieces"])
         self.assertEqual(view._messages[-1]["level"], "warning")
         self.assertEqual(view._messages[-1]["title"], "Unknown Workpiece")
 

@@ -8,6 +8,7 @@ from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDialog,
+    QFrame,
     QFormLayout,
     QGroupBox,
     QHBoxLayout,
@@ -22,7 +23,10 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from pl_gui.settings.settings_view.styles import ACTION_BTN_STYLE, GHOST_BTN_STYLE, GROUP_STYLE, LABEL_STYLE
+from pl_gui.settings.settings_view.styles import (
+    ACTION_BTN_STYLE, BG_COLOR, BORDER, GHOST_BTN_STYLE, LABEL_STYLE,
+    PRIMARY, SECONDARY_BG, TEXT_COLOR,
+)
 from src.applications.base.app_dialog import AppDialog, DIALOG_CHECKBOX_STYLE, DIALOG_INPUT_STYLE
 from src.applications.base.styled_message_box import ask_yes_no, show_warning
 from src.applications.base.widgets.custom_virtual_keyboard import KeyboardLineEdit
@@ -31,6 +35,42 @@ from src.applications.base.widgets.custom_virtual_keyboard import KeyboardLineEd
 def _t(text: str) -> str:
     translated = QCoreApplication.translate("RobotSettings", text)
     return translated or text
+
+
+_TARGET_CARD_STYLE = f"""
+QFrame#targetCard {{ background: white; border: 1px solid {BORDER}; border-radius: 14px; }}
+QLabel#targetCardHeader {{
+    background: {SECONDARY_BG}; color: {PRIMARY};
+    border-bottom: 1px solid {BORDER}; padding: 10px 16px;
+    border-top-left-radius: 14px; border-top-right-radius: 14px;
+    font-size: 10pt; font-weight: bold;
+}}
+QWidget#targetCardContent {{
+    background: white; border-bottom-left-radius: 14px;
+    border-bottom-right-radius: 14px;
+}}
+"""
+_TARGET_BODY_STYLE = "QGroupBox { background: white; border: none; margin: 0; padding: 0; }"
+_TARGET_INPUT_STYLE = f"""
+QLineEdit, QComboBox {{
+    background: white; color: {TEXT_COLOR}; border: 1px solid {BORDER};
+    border-radius: 8px; padding: 0 12px; min-height: 44px; font-size: 11pt;
+}}
+QLineEdit:focus, QComboBox:focus {{ border-color: {PRIMARY}; }}
+QComboBox::drop-down {{ border: none; width: 32px; }}
+"""
+_TARGET_TABLE_STYLE = f"""
+QTableWidget {{
+    background: white; alternate-background-color: {BG_COLOR};
+    color: {TEXT_COLOR}; border: 1px solid {BORDER}; border-radius: 8px;
+    gridline-color: {BORDER}; font-size: 11pt;
+}}
+QHeaderView::section {{
+    background: {PRIMARY}; color: white; border: none;
+    padding: 8px 10px; font-size: 10pt; font-weight: bold;
+}}
+QTableWidget::item:selected {{ background: {SECONDARY_BG}; color: {PRIMARY}; }}
+"""
 
 
 def _calibration_choice(frame: dict) -> str:
@@ -90,14 +130,47 @@ class TargetingDefinitionsTab(QWidget):
         root.setContentsMargins(12, 12, 12, 12)
         root.setSpacing(12)
 
-        root.addWidget(self._build_points_box())
-        root.addWidget(self._build_tcp_box())
-        root.addWidget(self._build_frames_box())
+        root.addWidget(self._card(self._build_points_box()))
+        root.addWidget(self._card(self._build_tcp_box(), translated=True))
+        root.addWidget(self._card(self._build_frames_box()))
         root.addStretch()
+
+    def _card(self, box: QGroupBox, *, translated: bool = False) -> QFrame:
+        title = box.title()
+        box.setTitle("")
+        box.setStyleSheet(_TARGET_BODY_STYLE)
+        card = QFrame()
+        card.setObjectName("targetCard")
+        card.setStyleSheet(_TARGET_CARD_STYLE)
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        header = QLabel(title.upper())
+        header.setObjectName("targetCardHeader")
+        layout.addWidget(header)
+        body = QWidget()
+        body.setObjectName("targetCardContent")
+        body_layout = QVBoxLayout(body)
+        body_layout.setContentsMargins(16, 12, 16, 16)
+        body_layout.addWidget(box)
+        layout.addWidget(body)
+        if translated:
+            self._tcp_card_header = header
+        return card
+
+    @staticmethod
+    def _style_table(table: QTableWidget) -> None:
+        table.setStyleSheet(_TARGET_TABLE_STYLE)
+        table.setAlternatingRowColors(True)
+        table.verticalHeader().hide()
+        table.verticalHeader().setDefaultSectionSize(56)
+
+    @staticmethod
+    def _size_table(table: QTableWidget) -> None:
+        table.setFixedHeight(38 + 56 * min(max(table.rowCount(), 1), 5))
 
     def _build_points_box(self) -> QGroupBox:
         box = QGroupBox("Target Points")
-        box.setStyleSheet(GROUP_STYLE)
         layout = QVBoxLayout(box)
 
         desc = QLabel("Measured XY references in robot coordinates. The active robot system can resolve offsets from these named points.")
@@ -113,6 +186,7 @@ class TargetingDefinitionsTab(QWidget):
         self._point_scope_label = QLabel(_t("Edit points for"))
         scope_row.addWidget(self._point_scope_label)
         self._point_area = QComboBox()
+        self._point_area.setStyleSheet(_TARGET_INPUT_STYLE)
         self._point_area.currentIndexChanged.connect(self._show_point_scope)
         scope_row.addWidget(self._point_area)
         self._local_points = QCheckBox(_t("Use local points for this area"))
@@ -127,6 +201,7 @@ class TargetingDefinitionsTab(QWidget):
         self._points_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self._points_table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
         self._points_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self._style_table(self._points_table)
         self._points_table.itemSelectionChanged.connect(self._update_buttons)
         layout.addWidget(self._points_table)
 
@@ -151,7 +226,6 @@ class TargetingDefinitionsTab(QWidget):
     def _build_tcp_box(self) -> QGroupBox:
         box = QGroupBox(_t("Camera-to-TCP calibration"))
         self._tcp_box = box
-        box.setStyleSheet(GROUP_STYLE)
         layout = QVBoxLayout(box)
         self._tcp_help = QLabel(_t(
             "Automatic mode uses these offsets. Manual mode uses the target points."
@@ -166,6 +240,7 @@ class TargetingDefinitionsTab(QWidget):
         self._tcp_scope_label = QLabel(_t("Edit calibration for"))
         row.addWidget(self._tcp_scope_label)
         self._tcp_area = QComboBox()
+        self._tcp_area.setStyleSheet(_TARGET_INPUT_STYLE)
         self._tcp_area.currentIndexChanged.connect(self._show_tcp_scope)
         row.addWidget(self._tcp_area)
         self._local_tcp = QCheckBox(_t("Use local calibration for this area"))
@@ -175,6 +250,8 @@ class TargetingDefinitionsTab(QWidget):
         values = QHBoxLayout()
         self._tcp_x = KeyboardLineEdit()
         self._tcp_y = KeyboardLineEdit()
+        self._tcp_x.setStyleSheet(_TARGET_INPUT_STYLE)
+        self._tcp_y.setStyleSheet(_TARGET_INPUT_STYLE)
         self._tcp_x_label = QLabel(_t("X (mm)"))
         self._tcp_y_label = QLabel(_t("Y (mm)"))
         for label, edit in ((self._tcp_x_label, self._tcp_x), (self._tcp_y_label, self._tcp_y)):
@@ -192,7 +269,7 @@ class TargetingDefinitionsTab(QWidget):
             self._point_scope_label.setText(_t("Edit points for"))
             self._local_points.setText(_t("Use local points for this area"))
             self._per_area_tcp.setText(_t("Use per-area camera-to-TCP calibration"))
-            self._tcp_box.setTitle(_t("Camera-to-TCP calibration"))
+            self._tcp_card_header.setText(_t("Camera-to-TCP calibration").upper())
             self._tcp_help.setText(_t(
                 "Automatic mode uses these offsets. Manual mode uses the target points."
             ))
@@ -207,7 +284,6 @@ class TargetingDefinitionsTab(QWidget):
 
     def _build_frames_box(self) -> QGroupBox:
         box = QGroupBox("Frames")
-        box.setStyleSheet(GROUP_STYLE)
         layout = QVBoxLayout(box)
 
         desc = QLabel("Named coordinate planes. Optional navigation groups define a rigid mapper. Height correction applies only when enabled.")
@@ -229,6 +305,7 @@ class TargetingDefinitionsTab(QWidget):
         self._frames_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self._frames_table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
         self._frames_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self._style_table(self._frames_table)
         self._frames_table.itemSelectionChanged.connect(self._update_buttons)
         layout.addWidget(self._frames_table)
 
@@ -420,6 +497,7 @@ class TargetingDefinitionsTab(QWidget):
             self._points_table.setItem(row, 1, QTableWidgetItem(str(point.get("display_name", point.get("name", "")))))
             self._points_table.setItem(row, 2, QTableWidgetItem(f"{float(point.get('x_mm', 0.0)):.3f}"))
             self._points_table.setItem(row, 3, QTableWidgetItem(f"{float(point.get('y_mm', 0.0)):.3f}"))
+        self._size_table(self._points_table)
 
     def _reload_frames_table(self) -> None:
         self._frames_table.setRowCount(0)
@@ -439,6 +517,7 @@ class TargetingDefinitionsTab(QWidget):
             self._frames_table.setItem(
                 row, 5, QTableWidgetItem(choice_labels[_calibration_choice(frame)])
             )
+        self._size_table(self._frames_table)
 
     def _on_calibration_mode_changed(self, enabled: bool) -> None:
         self._coordinate_calibration_mode = "per_area" if enabled else "global"

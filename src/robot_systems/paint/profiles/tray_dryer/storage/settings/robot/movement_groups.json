@@ -36,13 +36,13 @@
       "position": "[-13.236, 397.532, 377.623, -90.010, -0.369, -0.614]"
     },
     "Vertical Shaft": {
-      "velocity": 100,
-      "acceleration": 100,
+      "velocity": 20,
+      "acceleration": 10,
       "motion_type": "ptp",
       "iterations": 1,
       "has_iterations": false,
       "has_trajectory_execution": true,
-      "position": "[37.028, 27.898, 232.000, -179.990, 0.000, 0.000]"
+      "position": "[36.880, 34.793, 282.000, -179.860, -0.160, 0.050]"
     },
     "Vertical Shaft Alignment": {
       "velocity": 0,

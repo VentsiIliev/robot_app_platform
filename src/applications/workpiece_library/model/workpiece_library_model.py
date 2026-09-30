@@ -3,18 +3,24 @@ from typing import List, Optional
 from src.applications.base.i_application_model import IApplicationModel
 from src.applications.workpiece_library.domain.workpiece_schema import WorkpieceSchema, WorkpieceRecord
 from src.applications.workpiece_library.service.i_workpiece_library_service import IWorkpieceLibraryService
+from src.applications.workpiece_library.service.i_workpiece_selection import IWorkpieceSelection
 
 
 class WorkpieceLibraryModel(IApplicationModel):
 
-    def __init__(self, service: IWorkpieceLibraryService):
+    def __init__(self, service: IWorkpieceLibraryService, selection: IWorkpieceSelection | None = None):
         self._service = service
+        self._selection = selection
         self._records: List[WorkpieceRecord] = []
         self._schema:  WorkpieceSchema       = service.get_schema()
 
     @property
     def schema(self) -> WorkpieceSchema:
         return self._schema
+
+    @property
+    def selection_enabled(self) -> bool:
+        return self._selection is not None
 
     def load(self) -> List[WorkpieceRecord]:
         self._records = self._service.list_all()
@@ -47,3 +53,13 @@ class WorkpieceLibraryModel(IApplicationModel):
     def get_schema(self) -> WorkpieceSchema:
         self._schema = self._service.get_schema()
         return self._schema
+
+    def get_selection(self) -> tuple[str, ...] | None:
+        if self._selection is None:
+            return None
+        return self._selection.get_selected_ids()
+
+    def save_selection(self, ids: tuple[str, ...] | None) -> None:
+        if self._selection is None:
+            raise RuntimeError("Workpiece selection is unavailable")
+        self._selection.set_selected_ids(ids)

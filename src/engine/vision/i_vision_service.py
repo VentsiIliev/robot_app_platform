@@ -24,8 +24,18 @@ class IVisionService(ABC):
         """Resume acquisition/processing and require fresh frames."""
         raise NotImplementedError
 
-    def set_camera_flips(self, horizontal: bool, vertical: bool) -> None:
-        """Apply capture orientation to newly acquired frames."""
+    def set_camera_orientation(
+        self,
+        horizontal: bool,
+        vertical: bool,
+        rotate_degrees: int = 0,
+    ) -> None:
+        """Apply capture orientation to newly acquired frames.
+
+        ``rotate_degrees`` must be a multiple of 90.  A 90 or 270 degree
+        rotation transposes the frame, which ``get_camera_width()`` and
+        ``get_camera_height()`` already account for.
+        """
         raise NotImplementedError
 
     @abstractmethod
@@ -68,10 +78,12 @@ class IVisionService(ABC):
     def detect_aruco_markers(self, image: np.ndarray) -> tuple: ...
 
     @abstractmethod
-    def get_camera_width(self) -> int: ...
+    def get_camera_width(self) -> int:
+        """Width of the frames handed out, in pixels, after capture orientation."""
 
     @abstractmethod
-    def get_camera_height(self) -> int: ...
+    def get_camera_height(self) -> int:
+        """Height of the frames handed out, in pixels, after capture orientation."""
 
     @abstractmethod
     def get_chessboard_width(self) -> int: ...

@@ -7,6 +7,7 @@ import time
 import cv2
 
 from src.engine.core.i_messaging_service import IMessagingService
+from src.engine.vision.frame_orientation import apply_orientation, normalize_rotation
 from src.shared_contracts.events.vision_events import CameraTopics
 
 
@@ -26,6 +27,7 @@ class CameraStreamPublisher:
         fps: int = 15,
         flip_horizontal: bool = False,
         flip_vertical: bool = False,
+        rotate_degrees: int = 0,
     ) -> None:
         self._role = role
         self._device = device
@@ -34,9 +36,10 @@ class CameraStreamPublisher:
         self._height = min(max(1, int(height)), 480)
         self._fps = max(1, int(fps))
         self._stop_event = threading.Event()
-        self._flip_lock = threading.Lock()
+        self._orientation_lock = threading.Lock()
         self._flip_horizontal = bool(flip_horizontal)
         self._flip_vertical = bool(flip_vertical)
+        self._rotate_degrees = normalize_rotation(rotate_degrees)
         self._thread: threading.Thread | None = None
         self._capture: cv2.VideoCapture | None = None
         self._logger = logging.getLogger(f"CameraStreamPublisher.{role}")
@@ -52,10 +55,13 @@ class CameraStreamPublisher:
         )
         self._thread.start()
 
-    def set_flips(self, horizontal: bool, vertical: bool) -> None:
-        with self._flip_lock:
+    def set_orientation(self, horizontal: bool, vertical: bool, rotate_degrees: int = 0) -> None:
+        """Apply a new capture orientation to every frame published from now on."""
+        rotation = normalize_rotation(rotate_degrees)
+        with self._orientation_lock:
             self._flip_horizontal = bool(horizontal)
             self._flip_vertical = bool(vertical)
+            self._rotate_degrees = rotation
 
     def stop(self) -> None:
         self._stop_event.set()
@@ -108,12 +114,11 @@ class CameraStreamPublisher:
                             continue
 
                         failures = 0
-                        with self._flip_lock:
+                        with self._orientation_lock:
                             horizontal = self._flip_horizontal
                             vertical = self._flip_vertical
-                        if horizontal or vertical:
-                            flip_code = -1 if horizontal and vertical else (1 if horizontal else 0)
-                            frame = cv2.flip(frame, flip_code)
+                            rotate_degrees = self._rotate_degrees
+                        frame = apply_orientation(frame, horizontal, vertical, rotate_degrees)
                         self._messaging.publish(
                             topic,
                             {"image": frame, "camera": self._role},

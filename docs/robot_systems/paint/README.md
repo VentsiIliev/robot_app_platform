@@ -294,8 +294,12 @@ Important slices:
 These tests are the main safety net for future refactors inside the `align / plan / execute` structure.
 
 When workpiece matching is enabled but no saved workpiece matches the captured contour, the
-dashboard shows an **Unknown Workpiece** warning and stops paint execution. The complete
-captured contour is used only when matching is disabled. A successfully matched workpiece
+dashboard stops paint execution and shows a **Workpiece not recognized** dialog
+with Scan again, Open library, and Dismiss actions. The warning also remains in
+the dashboard message list. Scan again recaptures at the current paint position
+without returning to the magazine for another workpiece. The complete captured
+contour is used only when
+matching is disabled. A successfully matched workpiece
 without explicit paint segments still uses its complete saved contour as the paint mask.
 For matched workpieces with saved paint segments, production builds the plan through the
 paint executor so those segments become the RTCP contact mask over the main contour.

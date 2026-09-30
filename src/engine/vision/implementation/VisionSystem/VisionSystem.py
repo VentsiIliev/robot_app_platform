@@ -34,7 +34,7 @@ class VisionSystem:
                  camera_device: int | str | None = None,
                  camera_resolution: tuple[int, int] | None = None,
                  allow_camera_fallback: bool = True,
-                 camera_flips: tuple[bool, bool] = (False, False)):
+                 camera_orientation: tuple[bool, bool, int] = (False, False, 0)):
         self._configure_opencv_threads()
         self.optimal_camera_matrix = None
         self.roi = None
@@ -96,8 +96,9 @@ class VisionSystem:
         self.frame_grabber = FrameGrabber(
             self.camera,
             maxlen=5,
-            flip_horizontal=camera_flips[0],
-            flip_vertical=camera_flips[1],
+            flip_horizontal=camera_orientation[0],
+            flip_vertical=camera_orientation[1],
+            rotate_degrees=camera_orientation[2],
         )
         self.frame_grabber.start()
         self._last_processed_frame_sequence = 0
@@ -475,8 +476,7 @@ class VisionSystem:
             return False, "Area type is required"
         if corners is None:
             return False, "No points provided"
-        width = float(self.camera_settings.get_camera_width())
-        height = float(self.camera_settings.get_camera_height())
+        width, height = self._oriented_frame_size()
         normalized = []
         for point in np.asarray(corners).tolist():
             if not isinstance(point, (list, tuple)) or len(point) != 2:
@@ -492,8 +492,7 @@ class VisionSystem:
         points = self._work_area_service.get_work_area(area_type)
         if not points:
             return True, f"No saved points for {area_type}", None
-        width = float(self.camera_settings.get_camera_width())
-        height = float(self.camera_settings.get_camera_height())
+        width, height = self._oriented_frame_size()
         pixel_points = [(x * width, y * height) for x, y in points]
         return True, f"Work area points retrieved for {area_type}", pixel_points
 
@@ -570,21 +569,31 @@ class VisionSystem:
     def _get_area_points_by_region(self, area: str):
         if self._work_area_service is None or not area:
             return None
+        width, height = self._oriented_frame_size()
         return self._work_area_service.get_detection_roi_pixels(
             area,
-            self.camera_settings.get_camera_width(),
-            self.camera_settings.get_camera_height(),
+            width,
+            height,
         )
 
     def _get_active_brightness_area_points(self):
         active_area = self._get_active_area_id()
         if self._work_area_service is None or not active_area:
             return None
+        width, height = self._oriented_frame_size()
         return self._work_area_service.get_brightness_roi_pixels(
             active_area,
-            self.camera_settings.get_camera_width(),
-            self.camera_settings.get_camera_height(),
+            width,
+            height,
         )
+
+    def _oriented_frame_size(self) -> tuple[int, int]:
+        """Return the dimensions of frames after the configured capture rotation."""
+        width = int(self.camera_settings.get_camera_width())
+        height = int(self.camera_settings.get_camera_height())
+        if self.frame_grabber.is_transposed():
+            return height, width
+        return width, height
 
     def lock_auto_brightness_region(self) -> bool:
         return self._brightness_service.lock_current_area()

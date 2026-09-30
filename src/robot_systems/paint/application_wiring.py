@@ -628,6 +628,9 @@ def _build_paint_matching_service(
         run_matching_fn=vision_service.run_matching if vision_service is not None else None,
         capture_snapshot_service=capture_snapshot_service or _build_capture_snapshot_service(robot_system),
     )
+    selection = getattr(robot_system, "_paint_matching_selection", None)
+    if selection is not None:
+        matching_kwargs["selected_workpiece_ids_fn"] = selection.get_selected_ids
     if debug_dump_dir is not None:
         matching_kwargs["debug_dump_dir"] = debug_dump_dir
     return PaintWorkpieceMatchingService(**matching_kwargs)
@@ -870,11 +873,14 @@ def _build_workpiece_library_application(robot_system):
     service = PaintWorkpieceLibraryService(
         PaintWorkpieceService(
             JsonPaintWorkpieceRepository(robot_system.workpieces_storage_path())
-        )
+        ),
     )
+    selection = getattr(robot_system, "_paint_matching_selection", None)
     jog_service = build_robot_system_jog_service(robot_system)
     return WidgetApplication(
-        widget_factory=lambda ms: WorkpieceLibraryFactory().build(service, ms, jog_service=jog_service)
+        widget_factory=lambda ms: WorkpieceLibraryFactory().build(
+            service, ms, jog_service=jog_service, selection=selection,
+        )
     )
 
 
@@ -1467,7 +1473,7 @@ def _build_device_control_application(robot_system):
         vision_service=robot_system.get_optional_service(CommonServiceID.VISION),
         work_area_service=robot_system.get_optional_service(CommonServiceID.WORK_AREAS),
         camera_devices_settings_key=SettingsID.CAMERAS,
-        camera_flip_setter=robot_system.apply_camera_flips,
+        camera_orientation_setter=robot_system.apply_camera_orientation,
     )
     dryer_control_service = (
         DryerControlService(

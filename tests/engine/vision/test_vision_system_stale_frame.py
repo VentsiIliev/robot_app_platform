@@ -15,6 +15,32 @@ from src.engine.vision.implementation.VisionSystem.core.camera.frame_grabber imp
 
 
 class TestVisionSystemStaleFrame(unittest.TestCase):
+    def test_rotated_frame_dimensions_are_used_for_new_work_areas_and_rois(self):
+        vision = VisionSystem.__new__(VisionSystem)
+        vision.camera_settings = MagicMock()
+        vision.camera_settings.get_camera_width.return_value = 1280
+        vision.camera_settings.get_camera_height.return_value = 720
+        vision.frame_grabber = MagicMock()
+        vision.frame_grabber.is_transposed.return_value = True
+        vision._work_area_service = MagicMock()
+        vision._work_area_service.get_work_area.return_value = [(0.5, 0.5)]
+        vision._work_area_service.get_active_area_id.return_value = "paint"
+
+        vision.saveWorkAreaPoints({"area_type": "paint", "corners": [(360, 640)]})
+        vision._work_area_service.save_work_area.assert_called_once_with(
+            "paint", [(0.5, 0.5)]
+        )
+        _, _, points = vision.getWorkAreaPoints("paint")
+        self.assertEqual(points, [(360.0, 640.0)])
+        vision._get_area_points_by_region("paint")
+        vision._work_area_service.get_detection_roi_pixels.assert_called_once_with(
+            "paint", 720, 1280
+        )
+        vision._get_active_brightness_area_points()
+        vision._work_area_service.get_brightness_roi_pixels.assert_called_once_with(
+            "paint", 720, 1280
+        )
+
     def test_frame_grabber_applies_updated_horizontal_flip_to_next_frame(self):
         frame = np.array([[1, 2], [3, 4]], dtype=np.uint8)
         camera = MagicMock()
@@ -31,12 +57,54 @@ class TestVisionSystemStaleFrame(unittest.TestCase):
             self.assertIsNotNone(original)
             np.testing.assert_array_equal(original.frame, frame)
 
-            grabber.set_flips(True, False)
+            grabber.set_orientation(True, False)
             flipped = grabber.get_latest_snapshot_since(original.sequence, timeout_s=1.0)
             self.assertIsNotNone(flipped)
             np.testing.assert_array_equal(flipped.frame, np.array([[2, 1], [4, 3]], dtype=np.uint8))
         finally:
             grabber.stop()
+
+    def test_frame_grabber_applies_updated_rotation_to_next_frame(self):
+        frame = np.array([[1, 2], [3, 4]], dtype=np.uint8)
+        camera = MagicMock()
+
+        def capture(*, timeout):
+            time.sleep(0.01)
+            return frame.copy()
+
+        camera.capture.side_effect = capture
+        grabber = FrameGrabber(camera)
+        grabber.start()
+        try:
+            original = grabber.get_latest_snapshot_since(0, timeout_s=1.0)
+            self.assertIsNotNone(original)
+
+            grabber.set_orientation(False, False, 90)
+            rotated = grabber.get_latest_snapshot_since(original.sequence, timeout_s=1.0)
+            self.assertIsNotNone(rotated)
+            np.testing.assert_array_equal(rotated.frame, np.array([[3, 1], [4, 2]], dtype=np.uint8))
+        finally:
+            grabber.stop()
+
+    def test_frame_grabber_reports_transposition_for_quarter_turns(self):
+        grabber = FrameGrabber(MagicMock())
+        try:
+            self.assertFalse(grabber.is_transposed())
+            grabber.set_orientation(False, False, 180)
+            self.assertFalse(grabber.is_transposed())
+            grabber.set_orientation(False, False, 90)
+            self.assertTrue(grabber.is_transposed())
+            self.assertEqual(grabber.get_orientation(), (False, False, 90))
+        finally:
+            grabber.running = False
+
+    def test_frame_grabber_rejects_unsupported_rotation(self):
+        grabber = FrameGrabber(MagicMock())
+        try:
+            with self.assertRaisesRegex(ValueError, "rotation must be one of"):
+                grabber.set_orientation(False, False, 45)
+        finally:
+            grabber.running = False
 
     def test_frame_grabber_pause_clears_frames_and_resume_keeps_camera_open(self):
         camera = MagicMock()

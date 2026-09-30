@@ -8,6 +8,17 @@
     "Delete Failed": "Изтриването е неуспешно",
     "Save Failed": "Запазването е неуспешно",
     "Open Failed": "Отварянето е неуспешно",
-    "Could not load workpiece '{storage_id}'": "Детайлът '{storage_id}' не може да бъде зареден"
+    "Could not load workpiece '{storage_id}'": "Детайлът '{storage_id}' не може да бъде зареден",
+    "Selection": "Избор",
+    "All workpieces selected": "Избрани са всички детайли",
+    "{count} workpiece(s) selected": "Избрани {count} детайла"
+  },
+  "WorkpieceLibraryView": {
+    "Select": "Избор",
+    "Shape": "Форма",
+    "Select All": "Избери всички",
+    "Show Selected": "Покажи избраните",
+    "Clear Selection": "Изчисти избора",
+    "{count} selected": "Избрани {count}"
   }
 }

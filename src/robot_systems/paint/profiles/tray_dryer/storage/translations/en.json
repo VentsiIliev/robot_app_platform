@@ -14,6 +14,11 @@
     "Paint-head settings saved and applied immediately.": "Paint-head settings saved and applied immediately."
   },
   "PaintAdjustmentView": {
+    "No camera image yet": "No camera image yet",
+    "Live view of the painted section appears here": "Live view of the painted section appears here",
+    "Adjust paint · register units": "Adjust paint · register units",
+    "Start adjustment": "Start adjustment",
+    "Inspect along paint axis (mm)": "Inspect along paint axis (mm)",
     "Start paint adjustment": "Start paint adjustment",
     "Paint next length": "Paint next length",
     "Finish / Dropoff": "Finish / Dropoff",
@@ -33,14 +38,13 @@
     "Paint-head position": "Paint-head position",
     "Read position": "Read position",
     "Reading paint-head position…": "Reading paint-head position…",
-    "Position read failed: {error}": "Position read failed: {error}",
+    "Paint-head communication issue. It may be unplugged or missing.": "Paint-head communication issue. It may be unplugged or missing.",
     "Dry-run preview: {value} (not moved)": "Dry-run preview: {value} (not moved)",
     "Last confirmed position: {value}": "Last confirmed position: {value}",
     "Device disabled; position not read": "Device disabled; position not read",
     "Position unknown": "Position unknown",
     "Paint Adjustment — Auxiliary Camera": "Paint Adjustment — Auxiliary Camera",
     "Move by (degrees)": "Move by (degrees)",
-    "Go to setting": "Go to setting",
     "Setting {number}": "Setting {number}",
     "− Less paint": "− Less paint",
     "+ More paint": "+ More paint",
@@ -48,8 +52,7 @@
     "Ready": "Ready",
     "Sending paint-head command…": "Sending paint-head command…",
     "Paint-head position: {value}": "Paint-head position: {value}",
-    "Dry run: register {register} delta {value:+d}; no write.": "Dry run: register {register} delta {value:+d}; no write.",
-    "Dry run: would write {value} to register {register}.": "Dry run: would write {value} to register {register}.",
+    "Dry run: command simulated; no write.": "Dry run: command simulated; no write.",
     "Paint-head command failed: {error}": "Paint-head command failed: {error}",
     "Waiting for auxiliary camera…": "Waiting for auxiliary camera…",
     "Live auxiliary camera": "Live auxiliary camera"
@@ -67,6 +70,8 @@
   },
   "PaintQuickAccessPanel": {
     "Quick Controls": "Quick Controls",
+    "All": "All",
+    "Workpieces": "Workpieces",
     "Relieve Cable": "Relieve Cable",
     "Auto Dry": "Auto Dry",
     "Tray Dry": "Tray Dry",
@@ -126,6 +131,14 @@
     "Demo Alternate": "Demo Alternate"
   },
   "PaintDashboard": {
+    "PAINTING STOPPED": "PAINTING STOPPED",
+    "Workpiece not recognized": "Workpiece not recognized",
+    "No stored workpiece matches the part in front of the camera.": "No stored workpiece matches the part in front of the camera.",
+    "Check that the part is positioned correctly, then scan again. If this is a new part, add it in the workpiece library.": "Check that the part is positioned correctly, then scan again. If this is a new part, add it in the workpiece library.",
+    "PAINTING: STOPPED": "PAINTING: STOPPED",
+    "Scan again": "Scan again",
+    "Open library": "Open library",
+    "Dismiss": "Dismiss",
     "Painting": "Painting",
     "Paint process settings are not available.": "Paint process settings are not available.",
     "Stop the paint process before changing unmatched paint settings.": "Stop the paint process before changing unmatched paint settings.",
@@ -408,11 +421,13 @@
     "Return near the reference position if needed, rotate around the desired paint rotation axis, then capture.": "Return near the reference position if needed, rotate around the desired paint rotation axis, then capture."
   },
   "PaintDashboardController": {
+    "Scan again unavailable": "Scan again unavailable",
+    "The workpiece is no longer ready for recapture.": "The workpiece is no longer ready for recapture.",
     "All Magazines Empty": "All Magazines Empty",
     "No workpieces were found in any configured magazine. Refill the magazines and start again.": "No workpieces were found in any configured magazine. Refill the magazines and start again.",
     "Magazine is empty": "Magazine is empty",
     "Unknown Workpiece": "Unknown Workpiece",
-    "No saved workpiece matched the captured contour. Paint execution was stopped.": "No saved workpiece matched the captured contour. Paint execution was stopped."
+    "No matching workpiece. Painting stopped.": "No matching workpiece. Painting stopped."
   },
   "PaintMotionRecipe": {
     "Recipe Saved": "Recipe Saved",

@@ -127,13 +127,45 @@ class CameraStreamPublisherTests(unittest.TestCase):
         publisher.start()
         try:
             self.assertTrue(first_frame.wait(timeout=1.0))
-            publisher.set_flips(False, True)
+            publisher.set_orientation(False, True)
             self.assertTrue(second_frame.wait(timeout=1.0))
         finally:
             publisher.stop()
 
         np.testing.assert_array_equal(published[0], frame)
         np.testing.assert_array_equal(published[1], np.array([[3, 4], [1, 2]], dtype=np.uint8))
+
+    @patch("src.engine.vision.camera_stream_publisher.cv2.VideoCapture")
+    def test_live_rotation_update_changes_published_auxiliary_frames(self, video_capture) -> None:
+        frame = np.array([[1, 2], [3, 4]], dtype=np.uint8)
+        capture = MagicMock()
+        capture.isOpened.return_value = True
+        capture.read.side_effect = lambda: (True, frame.copy())
+        video_capture.return_value = capture
+        published = []
+        first_frame = threading.Event()
+        second_frame = threading.Event()
+        messaging = MagicMock()
+
+        def record_frame(_topic, message):
+            published.append(message["image"].copy())
+            (first_frame if len(published) == 1 else second_frame).set()
+
+        messaging.publish.side_effect = record_frame
+        publisher = CameraStreamPublisher("auxiliary", "/dev/video2", messaging)
+
+        publisher.start()
+        try:
+            self.assertTrue(first_frame.wait(timeout=1.0))
+            publisher.set_orientation(False, False, 90)
+            self.assertTrue(second_frame.wait(timeout=1.0))
+        finally:
+            publisher.stop()
+
+        np.testing.assert_array_equal(published[0], frame)
+        # 90 degrees clockwise maps a 2x2 grid onto a 2x2 transposed grid.
+        np.testing.assert_array_equal(published[1], np.array([[3, 1], [4, 2]], dtype=np.uint8))
+        self.assertEqual(published[1].shape, frame.shape)
 
     def test_primary_vision_publishes_named_camera_topic(self) -> None:
         messaging = MagicMock()

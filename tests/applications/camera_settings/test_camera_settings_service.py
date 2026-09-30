@@ -10,7 +10,10 @@ from enum import Enum
 from unittest.mock import MagicMock
 
 from src.applications.camera_settings.camera_settings_data import CameraSettingsData
-from src.applications.camera_settings.service.i_camera_settings_service import ICameraSettingsService
+from src.applications.camera_settings.service.i_camera_settings_service import (
+    CameraOrientation,
+    ICameraSettingsService,
+)
 from src.applications.camera_settings.service.stub_camera_settings_service import StubCameraSettingsService
 from src.applications.camera_settings.service.camera_settings_application_service import CameraSettingsApplicationService
 from src.engine.vision.camera_device_settings import (
@@ -288,33 +291,69 @@ class TestCameraSettingsApplicationServiceDevices(unittest.TestCase):
                 "primary_vision": "/dev/new-primary",
                 "auxiliary": "/dev/new-auxiliary",
             },
-            {"primary_vision": (True, False), "auxiliary": (False, True)},
+            {
+                "primary_vision": CameraOrientation(
+                    flip_horizontal=True, rotate_degrees=90
+                ),
+                "auxiliary": CameraOrientation(
+                    flip_vertical=True, rotate_degrees=180
+                ),
+            },
         )
 
         saved = settings_service.save.call_args.args[1]
         self.assertEqual(saved.get("primary_vision").device, "/dev/new-primary")
         self.assertTrue(saved.get("primary_vision").required)
         self.assertTrue(saved.get("primary_vision").flip_horizontal)
+        self.assertEqual(saved.get("primary_vision").rotate_degrees, 90)
         self.assertTrue(saved.get("auxiliary").flip_vertical)
+        self.assertEqual(saved.get("auxiliary").rotate_degrees, 180)
 
-    def test_save_applies_flips_to_running_camera_owners(self):
+    def test_save_applies_orientation_to_running_camera_owners(self):
         service, settings_service, _ = self._make_service()
-        apply_flips = MagicMock()
-        service._camera_flip_setter = apply_flips
+        apply_orientation_to_owners = MagicMock()
+        service._camera_orientation_setter = apply_orientation_to_owners
 
         service.save_camera_devices(
             {"primary_vision": "/dev/missing-primary", "auxiliary": "/dev/missing-auxiliary"},
-            {"primary_vision": (True, False), "auxiliary": (False, True)},
+            {
+                "primary_vision": CameraOrientation(
+                    flip_horizontal=True, rotate_degrees=90
+                ),
+                "auxiliary": CameraOrientation(
+                    flip_vertical=True, rotate_degrees=270
+                ),
+            },
         )
 
         self.assertEqual(settings_service.save.call_count, 1)
         self.assertEqual(
-            apply_flips.call_args_list,
+            apply_orientation_to_owners.call_args_list,
             [
-                unittest.mock.call("primary_vision", True, False),
-                unittest.mock.call("auxiliary", False, True),
+                unittest.mock.call("primary_vision", True, False, 90),
+                unittest.mock.call("auxiliary", False, True, 270),
             ],
         )
+
+    def test_save_falls_back_to_persisted_orientation_for_unlisted_roles(self):
+        service, settings_service, _ = self._make_service()
+
+        service.save_camera_devices(
+            {"primary_vision": "/dev/missing-primary"},
+            {},
+        )
+
+        saved = settings_service.save.call_args.args[1]
+        self.assertEqual(saved.get("primary_vision").rotate_degrees, 0)
+
+    def test_save_rejects_unsupported_rotation(self):
+        service, _, _ = self._make_service()
+
+        with self.assertRaisesRegex(ValueError, "rotation must be one of 0, 90, 180 or 270"):
+            service.save_camera_devices(
+                {"primary_vision": "/dev/missing-primary"},
+                {"primary_vision": CameraOrientation(rotate_degrees=45)},
+            )
 
 if __name__ == "__main__":
     unittest.main()

@@ -22,3 +22,4 @@ class SettingGroup:
     title: str
     fields: List[SettingField] = field(default_factory=list)
     columns: int = 2
+    axis_pairs: bool = False

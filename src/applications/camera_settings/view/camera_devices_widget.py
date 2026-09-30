@@ -24,6 +24,7 @@ from pl_gui.settings.settings_view.styles import (
 from pl_gui.utils.utils_widgets.camera_view import CameraView
 from src.applications.camera_settings.service.i_camera_settings_service import (
     CameraDevicesState,
+    CameraOrientation,
 )
 
 
@@ -39,7 +40,7 @@ class CameraDevicesWidget(QWidget):
         super().__init__(parent)
         self.setStyleSheet(f"background-color: {BG_COLOR};")
         self._selectors: dict[str, QComboBox] = {}
-        self._flip_controls: dict[str, tuple[QCheckBox, QCheckBox]] = {}
+        self._orientation_controls: dict[str, tuple[QCheckBox, QCheckBox, QComboBox]] = {}
         self._build_ui()
         self.retranslateUi()
 
@@ -66,17 +67,24 @@ class CameraDevicesWidget(QWidget):
             row.addWidget(label)
             row.addWidget(selector, stretch=1)
             assignment_layout.addLayout(row)
-            flip_row = QHBoxLayout()
+            orientation_row = QHBoxLayout()
             flip_horizontal = QCheckBox()
             flip_vertical = QCheckBox()
+            rotation = QComboBox()
+            rotation.setMinimumHeight(44)
+            rotation.setProperty("camera_role", role)
             flip_horizontal.setCursor(Qt.CursorShape.PointingHandCursor)
             flip_vertical.setCursor(Qt.CursorShape.PointingHandCursor)
-            flip_row.addSpacing(12)
-            flip_row.addWidget(flip_horizontal)
-            flip_row.addWidget(flip_vertical)
-            flip_row.addStretch()
-            assignment_layout.addLayout(flip_row)
-            self._flip_controls[role] = (flip_horizontal, flip_vertical)
+            rotation.setCursor(Qt.CursorShape.PointingHandCursor)
+            orientation_row.addSpacing(12)
+            orientation_row.addWidget(flip_horizontal)
+            orientation_row.addWidget(flip_vertical)
+            orientation_row.addSpacing(12)
+            orientation_row.addWidget(rotation)
+            orientation_row.addStretch()
+            assignment_layout.addLayout(orientation_row)
+            self._orientation_controls[role] = (flip_horizontal, flip_vertical, rotation)
+            rotation.currentIndexChanged.connect(self._on_rotation_changed)
 
         buttons = QHBoxLayout()
         self._refresh_button = QPushButton()
@@ -91,6 +99,10 @@ class CameraDevicesWidget(QWidget):
         buttons.addStretch()
         buttons.addWidget(self._save_button)
         assignment_layout.addLayout(buttons)
+        self._recalibration_hint = QLabel()
+        self._recalibration_hint.setWordWrap(True)
+        self._recalibration_hint.setVisible(False)
+        assignment_layout.addWidget(self._recalibration_hint)
         layout.addWidget(assignment_box)
 
         preview_box = QGroupBox()
@@ -135,11 +147,26 @@ class CameraDevicesWidget(QWidget):
             if index >= 0:
                 selector.setCurrentIndex(index)
             selector.blockSignals(False)
-            horizontal, vertical = state.flips.get(role, (False, False))
-            self._flip_controls[role][0].setChecked(horizontal)
-            self._flip_controls[role][1].setChecked(vertical)
+            horizontal, vertical, rotation = self._orientation_controls[role]
+            orientation = state.orientation.get(role, CameraOrientation())
+            horizontal.setChecked(orientation.flip_horizontal)
+            vertical.setChecked(orientation.flip_vertical)
+            index = rotation.findData(orientation.rotate_degrees)
+            rotation.setCurrentIndex(index if index >= 0 else 0)
+        self._update_recalibration_hint()
         self._status.setText(self.tr("Camera assignments loaded."))
         self._request_preview()
+
+    def _update_recalibration_hint(self) -> None:
+        """Warn that a transposing rotation invalidates the stored calibration."""
+        self._recalibration_hint.setVisible(
+            any(
+                CameraOrientation(
+                    rotate_degrees=int(rotation.currentData() or 0)
+                ).transposes_frame
+                for _, _, rotation in self._orientation_controls.values()
+            )
+        )
 
     def _option_label(self, device: str, capture_node: str, connected: bool) -> str:
         status = self.tr("connected") if connected else self.tr("missing")
@@ -152,10 +179,14 @@ class CameraDevicesWidget(QWidget):
             for role, selector in self._selectors.items()
         }
 
-    def flip_settings(self) -> dict[str, tuple[bool, bool]]:
+    def orientation_settings(self) -> dict[str, CameraOrientation]:
         return {
-            role: (horizontal.isChecked(), vertical.isChecked())
-            for role, (horizontal, vertical) in self._flip_controls.items()
+            role: CameraOrientation(
+                flip_horizontal=horizontal.isChecked(),
+                flip_vertical=vertical.isChecked(),
+                rotate_degrees=int(rotation.currentData() or 0),
+            )
+            for role, (horizontal, vertical, rotation) in self._orientation_controls.items()
         }
 
     def set_preview_frame(self, frame) -> None:
@@ -175,7 +206,7 @@ class CameraDevicesWidget(QWidget):
 
     def set_saved(self) -> None:
         self._status.setText(
-            self.tr("Camera settings saved. Flip changes are live; device changes require a restart.")
+            self.tr("Camera settings saved. Flip and rotation changes are live; device changes require a restart.")
         )
 
     def set_error(self, message: str) -> None:
@@ -199,9 +230,26 @@ class CameraDevicesWidget(QWidget):
         self._preview_box.setTitle(self.tr("Live Preview"))
         self.findChild(QLabel, "primary_vision_label").setText(self.tr("Primary vision"))
         self.findChild(QLabel, "auxiliary_label").setText(self.tr("Auxiliary"))
-        for horizontal, vertical in self._flip_controls.values():
+        for horizontal, vertical, rotation in self._orientation_controls.values():
             horizontal.setText(self.tr("Flip horizontally"))
             vertical.setText(self.tr("Flip vertically"))
+            current = rotation.currentData()
+            rotation.blockSignals(True)
+            rotation.clear()
+            rotation.addItem(self.tr("No rotation"), 0)
+            rotation.addItem(self.tr("Rotate 90° clockwise"), 90)
+            rotation.addItem(self.tr("Rotate 180°"), 180)
+            rotation.addItem(self.tr("Rotate 270° clockwise"), 270)
+            index = rotation.findData(current)
+            rotation.setCurrentIndex(max(0, index))
+            rotation.blockSignals(False)
+        self._recalibration_hint.setText(
+            self.tr(
+                "Rotating a camera by 90 or 270 degrees transposes the image and "
+                "invalidates the stored camera calibration. Re-run calibration before painting."
+            )
+        )
+        self._update_recalibration_hint()
         self._refresh_button.setText(self.tr("Refresh devices"))
         self._save_button.setText(self.tr("Save assignments"))
         current_role = self._preview_role.currentData()
@@ -224,7 +272,10 @@ class CameraDevicesWidget(QWidget):
         if len(set(assignments.values())) != len(assignments):
             self.set_error(self.tr("Primary and auxiliary cameras must be different devices."))
             return
-        self.save_requested.emit(assignments, self.flip_settings())
+        self.save_requested.emit(assignments, self.orientation_settings())
+
+    def _on_rotation_changed(self, _index: int) -> None:
+        self._update_recalibration_hint()
 
     def _on_selection_changed(self, _index: int) -> None:
         self._request_preview()

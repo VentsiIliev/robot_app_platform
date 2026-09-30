@@ -18,6 +18,7 @@ from src.robot_systems.paint.processes.paint.execution_machine import (
     PaintExecutionContext,
     PaintExecutionMachineFactory,
 )
+from src.robot_systems.paint.processes.paint.execution_machine.state import PaintExecutionState
 from src.robot_systems.paint.processes.paint.magazine_load_result import (
     ALL_MAGAZINES_EMPTY,
     MAGAZINE_EMPTY,
@@ -100,12 +101,26 @@ class PaintProductionService:
             context.run_allowed.set()
         self._paint_control.request_stop()
 
+    def can_retry_unmatched_workpiece(self) -> bool:
+        """Only a failed match at the paint capture position can be recaptured."""
+        with self._active_context_lock:
+            context = self._last_execution_context
+            return bool(
+                self._active_execution_context is None
+                and context is not None
+                and context.raw_workpiece is None
+                and str(context.workpiece_description).startswith("Unknown workpiece")
+                and not context.magazine_stage_only
+                and context.cached_workpiece_contour is None
+            )
+
     def run_once(
         self,
         stop_requested: Optional[Callable[[], bool]] = None,
         *,
         manual_single_cycle: bool = False,
         adjustment_session=None,
+        retry_unmatched_workpiece: bool = False,
     ) -> tuple[bool, str]:
         """Run production, optionally forcing one calibration-table cycle without magazine load."""
         self._clear_prepositioned_start_group()
@@ -118,6 +133,17 @@ class PaintProductionService:
 
         process_config = process_config_result[2]
         magazine_config = process_config.magazine_load if process_config is not None else None
+        if retry_unmatched_workpiece:
+            if not self.can_retry_unmatched_workpiece():
+                return False, "No unmatched workpiece is ready for recapture"
+            return self._run_single_cycle(
+                should_stop,
+                process_config=process_config,
+                magazine_config=None,
+                cycle_index=1,
+                suppress_magazine_load=True,
+                initial_state=PaintExecutionState.CAPTURE_WORKPIECE,
+            )
         if manual_single_cycle or adjustment_session is not None:
             if magazine_config is None:
                 return False, "Paint magazine calibration settings are unavailable"
@@ -545,6 +571,7 @@ class PaintProductionService:
         suppress_magazine_load: bool = False,
         retry_capture_until_workpiece: bool = False,
         adjustment_session=None,
+        initial_state: PaintExecutionState = PaintExecutionState.STARTING,
     ) -> tuple[bool, str]:
         raw_process_config = process_config or PAINT_PROCESS_CONFIG
         process_config = scale_paint_process_accelerations(raw_process_config)
@@ -601,7 +628,7 @@ class PaintProductionService:
         with self._active_context_lock:
             self._active_execution_context = context
         try:
-            machine = PaintExecutionMachineFactory().build(context)
+            machine = PaintExecutionMachineFactory().build(context, initial_state=initial_state)
             machine.start_execution()
         finally:
             self._last_execution_context = context

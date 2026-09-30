@@ -55,8 +55,8 @@ def main() -> int:
     current_value = transport.read_register(REGISTER_ADDRESS)
     # register_delta = degrees_to_register_delta(MOVE_DEGREES)
     # value_to_write = current_value + register_delta
-    setting=1
-    step=38
+    setting=2
+    step=10
     value_to_write = 45+(step*(6-setting))
     if value_to_write < MIN_WRITE_VALUE:
         raise ValueError(

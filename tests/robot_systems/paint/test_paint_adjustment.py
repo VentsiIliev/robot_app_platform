@@ -10,6 +10,8 @@ import numpy as np
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from PyQt6.QtCore import QPoint, Qt
+from PyQt6.QtTest import QTest
 from PyQt6.QtWidgets import QApplication
 
 from src.robot_systems.paint.applications.paint_adjustment import PaintAdjustmentFactory
@@ -17,7 +19,9 @@ from src.robot_systems.paint.applications.paint_adjustment.service.stub_paint_ad
     StubPaintAdjustmentService,
 )
 from src.robot_systems.paint.applications.paint_adjustment.service.i_paint_adjustment_service import PaintHeadDialConfig
-from src.robot_systems.paint.applications.paint_adjustment.dial_geometry import dial_angle_for_value
+from src.robot_systems.paint.applications.paint_adjustment.dial_geometry import (
+    dial_angle_for_value, dial_setting_for_value, dial_value_for_angle,
+)
 from src.robot_systems.paint.paint_robot_system import PaintRobotSystem
 from src.shared_contracts.events.vision_events import CameraTopics
 
@@ -44,6 +48,12 @@ class PaintAdjustmentTests(unittest.TestCase):
         )
         self.assertEqual(dial_angle_for_value(216, 45, 38, 6), -60)
         self.assertIsNone(dial_angle_for_value(236, 45, 38, 6))
+        self.assertEqual(dial_value_for_angle(-60, 45, 38, 6), 216)
+        self.assertEqual(dial_value_for_angle(-30, 45, 38, 6), 197)
+        self.assertAlmostEqual(dial_setting_for_value(212, 45, 38, 6), 1 + 23 / 38)
+        self.assertEqual(dial_setting_for_value(235, 45, 38, 6), 1.0)
+        self.assertEqual(dial_setting_for_value(197, 45, 38, 6), 2.0)
+        self.assertIsNone(dial_setting_for_value(236, 45, 38, 6))
 
     def test_finish_enabled_after_partial_section_only_at_inspection(self) -> None:
         view = PaintAdjustmentFactory().build(StubPaintAdjustmentService(), messaging=MagicMock())
@@ -66,6 +76,81 @@ class PaintAdjustmentTests(unittest.TestCase):
         self.assertFalse(view._finish_button.isEnabled())
         view.set_adjustment_status("starting", 0.0, 0.0)
         self.assertNotIn("No workpiece found", view._cycle_note.text())
+        view.clean_up()
+
+    def test_quick_step_buttons_follow_paint_head_availability(self) -> None:
+        view = PaintAdjustmentFactory().build(StubPaintAdjustmentService(), messaging=MagicMock())
+        view.set_paint_head_available(True)
+        view._step_buttons[2].click()
+        self.assertEqual(view._step_input.value(), 3)
+        self.assertTrue(view._step_buttons[2].isChecked())
+        view.set_action_pending()
+        self.assertTrue(all(not button.isEnabled() for button in view._step_buttons))
+        view.clean_up()
+
+    def test_more_paint_repeats_while_held_and_stops_on_release(self) -> None:
+        service = StubPaintAdjustmentService()
+        original_adjust = service.adjust_paint_by_register_units
+        service.adjust_paint_by_register_units = MagicMock(wraps=original_adjust)
+        view = PaintAdjustmentFactory().build(service, messaging=MagicMock())
+        self._wait_for_position_read(view._controller)
+        view.show()
+        self._app.processEvents()
+        view._step_input.setValue(2)
+
+        QTest.mousePress(view._more_button, Qt.MouseButton.LeftButton)
+        QTest.qWait(850)
+        QTest.mouseRelease(view._more_button, Qt.MouseButton.LeftButton)
+        self._wait_for_action(view._controller)
+        call_count = service.adjust_paint_by_register_units.call_count
+        self.assertGreaterEqual(call_count, 2)
+        self.assertTrue(all(call.args == ("more", 2) for call in service.adjust_paint_by_register_units.call_args_list))
+        self.assertEqual(view._dial.actual_value, 121 + 2 * call_count)
+        QTest.qWait(350)
+        self.assertEqual(service.adjust_paint_by_register_units.call_count, call_count)
+        view.clean_up()
+
+    def test_invalid_position_read_shows_connection_guidance(self) -> None:
+        service = StubPaintAdjustmentService()
+        service.read_current_position = MagicMock(
+            side_effect=ValueError("Paint-head position 0 is outside the configured range")
+        )
+        with self.assertLogs(
+            "src.robot_systems.paint.applications.paint_adjustment.controller.paint_adjustment_controller",
+            level=logging.ERROR,
+        ):
+            view = PaintAdjustmentFactory().build(service, messaging=MagicMock())
+            self._wait_for_position_read(view._controller)
+        self.assertIn("communication issue", view._position_note.text())
+        self.assertIn("unplugged or missing", view._position_note.text())
+        self.assertIn("position 0", view._position_note.toolTip())
+        self.assertTrue(view._read_position_button.isEnabled())
+        view.clean_up()
+
+    def test_dragging_dial_previews_intermediate_value_and_sends_on_release(self) -> None:
+        service = StubPaintAdjustmentService()
+        original_go_to_position = service.go_to_position
+        service.go_to_position = MagicMock(wraps=original_go_to_position)
+        view = PaintAdjustmentFactory().build(service, messaging=MagicMock())
+        self._wait_for_position_read(view._controller)
+        view.resize(1400, 900)
+        view.show()
+        self._app.processEvents()
+        dial = view._dial
+        radius = min(dial.width(), dial.height()) // 2 - 42
+        center = QPoint(dial.width() // 2, dial.height() // 2)
+        top = QPoint(center.x(), center.y() - radius)
+        between = QPoint(center.x() + radius // 2, center.y() - round(radius * 0.866))
+        QTest.mousePress(dial, Qt.MouseButton.LeftButton, pos=top)
+        QTest.mouseMove(dial, between)
+        self.assertEqual(dial.preview_value, 216)
+        self.assertEqual(dial.format_position(dial.preview_value), "1.5")
+        service.go_to_position.assert_not_called()
+        QTest.mouseRelease(dial, Qt.MouseButton.LeftButton, pos=between)
+        self._wait_for_action(view._controller)
+        service.go_to_position.assert_called_once_with(216)
+        self.assertEqual(dial.actual_value, 216)
+        self.assertIn("1.5", view._position_note.text())
         view.clean_up()
 
     def test_auxiliary_subscription_preview_buttons_and_cleanup(self) -> None:
@@ -114,33 +199,30 @@ class PaintAdjustmentTests(unittest.TestCase):
             "src.robot_systems.paint.applications.paint_adjustment.controller.paint_adjustment_controller",
             level=logging.INFO,
         ) as logs:
-            view._step_input.setValue(2)
+            view._step_input.setValue(1)
             view._more_button.click()
             self._wait_for_action(controller)
-            self.assertIn("123", view._action_note.text())
-            view._step_input.setValue(1)
+            self.assertEqual(view._dial.actual_value, 122)
+            view._step_input.setValue(2)
             view._less_button.click()
             self._wait_for_action(controller)
-            self.assertIn("122", view._action_note.text())
-            view._preset_buttons[1].click()
-            self._wait_for_action(controller)
-            self.assertIn("197", view._action_note.text())
+            self.assertEqual(view._dial.actual_value, 120)
         self.assertTrue(any("more" in line for line in logs.output))
         self.assertTrue(any("less" in line for line in logs.output))
-        self.assertTrue(any("setting 2" in line for line in logs.output))
 
         controller._model._service.get_dial_config = MagicMock(
             return_value=PaintHeadDialConfig(45, 38, 8, True)
         )
         controller._refresh_preset_configuration()
-        self.assertEqual(len(view._preset_buttons), 8)
+        self.assertEqual(view._dial._count, 8)
 
         view.set_action_result(-1, 2, wrote=False, relative=True)
-        self.assertIn("delta -1", view._action_note.text())
+        self.assertIn("command simulated", view._action_note.text())
         view.set_action_result(235, 2, wrote=False, relative=False)
-        self.assertIn("write 235", view._action_note.text())
+        self.assertIn("command simulated", view._action_note.text())
+        self.assertIn("3.0", view._position_note.text())
         self.assertEqual(view._dial.preview_value, 235)
-        self.assertEqual(view._dial.actual_value, 197)
+        self.assertEqual(view._dial.actual_value, 120)
 
         view.clean_up()
         broker.unsubscribe.assert_any_call(topic, controller._on_frame)

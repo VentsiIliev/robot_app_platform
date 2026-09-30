@@ -60,6 +60,15 @@ class TestPaintDashboardModel(unittest.TestCase):
         service.resume.assert_called_once_with()
         service.reset_errors.assert_called_once_with()
 
+    def test_scan_again_uses_dedicated_service_command(self) -> None:
+        service = MagicMock()
+        service.retry_unmatched_workpiece.return_value = True
+        model = PaintDashboardModel(service)
+
+        self.assertTrue(model.retry_unmatched_workpiece())
+        service.retry_unmatched_workpiece.assert_called_once_with()
+        service.start.assert_not_called()
+
     def test_manual_controls_delegate_through_service(self) -> None:
         service = MagicMock()
         service.get_auxiliary_states.return_value = {"pump": True, "fan": False}
@@ -94,6 +103,59 @@ class TestPaintDashboardModel(unittest.TestCase):
 
 
 class TestPaintDashboardController(unittest.TestCase):
+    def test_select_workpieces_action_opens_library(self) -> None:
+        broker = MagicMock()
+        controller = PaintDashboardController.__new__(PaintDashboardController)
+        controller._broker = broker
+
+        controller._on_action("select_workpieces")
+
+        broker.publish.assert_called_once_with(
+            ShellTopics.NAVIGATE, {"app": "WorkpieceLibrary"}
+        )
+
+    def test_scan_again_uses_recapture_command_without_normal_start(self) -> None:
+        controller = PaintDashboardController.__new__(PaintDashboardController)
+        controller._model = MagicMock()
+        controller._view = MagicMock()
+        controller._model.retry_unmatched_workpiece.return_value = True
+        controller._model.load.return_value = DashboardState(process_state="running")
+        controller._on_start = MagicMock()
+
+        controller._on_scan_again()
+
+        controller._model.retry_unmatched_workpiece.assert_called_once_with()
+        controller._model.reset_errors.assert_not_called()
+        controller._on_start.assert_not_called()
+        controller._view.apply_dashboard_state.assert_called_once_with(
+            controller._model.load.return_value
+        )
+
+    def test_scan_again_rejection_does_not_start_a_new_pickup_cycle(self) -> None:
+        controller = PaintDashboardController.__new__(PaintDashboardController)
+        controller._model = MagicMock()
+        controller._view = MagicMock()
+        controller._model.retry_unmatched_workpiece.return_value = False
+        controller._on_start = MagicMock()
+
+        controller._on_scan_again()
+
+        controller._on_start.assert_not_called()
+        controller._view.show_warning_dialog.assert_called_once()
+
+    def test_dashboard_refreshes_selection_indicator_after_gallery_return(self) -> None:
+        controller = PaintDashboardController.__new__(PaintDashboardController)
+        controller._model = MagicMock()
+        controller._view = MagicMock()
+        controller._model.get_unmatched_paint_settings.return_value = {
+            "matching_enabled": True,
+            "selected_workpiece_count": 0,
+        }
+
+        controller._refresh_workpiece_selection_indicator()
+
+        controller._view.set_workpiece_selection_indicator.assert_called_once_with(True, 0)
+
     def _make_view(self) -> MagicMock:
         view = MagicMock()
         view.start_requested = _signal()
@@ -547,7 +609,7 @@ class TestPaintDashboardController(unittest.TestCase):
             patch.object(PaintDashboardController, "_init_dashboard_process_state"),
         ):
             controller = PaintDashboardController(MagicMock(), view, MagicMock())
-        controller._dashboard_notice_bridge.warning_ready = MagicMock()
+        controller._dashboard_notice_bridge.unknown_workpiece_ready = MagicMock()
 
         controller._on_dashboard_message_raw(
             PaintDashboardMessageEvent(
@@ -557,7 +619,7 @@ class TestPaintDashboardController(unittest.TestCase):
             )
         )
 
-        controller._dashboard_notice_bridge.warning_ready.emit.assert_called_once_with(
+        controller._dashboard_notice_bridge.unknown_workpiece_ready.emit.assert_called_once_with(
             "Unknown Workpiece",
             "No saved workpiece matched the captured contour.",
         )

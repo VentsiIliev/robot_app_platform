@@ -1,5 +1,7 @@
 from src.applications.base.i_application_model import IApplicationModel
-from ..service.i_paint_adjustment_service import IPaintAdjustmentService, PaintHeadDialConfig, PaintAdjustmentOptions
+from ..service.i_paint_adjustment_service import (
+    IPaintAdjustmentService, PaintHeadCommandResult, PaintHeadDialConfig, PaintAdjustmentOptions,
+)
 
 
 class PaintAdjustmentModel(IApplicationModel):
@@ -49,10 +51,16 @@ class PaintAdjustmentModel(IApplicationModel):
             raise ValueError("Paint adjustment degrees must be an integer >= 1")
         return self._service.adjust_paint(direction, degrees)
 
-    def go_to_setting(self, setting: int) -> int:
+    def adjust_paint_by_register_units(self, direction: str, units: int) -> PaintHeadCommandResult:
+        return self._service.adjust_paint_by_register_units(direction, units)
+
+    def go_to_setting(self, setting: int) -> PaintHeadCommandResult:
         if isinstance(setting, bool) or not isinstance(setting, int) or setting < 1:
             raise ValueError("Paint-head setting must be a positive integer")
         return self._service.go_to_setting(setting)
+
+    def go_to_position(self, position: int) -> PaintHeadCommandResult:
+        return self._service.go_to_position(position)
 
     def save(self, *args, **kwargs) -> None:
         """There is no persisted preview state."""

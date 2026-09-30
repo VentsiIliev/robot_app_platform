@@ -40,6 +40,7 @@ class PaintDashboardService(IPaintDashboardService):
         allow_running_paint_settings_updates: bool = False,
         production_start_guard=None,
         paint_process_config_service=None,
+        matching_selection=None,
         plate_layout_service=None,
         target_point_name: str = "camera",
         frame_name: str = "calibration",
@@ -51,6 +52,7 @@ class PaintDashboardService(IPaintDashboardService):
         self._robot_service = robot_service
         self._vision_service = vision_service
         self._paint_process_config_service = paint_process_config_service
+        self._matching_selection = matching_selection
         self._plate_layout_service = plate_layout_service
         self._production_start_guard = production_start_guard
         self._auxiliary_devices = {
@@ -117,16 +119,24 @@ class PaintDashboardService(IPaintDashboardService):
             getattr(self._process.state, "value", self._process.state),
         )
 
+    def retry_unmatched_workpiece(self) -> bool:
+        return self._process.retry_unmatched_workpiece()
+
     def get_unmatched_paint_settings(self) -> dict[str, float | bool]:
         service = self._paint_process_config_service
         if service is None:
             return {}
         config = service.get_snapshot()
+        selected_ids = (
+            self._matching_selection.get_selected_ids()
+            if self._matching_selection is not None else None
+        )
         return {
             "velocity_percent": float(config.default_paint_velocity_percent),
             "acceleration_percent": float(config.default_paint_acceleration_percent),
             "offset_mm": float(config.default_paint_offset_mm),
             "matching_enabled": bool(config.enable_workpiece_matching),
+            "selected_workpiece_count": len(selected_ids) if selected_ids is not None else None,
             "pass_count": max(1, min(2, int(config.unmatched_paint_pass_count))),
             "pass_2": {
                 "use_pass_1_settings": bool(config.unmatched_second_pass.use_pass_1_settings),

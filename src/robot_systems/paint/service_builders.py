@@ -23,7 +23,11 @@ def build_paint_vision_service(ctx):
         camera_device=primary.device,
         camera_resolution=(primary.width, primary.height),
         allow_camera_fallback=False,
-        camera_flips=(primary.flip_horizontal, primary.flip_vertical),
+        camera_orientation=(
+            primary.flip_horizontal,
+            primary.flip_vertical,
+            primary.rotate_degrees,
+        ),
     )
 
 

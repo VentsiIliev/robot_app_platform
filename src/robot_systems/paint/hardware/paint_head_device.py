@@ -39,7 +39,19 @@ class PaintHeadDevice:
 
     def go_to_setting(self, setting: int) -> int:
         """Write the script's absolute preset: min + spacing × (count − setting)."""
-        return self._write_and_verify(self.register_for_setting(setting))
+        return self.go_to_position(self.register_for_setting(setting))
+
+    def go_to_position(self, position: int) -> int:
+        """Write a calibrated register position and verify the readback."""
+        return self._write_and_verify(self.validate_position(position))
+
+    def validate_position(self, position: int) -> int:
+        """Validate an absolute target without device I/O for dry runs."""
+        if isinstance(position, bool) or not isinstance(position, int):
+            raise ValueError("Paint-head target must be a whole register value")
+        if not self._min_value <= position <= self._max_value:
+            raise ValueError(f"Paint-head target {position} is outside the configured range")
+        return position
 
     def register_for_setting(self, setting: int) -> int:
         """Calculate an absolute preset without accessing hardware."""
@@ -51,15 +63,39 @@ class PaintHeadDevice:
 
     def move_degrees(self, delta_degrees: int) -> int:
         """Move signed whole degrees from the current register position."""
-        delta_register = self.register_delta_for_degrees(delta_degrees)
+        return self.move_register_delta(self.register_delta_for_degrees(delta_degrees))
 
+    def move_register_delta(self, delta_register: int) -> int:
+        """Move a signed register distance after reading the current position."""
+        if isinstance(delta_register, bool) or not isinstance(delta_register, int) or delta_register == 0:
+            raise ValueError("Paint-head register move must be a nonzero whole number")
         current = self.read_position()
+        return self.go_to_position(current + delta_register)
 
-        target = current + delta_register
-        if not self._min_value <= target <= self._max_value:
-            raise ValueError(f"Paint-head target {target} is outside the configured range")
+    def register_delta_for_setting_tenths(self, tenths: int) -> int:
+        """Convert a positive tenth-of-setting step to register units."""
+        if isinstance(tenths, bool) or not isinstance(tenths, int) or tenths < 1:
+            raise ValueError("Paint-head setting step must be a positive whole number of tenths")
+        delta = round(self._preset_spacing * tenths / 10)
+        if delta == 0:
+            raise ValueError("Paint-head setting step is smaller than one register unit")
+        return delta
 
-        return self._write_and_verify(target)
+    def move_setting_tenths(self, signed_tenths: int) -> int:
+        """Advance the displayed setting by exact tenths in register direction."""
+        if isinstance(signed_tenths, bool) or not isinstance(signed_tenths, int) or signed_tenths == 0:
+            raise ValueError("Paint-head setting step must be a nonzero whole number of tenths")
+        current = self.read_position()
+        displayed_tenths = round(10 + (self._max_value - current) * 10 / self._preset_spacing)
+        target_tenths = displayed_tenths - signed_tenths
+        if not 10 <= target_tenths <= self._preset_count * 10:
+            raise ValueError("Paint-head setting step exceeds the configured range")
+        target = round(
+            self._max_value - (target_tenths - 10) * self._preset_spacing / 10
+        )
+        if target == current:
+            raise ValueError("Paint-head setting step is smaller than one register unit")
+        return self.go_to_position(target)
 
     def read_position(self) -> int:
         """Read and validate the current register position."""

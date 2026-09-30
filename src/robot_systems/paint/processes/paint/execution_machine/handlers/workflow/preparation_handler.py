@@ -36,7 +36,7 @@ def handle_prepare_workpiece(ctx: PaintExecutionContext) -> PaintExecutionState:
         service.publish_dashboard_message(
             "warning",
             "Unknown Workpiece",
-            "No saved workpiece matched the captured contour. Paint execution was stopped.",
+            "No matching workpiece. Painting stopped.",
         )
     service._log_phase_timing("workpiece_preparation", phase_start, cycle=ctx.cycle_index)
     if ctx.should_stop():

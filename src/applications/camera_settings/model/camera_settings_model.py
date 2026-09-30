@@ -1,6 +1,9 @@
 from src.applications.base.i_application_model import IApplicationModel
 from src.applications.camera_settings.camera_settings_data import CameraSettingsData
-from src.applications.camera_settings.service.i_camera_settings_service import ICameraSettingsService
+from src.applications.camera_settings.service.i_camera_settings_service import (
+    CameraOrientation,
+    ICameraSettingsService,
+)
 
 
 class CameraSettingsModel(IApplicationModel):
@@ -26,9 +29,9 @@ class CameraSettingsModel(IApplicationModel):
     def save_camera_devices(
         self,
         assignments: dict[str, str],
-        flips: dict[str, tuple[bool, bool]],
+        orientation: dict[str, CameraOrientation],
     ) -> None:
-        self._service.save_camera_devices(assignments, flips)
+        self._service.save_camera_devices(assignments, orientation)
 
     def save_work_area(self, area_type: str, normalized_points) -> tuple:
         key = area_type.removesuffix("_area") if area_type.endswith("_area") else area_type

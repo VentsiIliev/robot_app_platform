@@ -5,6 +5,7 @@ BG_COLOR      = "#F8F9FA"
 BORDER        = "#E0E0E0"
 TEXT_COLOR    = "#1A1A2E"
 ERROR_COLOR   = "#C62828"
+STATUS_OK     = "#2E7D32"
 
 ###
 PRIMARY_HOVER = "#8B6FF9"       # lighter primary for hover
@@ -96,6 +97,91 @@ QTabBar::tab:hover:!selected {{
 }}
 """
 
+SETTINGS_FOOTER_STYLE = f"""
+QWidget#settingsFooter {{
+    background: white;
+    border-top: 1px solid {BORDER};
+    border-radius: 12px 12px 0 0;
+}}
+"""
+
+SETTINGS_HEADER_STYLE = f"""
+QLabel#settingsHeader {{
+    background: {PRIMARY};
+    color: white;
+    border-radius: 0 0 14px 14px;
+    padding: 12px 16px;
+    font-size: 11pt;
+    font-weight: bold;
+}}
+"""
+
+SETTINGS_CARD_FRAME_STYLE = f"""
+QFrame#settingsCard {{
+    background: white;
+    border: 1px solid {BORDER};
+    border-radius: 14px;
+}}
+QWidget#settingsCardHeader {{
+    background: {SECONDARY_BG};
+    border-bottom: 1px solid {BORDER};
+    border-top-left-radius: 14px;
+    border-top-right-radius: 14px;
+}}
+QWidget#settingsCardContent {{
+    background: white;
+    border-bottom-left-radius: 14px;
+    border-bottom-right-radius: 14px;
+}}
+QLabel#settingsCardTitle {{
+    color: {PRIMARY};
+    background: transparent;
+    font-size: 10pt;
+    font-weight: bold;
+}}
+QGroupBox#settingsCardBody {{
+    background: white;
+    border: none;
+    margin: 0;
+    padding: 0;
+}}
+"""
+
+SETTINGS_STEP_STYLE = f"""
+QPushButton {{
+    background: white;
+    color: {PRIMARY};
+    border: 1px solid {BORDER};
+    padding: 4px 10px;
+    min-height: 30px;
+    min-width: 36px;
+}}
+QPushButton:checked {{
+    background: {PRIMARY};
+    color: white;
+    border-color: {PRIMARY};
+}}
+"""
+
+SETTINGS_CARD_BODY_STYLE = f"""
+QGroupBox#settingsCardBody {{
+    background: white;
+    border: none;
+    border-radius: 0;
+    margin: 0;
+    padding: 0;
+}}
+"""
+
+SETTINGS_FIELD_LABEL_STYLE = f"""
+QLabel {{
+    color: {PRIMARY};
+    font-size: 9pt;
+    font-weight: normal;
+    background: transparent;
+}}
+"""
+
 GROUP_STYLE = f"""
 QGroupBox {{
     color: #333333;
@@ -129,6 +215,7 @@ QPushButton {{
 }}
 QPushButton:hover   {{ background-color: {PRIMARY_DARK}; }}
 QPushButton:pressed {{ background-color: #4A2EC6; }}
+QPushButton:disabled {{ background-color: {SECONDARY_BG}; color: {DISABLED_BORDER}; }}
 """
 
 LABEL_STYLE = f"""
@@ -168,4 +255,5 @@ QPushButton {{
 }}
 QPushButton:hover   {{ background-color: {PRIMARY_LIGHT}; }}
 QPushButton:pressed {{ background-color: {PRIMARY_LIGHT}; }}
+QPushButton:disabled {{ color: {DISABLED_BORDER}; border-color: {DISABLED_BORDER}; }}
 """

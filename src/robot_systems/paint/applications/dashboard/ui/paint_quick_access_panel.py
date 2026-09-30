@@ -30,6 +30,7 @@ class PaintQuickAccessPanel(QWidget):
     cable_relief_requested = pyqtSignal()
     drying_mode_requested = pyqtSignal(str)
     new_tray_requested = pyqtSignal()
+    select_workpieces_requested = pyqtSignal()
 
     def __init__(
         self,
@@ -43,6 +44,7 @@ class PaintQuickAccessPanel(QWidget):
         self._states = {item.device_id: False for item in self._configs}
         self._buttons: dict[str, QPushButton] = {}
         self._drying_mode = "auto"
+        self._selected_workpiece_count: int | None = None
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -71,6 +73,10 @@ class PaintQuickAccessPanel(QWidget):
         self._new_tray.clicked.connect(self._on_new_tray)
         self._new_tray.hide()
         self._layout.addWidget(self._new_tray)
+        self._select_workpieces = self._button()
+        self._select_workpieces.clicked.connect(self._on_select_workpieces)
+        self._select_workpieces.hide()
+        self._layout.addWidget(self._select_workpieces)
         self._layout.addStretch(1)
         root.addWidget(self._box, 1)
         self.retranslateUi()
@@ -95,6 +101,16 @@ class PaintQuickAccessPanel(QWidget):
 
     def _on_new_tray(self) -> None:
         self.new_tray_requested.emit()
+
+    def _on_select_workpieces(self) -> None:
+        self.select_workpieces_requested.emit()
+
+    def set_workpiece_matching_enabled(self, enabled: bool) -> None:
+        self._select_workpieces.setVisible(enabled)
+
+    def set_workpiece_selection_count(self, count: int | None) -> None:
+        self._selected_workpiece_count = count
+        self._render_workpiece_selection()
 
     def set_drying_mode(self, mode: str) -> None:
         normalized = str(mode).lower()
@@ -138,6 +154,7 @@ class PaintQuickAccessPanel(QWidget):
             *(self._buttons[item.device_id] for item in self._configs),
             self._cable_relief,
             self._new_tray,
+            self._select_workpieces,
         ]
         for widget in widgets:
             widget.setFixedHeight(_FOOTER_BUTTON_HEIGHT)
@@ -149,9 +166,10 @@ class PaintQuickAccessPanel(QWidget):
         grid.setContentsMargins(0, 0, 0, 0)
         grid.setHorizontalSpacing(8)
         grid.setVerticalSpacing(6)
-        for index, widget in enumerate(widgets[:-1]):
+        for index, widget in enumerate(widgets[:-2]):
             grid.addWidget(widget, index // 2, index % 2)
         grid.addWidget(self._new_tray, 2, 0, 1, 2)
+        grid.addWidget(self._select_workpieces, 3, 0, 1, 2)
         grid.setColumnStretch(0, 1)
         grid.setColumnStretch(1, 1)
         self._layout.setContentsMargins(10, 10, 10, 10)
@@ -164,6 +182,7 @@ class PaintQuickAccessPanel(QWidget):
             self._box.setTitle(self.tr("Quick Controls"))
         self._cable_relief.setText(self.tr("Relieve Cable"))
         self._new_tray.setText(self.tr("New Tray"))
+        self._render_workpiece_selection()
         self._render_drying_mode()
         for config in self._configs:
             self._render_device(config.device_id)
@@ -175,6 +194,11 @@ class PaintQuickAccessPanel(QWidget):
             "demo": self.tr("Demo Alternate"),
         }[self._drying_mode]
         self._drying_mode_button.setText(text)
+
+    def _render_workpiece_selection(self) -> None:
+        count = self._selected_workpiece_count
+        suffix = self.tr("All") if count is None else str(count)
+        self._select_workpieces.setText(f"{self.tr('Workpieces')}({suffix})")
 
     def _render_device(self, device_id: str) -> None:
         button = self._buttons.get(device_id)

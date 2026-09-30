@@ -9,6 +9,11 @@
     "Auxiliary": "Auxiliary",
     "Flip horizontally": "Flip horizontally",
     "Flip vertically": "Flip vertically",
+    "No rotation": "No rotation",
+    "Rotate 90° clockwise": "Rotate 90° clockwise",
+    "Rotate 180°": "Rotate 180°",
+    "Rotate 270° clockwise": "Rotate 270° clockwise",
+    "Rotating a camera by 90 or 270 degrees transposes the image and invalidates the stored camera calibration. Re-run calibration before painting.": "Rotating a camera by 90 or 270 degrees transposes the image and invalidates the stored camera calibration. Re-run calibration before painting.",
     "Refresh devices": "Refresh devices",
     "Save assignments": "Save assignments",
     "Preview primary vision": "Preview primary vision",
@@ -17,7 +22,7 @@
     "missing": "missing",
     "Camera assignments loaded.": "Camera assignments loaded.",
     "No frame available from the selected camera.": "No frame available from the selected camera.",
-    "Camera settings saved. Flip changes are live; device changes require a restart.": "Camera settings saved. Flip changes are live; device changes require a restart.",
+    "Camera settings saved. Flip and rotation changes are live; device changes require a restart.": "Camera settings saved. Flip and rotation changes are live; device changes require a restart.",
     "Assign both camera roles before saving.": "Assign both camera roles before saving.",
     "Primary and auxiliary cameras must be different devices.": "Primary and auxiliary cameras must be different devices."
   }

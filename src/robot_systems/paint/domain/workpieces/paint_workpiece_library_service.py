@@ -34,16 +34,20 @@ class PaintWorkpieceLibraryService:
     def list_all(self) -> List[WorkpieceRecord]:
         records: List[WorkpieceRecord] = []
         for meta in self._service.list_all():
-            raw = self.load_raw(str(meta.get("id", ""))) or {}
+            raw = (
+                {}
+                if "workpieceId" in meta
+                else self.load_raw(str(meta.get("id", ""))) or {}
+            )
             records.append(
                 WorkpieceRecord(
                     {
                         "id": meta.get("id", ""),
-                        "workpieceId": raw.get("workpieceId", ""),
+                        "workpieceId": meta.get("workpieceId", raw.get("workpieceId", "")),
                         "name": raw.get("name", meta.get("name", "")),
                         "date": meta.get("date", ""),
-                        "description": raw.get("description", ""),
-                        "height_mm": raw.get("height_mm", ""),
+                        "description": meta.get("description", raw.get("description", "")),
+                        "height_mm": meta.get("height_mm", raw.get("height_mm", "")),
                     }
                 )
             )

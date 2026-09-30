@@ -16,6 +16,7 @@ class PaintWorkpieceMatchingService(IWorkpieceMatcher):
         *,
         list_saved_workpieces_fn: Optional[Callable[[], list[dict]]] = None,
         load_saved_workpiece_fn: Optional[Callable[[str], Optional[dict]]] = None,
+        selected_workpiece_ids_fn: Optional[Callable[[], tuple[str, ...] | None]] = None,
         run_matching_fn: Optional[Callable[[list, list], tuple]] = None,
         capture_snapshot_service=None,
         debug_dump_dir: str | None = None,
@@ -23,6 +24,7 @@ class PaintWorkpieceMatchingService(IWorkpieceMatcher):
         """Store repository, matching, and snapshot dependencies for paint matching."""
         self._list_saved_workpieces_fn = list_saved_workpieces_fn
         self._load_saved_workpiece_fn = load_saved_workpiece_fn
+        self._selected_workpiece_ids_fn = selected_workpiece_ids_fn
         self._run_matching_fn = run_matching_fn
         self._capture_snapshot_service = capture_snapshot_service
         self._debug_dump_dir = debug_dump_dir
@@ -118,10 +120,16 @@ class PaintWorkpieceMatchingService(IWorkpieceMatcher):
 
     def _load_candidates(self) -> list:
         """Load saved workpieces and wrap them in the contour-matcher adapter shape."""
-        stored = self._list_saved_workpieces_fn() or []
+        selected_ids = (
+            self._selected_workpiece_ids_fn()
+            if self._selected_workpiece_ids_fn is not None else None
+        )
+        stored_ids = (
+            selected_ids if selected_ids is not None
+            else (item.get("id") for item in (self._list_saved_workpieces_fn() or []))
+        )
         candidates: list[MatchableWorkpiece] = []
-        for item in stored:
-            storage_id = item.get("id")
+        for storage_id in stored_ids:
             if not storage_id:
                 continue
             raw = self._load_saved_workpiece_fn(storage_id)

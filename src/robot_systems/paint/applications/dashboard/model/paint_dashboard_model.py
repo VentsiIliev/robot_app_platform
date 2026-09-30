@@ -43,6 +43,9 @@ class PaintDashboardModel(IApplicationModel):
         self._service.reset_errors()
         return self.load()
 
+    def retry_unmatched_workpiece(self) -> bool:
+        return self._service.retry_unmatched_workpiece()
+
     def get_unmatched_paint_settings(self) -> dict:
         return self._service.get_unmatched_paint_settings()
 

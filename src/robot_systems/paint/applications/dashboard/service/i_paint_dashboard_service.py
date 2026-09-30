@@ -45,6 +45,9 @@ class IPaintDashboardService(ABC):
     def reset_errors(self) -> None: ...
 
     @abstractmethod
+    def retry_unmatched_workpiece(self) -> bool: ...
+
+    @abstractmethod
     def get_unmatched_paint_settings(self) -> dict: ...
 
     @abstractmethod

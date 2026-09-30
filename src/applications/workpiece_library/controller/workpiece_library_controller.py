@@ -1,4 +1,5 @@
 import logging
+from collections import OrderedDict
 
 from PyQt6.QtCore import QCoreApplication, QTimer
 from PyQt6.QtWidgets import QMessageBox
@@ -23,6 +24,9 @@ class WorkpieceLibraryController(IApplicationController):
         self._broker  = messaging
         self._all_records = []
         self._pending_open_payload = None
+        self._search_text = ""
+        self._show_selected_only = False
+        self._thumbnail_cache: OrderedDict[str, bytes | None] = OrderedDict()
 
     def load(self) -> None:
         self._connect_signals()
@@ -40,30 +44,74 @@ class WorkpieceLibraryController(IApplicationController):
         self._view.selection_changed.connect(self._on_selection)
         self._view.edit_requested.connect(self._on_edit)
         self._view.open_in_editor_requested.connect(self._on_open_in_editor)
+        if self._model.selection_enabled:
+            self._view.selection_requested.connect(self._on_selection_applied)
+            self._view.show_selected_changed.connect(self._on_show_selected_changed)
+            self._view.visible_thumbnails_requested.connect(self._on_visible_thumbnails)
 
     # ── Handlers ──────────────────────────────────────────────────────
 
 
     def _refresh(self) -> None:
+        self._thumbnail_cache.clear()
         self._all_records = self._model.load()  # already there
         schema = self._model.get_schema()  # ← re-fetch schema fresh
         self._view.set_schema(schema)  # ← new setter
-        self._view.set_records(self._all_records)
+        if self._model.selection_enabled:
+            self._view.set_available_ids([
+                str(record.get_id(schema.id_key)) for record in self._all_records
+            ])
+        if self._model.selection_enabled:
+            self._view.set_selection(self._model.get_selection())
+        self._apply_filter()
         self._view.set_status(f"{len(self._all_records)} workpiece(s) loaded")
 
-    def _on_search(self, text: str) -> None:
-        text = text.strip().lower()
-        if not text:
-            self._view.set_records(self._all_records)
+    def _on_selection_applied(self, ids: tuple[str, ...] | None) -> None:
+        try:
+            self._model.save_selection(ids)
+        except (OSError, ValueError) as exc:
+            self._view.set_selection(self._model.get_selection())
+            show_warning(self._view, self._t("Selection"), str(exc))
             return
+        if self._show_selected_only:
+            QTimer.singleShot(0, self._apply_filter)
+        self._view.set_status(
+            self._t("All workpieces selected") if ids is None
+            else self._t("{count} workpiece(s) selected").format(count=len(ids))
+        )
+
+    def _on_show_selected_changed(self, enabled: bool) -> None:
+        self._show_selected_only = enabled
+        self._apply_filter()
+
+    def _on_visible_thumbnails(self, storage_ids: list[str]) -> None:
+        for storage_id in storage_ids:
+            if storage_id not in self._thumbnail_cache:
+                self._thumbnail_cache[storage_id] = self._model.get_thumbnail(storage_id)
+                if len(self._thumbnail_cache) > 256:
+                    self._thumbnail_cache.popitem(last=False)
+            self._view.set_table_thumbnail(storage_id, self._thumbnail_cache[storage_id])
+
+    def _on_search(self, text: str) -> None:
+        self._search_text = text.strip().lower()
+        self._apply_filter()
+
+    def _apply_filter(self) -> None:
+        text = self._search_text
         schema = self._model.schema
+        checked = self._view.checked_ids() if self._show_selected_only else None
         filtered = [
             r for r in self._all_records
-            if text in str(r.get(schema.id_key, "")).lower()
-            or text in str(r.get(schema.name_key, "")).lower()
+            if (checked is None or str(r.get_id(schema.id_key)) in checked)
+            and (
+                not text
+                or text in str(r.get(schema.id_key, "")).lower()
+                or text in str(r.get(schema.name_key, "")).lower()
+            )
         ]
         self._view.set_records(filtered)
-        self._view.set_status(f"{len(filtered)} match(es)")
+        if text or self._show_selected_only:
+            self._view.set_status(f"{len(filtered)} match(es)")
 
     def _on_selection(self, record) -> None:
         if record is None:

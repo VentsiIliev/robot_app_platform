@@ -70,7 +70,7 @@
     "commands": {
       "min_value": 45,
       "max_value": 235,
-      "preset_spacing": 38,
+      "preset_spacing": XX,
       "preset_count": 6,
       "degree_units_numerator": 94,
       "degree_units_denominator": 90,

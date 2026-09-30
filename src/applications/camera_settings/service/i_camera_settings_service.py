@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import List, Tuple
+from typing import ClassVar, List, Tuple
 from src.applications.camera_settings.camera_settings_data import CameraSettingsData
 
 
@@ -12,10 +12,29 @@ class CameraDeviceOption:
 
 
 @dataclass(frozen=True)
+class CameraOrientation:
+    """Capture orientation for one camera role.
+
+    Rotation is always applied first, then the mirror, so ``flip_vertical``
+    keeps meaning "mirror the image as displayed" for any rotation.
+    """
+
+    VALID_ROTATIONS: ClassVar[tuple[int, ...]] = (0, 90, 180, 270)
+
+    flip_horizontal: bool = False
+    flip_vertical: bool = False
+    rotate_degrees: int = 0
+
+    @property
+    def transposes_frame(self) -> bool:
+        return self.rotate_degrees in (90, 270)
+
+
+@dataclass(frozen=True)
 class CameraDevicesState:
     assignments: dict[str, str]
     options: tuple[CameraDeviceOption, ...]
-    flips: dict[str, tuple[bool, bool]] = field(default_factory=dict)
+    orientation: dict[str, CameraOrientation] = field(default_factory=dict)
 
 
 class ICameraSettingsService(ABC):
@@ -45,5 +64,5 @@ class ICameraSettingsService(ABC):
     def save_camera_devices(
         self,
         assignments: dict[str, str],
-        flips: dict[str, tuple[bool, bool]],
+        orientation: dict[str, CameraOrientation],
     ) -> None: ...

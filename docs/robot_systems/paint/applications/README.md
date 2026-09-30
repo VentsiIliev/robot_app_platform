@@ -40,6 +40,20 @@ Key pieces:
 
 The dashboard is a thin UI over `PaintDashboardService`, which is built in `PaintRobotSystem.on_start()` from the current `PaintProcess`.
 
+When workpiece matching finds no saved match, the process publishes an
+`Unknown Workpiece` warning. The dashboard records it in the message list and
+opens the shared action warning dialog with the title **Workpiece not
+recognized**. The dialog offers **Scan again**, **Open library**, and
+**Dismiss**. Scan again is accepted only for the unmatched-workpiece error.
+It resets that error and starts a new cycle directly at paint capture, using a
+fresh image at the current calibration/paint position. Magazine pickup and
+calibration navigation are skipped; matching, paint planning, and execution
+then follow the normal cycle. Open library uses the existing
+`ShellTopics.NAVIGATE` route to `WorkpieceLibrary`. Dismiss closes the dialog.
+Other warnings continue to use the standard styled warning box. The
+paint-specific actions are handled by the dashboard view and controller; the
+shared dialog only returns the chosen action key.
+
 Primary responsibility:
 
 - display paint-process state and operator-facing runtime status

@@ -3,6 +3,7 @@ from src.applications.camera_settings.camera_settings_data import CameraSettings
 from src.applications.camera_settings.service.i_camera_settings_service import (
     CameraDeviceOption,
     CameraDevicesState,
+    CameraOrientation,
     ICameraSettingsService,
 )
 
@@ -46,15 +47,19 @@ class StubCameraSettingsService(ICameraSettingsService):
                 CameraDeviceOption("/dev/video0", "/dev/video0", True),
                 CameraDeviceOption("/dev/video2", "/dev/video2", True),
             ),
-            flips={
-                "primary_vision": (False, False),
-                "auxiliary": (False, False),
+            orientation={
+                "primary_vision": CameraOrientation(rotate_degrees=0),
+                "auxiliary": CameraOrientation(rotate_degrees=0),
             },
         )
 
     def save_camera_devices(
         self,
         assignments: dict[str, str],
-        flips: dict[str, tuple[bool, bool]],
+        orientation: dict[str, CameraOrientation],
     ) -> None:
-        _logger.info("StubCameraSettingsService: camera assignments=%s flips=%s", assignments, flips)
+        _logger.info(
+            "StubCameraSettingsService: camera assignments=%s orientation=%s",
+            assignments,
+            orientation,
+        )

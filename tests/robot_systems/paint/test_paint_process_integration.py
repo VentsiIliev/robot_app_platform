@@ -50,6 +50,66 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
             path_executor=MagicMock(),
         )
 
+    def test_retry_unmatched_workpiece_recaptures_without_magazine_navigation(self):
+        config = PaintProcessConfig(
+            magazine_load=PaintMagazineLoadConfig(enabled=True),
+            run_while_workpiece_found=True,
+        )
+        navigation = MagicMock()
+        magazine_load = MagicMock()
+        service = PaintProductionService(
+            workpiece_preparation_service=MagicMock(),
+            capture_snapshot_service=MagicMock(),
+            path_preparation_service=MagicMock(),
+            path_executor=MagicMock(),
+            magazine_load_service=magazine_load,
+            navigation_service=navigation,
+        )
+        service._get_process_config = MagicMock(return_value=(True, "", config))
+        service._last_execution_context = SimpleNamespace(
+            raw_workpiece=None,
+            workpiece_description="Unknown workpiece",
+            magazine_stage_only=False,
+            cached_workpiece_contour=None,
+        )
+        service._capture_snapshot_service.capture_snapshot.return_value = VisionCaptureSnapshot(
+            frame="new-frame", contours=[_square(2.0)], source="paint_process"
+        )
+        service._workpiece_preparation.prepare_workpiece.return_value = (
+            {"id": "wp-1"}, "Prepared workpiece"
+        )
+        service._path_preparation_service.build_execution_plan.return_value = {"plan": 1}
+        service._path_executor.execute_paint_process.return_value = (True, "Paint completed")
+
+        ok, message = service.run_once(retry_unmatched_workpiece=True)
+
+        self.assertTrue(ok, message)
+        service._capture_snapshot_service.capture_snapshot.assert_called_once_with(
+            source="paint_process"
+        )
+        navigation.move_to_calibration_position.assert_not_called()
+        magazine_load.load_to_calibration.assert_not_called()
+        service._workpiece_preparation.prepare_workpiece.assert_called_once()
+        service._path_executor.execute_paint_process.assert_called_once()
+        self.assertIsNone(service._last_execution_context.magazine_config)
+
+    def test_retry_unmatched_workpiece_rejects_unrelated_error(self):
+        service = self._make_service()
+        service._last_execution_context = SimpleNamespace(
+            raw_workpiece=None,
+            workpiece_description="Camera unavailable",
+            magazine_stage_only=False,
+            cached_workpiece_contour=None,
+        )
+        service._run_single_cycle = MagicMock()
+
+        self.assertFalse(service.can_retry_unmatched_workpiece())
+        self.assertEqual(
+            service.run_once(retry_unmatched_workpiece=True),
+            (False, "No unmatched workpiece is ready for recapture"),
+        )
+        service._run_single_cycle.assert_not_called()
+
     def test_manual_single_cycle_skips_magazine_and_repeat_even_when_enabled(self):
         service = self._make_service()
         config = PaintProcessConfig(
@@ -1630,6 +1690,26 @@ class TestPaintProcessIntegration(unittest.TestCase):
         messaging = MagicMock()
         process = PaintProcess(production_service=production_service, messaging=messaging)
         return process, production_service, messaging
+
+    def test_retry_unmatched_workpiece_starts_capture_only_run(self):
+        process, production_service, _messaging = self._make_process((True, "Paint completed"))
+        production_service.can_retry_unmatched_workpiece.return_value = True
+        process.set_error("Unknown workpiece")
+
+        self.assertTrue(process.retry_unmatched_workpiece())
+        process._thread.join(timeout=1.0)
+
+        self.assertFalse(process._thread.is_alive())
+        self.assertTrue(production_service.run_once.call_args.kwargs["retry_unmatched_workpiece"])
+        self.assertFalse(process._manual_single_cycle_requested)
+
+    def test_retry_unmatched_workpiece_rejects_other_process_errors(self):
+        process, production_service, _messaging = self._make_process((True, "Paint completed"))
+        production_service.can_retry_unmatched_workpiece.return_value = False
+        process.set_error("Robot disconnected")
+
+        self.assertFalse(process.retry_unmatched_workpiece())
+        production_service.run_once.assert_not_called()
 
     def test_manual_single_cycle_starts_through_process_and_rejects_duplicate_start(self):
         process, production_service, _messaging = self._make_process((True, "Paint completed"))

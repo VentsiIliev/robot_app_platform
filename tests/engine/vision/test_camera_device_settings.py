@@ -21,12 +21,14 @@ class TestCameraDevicesConfigSerializer(unittest.TestCase):
                     required=True,
                     flip_horizontal=True,
                     flip_vertical=False,
+                    rotate_degrees=90,
                 ),
                 "auxiliary": CameraDeviceSpec(
                     device=2,
                     width=640,
                     height=480,
                     flip_vertical=True,
+                    rotate_degrees=180,
                 ),
             }
         )
@@ -35,10 +37,33 @@ class TestCameraDevicesConfigSerializer(unittest.TestCase):
 
         self.assertEqual(restored, settings)
 
-    def test_missing_flip_flags_default_to_false(self) -> None:
+    def test_missing_orientation_flags_use_identity_defaults(self) -> None:
         restored = self.serializer.from_dict({"cameras": {"primary_vision": {"device": 0}}})
-        self.assertFalse(restored.get("primary_vision").flip_horizontal)
-        self.assertFalse(restored.get("primary_vision").flip_vertical)
+        spec = restored.get("primary_vision")
+        self.assertFalse(spec.flip_horizontal)
+        self.assertFalse(spec.flip_vertical)
+        self.assertEqual(spec.rotate_degrees, 0)
+
+    def test_rotation_is_folded_to_a_canonical_value(self) -> None:
+        restored = self.serializer.from_dict({"cameras": {"primary_vision": {
+            "device": 0,
+            "rotate_degrees": 450,
+        }}})
+        self.assertEqual(restored.get("primary_vision").rotate_degrees, 90)
+
+    def test_rejects_rotation_that_is_not_a_multiple_of_ninety(self) -> None:
+        with self.assertRaisesRegex(ValueError, "rotation must be one of 0, 90, 180 or 270"):
+            self.serializer.from_dict({"cameras": {"primary_vision": {
+                "device": 0,
+                "rotate_degrees": 45,
+            }}})
+
+    def test_rejects_non_integer_rotation(self) -> None:
+        with self.assertRaisesRegex(ValueError, "rotation must be one of 0, 90, 180 or 270"):
+            self.serializer.from_dict({"cameras": {"primary_vision": {
+                "device": 0,
+                "rotate_degrees": "90",
+            }}})
 
     def test_rejects_non_boolean_flip(self) -> None:
         with self.assertRaisesRegex(ValueError, "flip_horizontal must be true or false"):

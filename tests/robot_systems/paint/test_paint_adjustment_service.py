@@ -113,6 +113,31 @@ class PaintAdjustmentServiceTests(unittest.TestCase):
             transport.write_register.call_args_list[1].args, (2, 121)
         )
 
+    def test_register_step_uses_units_without_preset_or_degree_conversion(self):
+        service, transport = self._service(sign=-1)
+        transport.read_register.side_effect = [121, 118, 118, 120]
+        self.assertEqual(service.adjust_paint_by_register_units("more", 3).value, 118)
+        self.assertEqual(service.adjust_paint_by_register_units("less", 2).value, 120)
+        self.assertEqual(
+            [call.args for call in transport.write_register.call_args_list],
+            [(2, 118), (2, 120)],
+        )
+        with self.assertRaises(ValueError):
+            service.adjust_paint_by_register_units("more", 0)
+
+        disabled, disabled_transport = self._service(sign=-1, enabled=False)
+        preview = disabled.adjust_paint_by_register_units("more", 3)
+        self.assertEqual((preview.value, preview.wrote, preview.relative), (-3, False, True))
+        disabled_transport.read_register.assert_not_called()
+        disabled_transport.write_register.assert_not_called()
+
+    def test_register_step_checks_calibrated_range_before_write(self):
+        service, transport = self._service(sign=-1)
+        transport.read_register.return_value = 45
+        with self.assertRaises(ValueError):
+            service.adjust_paint_by_register_units("more", 1)
+        transport.write_register.assert_not_called()
+
     def test_disabled_device_logs_calculations_without_hardware_io(self):
         service, transport = self._service(sign=1, enabled=False)
         self.assertTrue(service.is_paint_head_available())
@@ -140,6 +165,24 @@ class PaintAdjustmentServiceTests(unittest.TestCase):
 
         disabled, disabled_transport = self._service(sign=-1, enabled=False)
         self.assertIsNone(disabled.read_current_position())
+        disabled_transport.read_register.assert_not_called()
+
+    def test_dial_writes_intermediate_position_and_validates_range(self):
+        service, transport = self._service(sign=1)
+        transport.read_register.return_value = 216
+        result = service.go_to_position(216)
+        self.assertEqual((result.value, result.wrote, result.relative), (216, True, False))
+        transport.write_register.assert_called_once_with(2, 216)
+        transport.read_register.assert_called_once_with(2)
+        for invalid in (44, 236, True, 216.5):
+            with self.assertRaises(ValueError):
+                service.go_to_position(invalid)
+        transport.write_register.assert_called_once()
+
+        disabled, disabled_transport = self._service(sign=1, enabled=False)
+        preview = disabled.go_to_position(216)
+        self.assertEqual((preview.value, preview.wrote), (216, False))
+        disabled_transport.write_register.assert_not_called()
         disabled_transport.read_register.assert_not_called()
 
     def test_single_cycle_delegates_without_changing_settings(self):

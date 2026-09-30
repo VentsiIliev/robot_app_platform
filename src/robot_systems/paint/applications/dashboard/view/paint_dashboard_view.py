@@ -31,7 +31,11 @@ from PyQt6.QtWidgets import (
 )
 
 from src.applications.base.i_application_view import IApplicationView
-from src.applications.base.styled_message_box import ask_yes_no, show_warning as show_styled_warning
+from src.applications.base.styled_message_box import (
+    DialogAction,
+    ask_yes_no,
+    show_warning as show_styled_warning,
+)
 from src.applications.base.drawer_toggle import DrawerToggle
 from pl_gui.dashboard.DashboardWidget import DashboardWidget
 from pl_gui.settings.settings_view.styles import (
@@ -203,6 +207,7 @@ class PaintDashboardView(IApplicationView):
     stop_requested = pyqtSignal()
     pause_requested = pyqtSignal()
     reset_requested = pyqtSignal()
+    scan_again_requested = pyqtSignal()
 
     action_requested = pyqtSignal(str)
     cable_relief_requested = pyqtSignal()
@@ -215,6 +220,7 @@ class PaintDashboardView(IApplicationView):
     remove_plate_placement_requested = pyqtSignal(int)
     camera_selected = pyqtSignal(str)
     camera_feed_visible = pyqtSignal(bool)
+    dashboard_shown = pyqtSignal()
 
     def __init__(
         self,
@@ -392,6 +398,9 @@ class PaintDashboardView(IApplicationView):
                     self.drying_mode_requested
                 )
                 self._quick_access.new_tray_requested.connect(self._on_new_tray)
+                self._quick_access.select_workpieces_requested.connect(
+                    self._on_select_workpieces
+                )
                 self._plate_layout.set_new_tray_button_visible(False)
                 side_panel = top_section.itemAt(top_section.count() - 1).widget()
                 side_layout = side_panel.layout()
@@ -460,6 +469,7 @@ class PaintDashboardView(IApplicationView):
     def showEvent(self, event) -> None:
         super().showEvent(event)
         self.camera_feed_visible.emit(self.is_camera_feed_visible())
+        self.dashboard_shown.emit()
 
     def hideEvent(self, event) -> None:
         self.camera_feed_visible.emit(False)
@@ -1220,6 +1230,9 @@ class PaintDashboardView(IApplicationView):
             return
         self.action_requested.emit(action_id)
 
+    def _on_select_workpieces(self) -> None:
+        self.action_requested.emit("select_workpieces")
+
     def set_trajectory_image(self, image) -> None:
         self._dashboard.set_trajectory_image(image)
 
@@ -1330,10 +1343,19 @@ class PaintDashboardView(IApplicationView):
             widget.set_application_shortcuts(shortcuts)
 
     def set_unmatched_paint_settings(self, settings: dict) -> None:
+        self.set_workpiece_selection_indicator(
+            bool(settings.get("matching_enabled", False)),
+            settings.get("selected_workpiece_count"),
+        )
         for widget in self._control_widgets():
             widget.set_unmatched_paint_settings(settings)
         if self._quick_controls is not None:
             self._quick_controls.set_unmatched_paint_settings(settings)
+
+    def set_workpiece_selection_indicator(self, matching_enabled: bool, count: int | None) -> None:
+        if self._quick_access is not None:
+            self._quick_access.set_workpiece_matching_enabled(matching_enabled)
+            self._quick_access.set_workpiece_selection_count(count)
 
     def set_unmatched_paint_settings_editable(self, editable: bool) -> None:
         for widget in self._control_widgets():
@@ -1364,6 +1386,29 @@ class PaintDashboardView(IApplicationView):
         """Record a warning in the dashboard and show the shared modal warning."""
         self._enqueue_message("warning", title, message)
         show_styled_warning(self, title, message)
+
+    def show_unknown_workpiece_dialog(self, title: str, message: str) -> None:
+        self._enqueue_message("warning", title, message)
+        action = show_styled_warning(
+            self,
+            self._translate_text("Workpiece not recognized"),
+            self._translate_text("No stored workpiece matches the part in front of the camera."),
+            heading=self._translate_text("PAINTING STOPPED"),
+            guidance=self._translate_text(
+                "Check that the part is positioned correctly, then scan again. "
+                "If this is a new part, add it in the workpiece library."
+            ),
+            status=self._translate_text("PAINTING: STOPPED"),
+            actions=(
+                DialogAction("scan_again", self._translate_text("Scan again"), primary=True),
+                DialogAction("open_library", self._translate_text("Open library")),
+                DialogAction("dismiss", self._translate_text("Dismiss"), full_width=True),
+            ),
+        )
+        if action == "scan_again":
+            self.scan_again_requested.emit()
+        elif action == "open_library":
+            self.action_requested.emit("select_workpieces")
 
     def _enqueue_message(self, level: str, title: str, message: str) -> None:
         clean_title = str(title or "").strip()

@@ -42,8 +42,13 @@ class VisionService(IVisionService, IHealthCheckable,IExposureControl):
     def set_raw_mode(self, enabled: bool) -> None:
         self._vision_system.rawMode = enabled
 
-    def set_camera_flips(self, horizontal: bool, vertical: bool) -> None:
-        self._vision_system.frame_grabber.set_flips(horizontal, vertical)
+    def set_camera_orientation(
+        self,
+        horizontal: bool,
+        vertical: bool,
+        rotate_degrees: int = 0,
+    ) -> None:
+        self._vision_system.frame_grabber.set_orientation(horizontal, vertical, rotate_degrees)
 
     def capture_calibration_image(self) -> tuple[bool, str]:
         return self._vision_system.captureCalibrationImage()
@@ -146,10 +151,31 @@ class VisionService(IVisionService, IHealthCheckable,IExposureControl):
         return self._vision_system.detectArucoMarkers(image=image)
 
     def get_camera_width(self) -> int:
-        return self._vision_system.camera_settings.get_camera_width()
+        if self._primary_frame_is_transposed():
+            return int(self._vision_system.camera_settings.get_camera_height())
+        return int(self._vision_system.camera_settings.get_camera_width())
 
     def get_camera_height(self) -> int:
-        return self._vision_system.camera_settings.get_camera_height()
+        if self._primary_frame_is_transposed():
+            return int(self._vision_system.camera_settings.get_camera_width())
+        return int(self._vision_system.camera_settings.get_camera_height())
+
+    def _primary_frame_is_transposed(self) -> bool:
+        """True when the applied capture rotation swapped the frame dimensions.
+
+        The sensor resolution in ``camera_settings`` is unaffected by rotation,
+        so every pixel-to-millimetre conversion has to be told about the
+        transpose explicitly or it will read the wrong image centre.
+        """
+        grabber = getattr(self._vision_system, "frame_grabber", None)
+        checker = getattr(grabber, "is_transposed", None)
+        if not callable(checker):
+            return False
+        try:
+            return bool(checker())
+        except Exception:
+            self._logger.warning("Could not read the capture orientation", exc_info=True)
+            return False
 
     def get_chessboard_width(self) -> int:
         return self._vision_system.camera_settings.get_chessboard_width()

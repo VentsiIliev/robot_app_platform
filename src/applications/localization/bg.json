@@ -39,6 +39,17 @@
     "Low latency enabled — {count} port(s)": "Ниската латентност е активирана — {count} порт(а)",
     "Low latency update failed": "Неуспешно задаване на ниска латентност"
   },
+  "SettingsView": {
+    "SETTINGS": "НАСТРОЙКИ",
+    "STEP": "СТЪПКА",
+    "AXIS": "ОС",
+    "MINIMUM": "МИНИМУМ",
+    "MAXIMUM": "МАКСИМУМ",
+    "Save": "Запази",
+    "Discard": "Отхвърли",
+    "All changes saved": "Всички промени са запазени",
+    "Unsaved changes": "Незапазени промени"
+  },
   "RobotJogWidget": {
     "Cartesian": "Декартово",
     "Joint": "Стави",

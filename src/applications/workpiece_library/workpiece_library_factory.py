@@ -5,14 +5,18 @@ from src.applications.base.i_application_view import IApplicationView
 from src.applications.workpiece_library.controller.workpiece_library_controller import WorkpieceLibraryController
 from src.applications.workpiece_library.model.workpiece_library_model import WorkpieceLibraryModel
 from src.applications.workpiece_library.service.i_workpiece_library_service import IWorkpieceLibraryService
+from src.applications.workpiece_library.service.i_workpiece_selection import IWorkpieceSelection
 from src.applications.workpiece_library.view.workpiece_library_view import WorkpieceLibraryView
 from src.engine.core.i_messaging_service import IMessagingService
 
 
 class WorkpieceLibraryFactory(ApplicationFactory):
 
+    def __init__(self):
+        self._selection: IWorkpieceSelection | None = None
+
     def _create_model(self, service: IWorkpieceLibraryService) -> WorkpieceLibraryModel:
-        return WorkpieceLibraryModel(service)
+        return WorkpieceLibraryModel(service, self._selection)
 
     def _create_view(self) -> IApplicationView:
         raise NotImplementedError("Use build() — view requires schema from model")
@@ -22,9 +26,14 @@ class WorkpieceLibraryFactory(ApplicationFactory):
         assert isinstance(view, WorkpieceLibraryView)
         return WorkpieceLibraryController(model, view)
 
-    def build(self, service: IWorkpieceLibraryService, messaging: IMessagingService = None, jog_service=None):
+    def build(self, service: IWorkpieceLibraryService, messaging: IMessagingService = None, jog_service=None,
+              selection: IWorkpieceSelection | None = None):
+        self._selection = selection
         model      = self._create_model(service)
-        view       = WorkpieceLibraryView(schema=model.schema)
+        view       = WorkpieceLibraryView(
+            schema=model.schema, selection_enabled=selection is not None,
+            show_thumbnails=selection is not None,
+        )
         controller = WorkpieceLibraryController(model, view, messaging)
         return self._finalize_build(
             model=model,

@@ -124,6 +124,23 @@ class PaintAdjustmentService(IPaintAdjustmentService):
         value = device.move_degrees(signed_degrees)
         return PaintHeadCommandResult(value, register, wrote=True, relative=True)
 
+    def adjust_paint_by_register_units(self, direction: str, units: int) -> PaintHeadCommandResult:
+        if direction not in {"more", "less"}:
+            raise ValueError("Paint adjustment direction must be 'more' or 'less'")
+        if isinstance(units, bool) or not isinstance(units, int) or units < 1:
+            raise ValueError("Paint adjustment register units must be an integer >= 1")
+        device, more_sign, enabled, register = self._build_device()
+        direction_sign = more_sign * (1 if direction == "more" else -1)
+        signed_delta = units * direction_sign
+        if not enabled:
+            self._logger.info(
+                "Paint head disabled: dry run register %d relative delta %+d (no read/write)",
+                register, signed_delta,
+            )
+            return PaintHeadCommandResult(signed_delta, register, wrote=False, relative=True)
+        value = device.move_register_delta(signed_delta)
+        return PaintHeadCommandResult(value, register, wrote=True, relative=True)
+
     def go_to_setting(self, setting: int) -> PaintHeadCommandResult:
         if isinstance(setting, bool) or not isinstance(setting, int) or setting < 1:
             raise ValueError("Paint-head setting must be a positive integer")
@@ -136,6 +153,18 @@ class PaintAdjustmentService(IPaintAdjustmentService):
             )
             return PaintHeadCommandResult(target, register, wrote=False, relative=False)
         value = device.go_to_setting(setting)
+        return PaintHeadCommandResult(value, register, wrote=True, relative=False)
+
+    def go_to_position(self, position: int) -> PaintHeadCommandResult:
+        device, _more_sign, enabled, register = self._build_device()
+        if not enabled:
+            target = device.validate_position(position)
+            self._logger.info(
+                "Paint head disabled: dry run register %d absolute value %d (no write)",
+                register, target,
+            )
+            return PaintHeadCommandResult(target, register, wrote=False, relative=False)
+        value = device.go_to_position(position)
         return PaintHeadCommandResult(value, register, wrote=True, relative=False)
 
     def _build_device(self) -> tuple[PaintHeadDevice, int, bool, int]:

@@ -43,18 +43,61 @@ class ICameraSettingsService(ABC):
     def save_settings(self, settings: CameraSettingsData) -> None: ...
     def set_raw_mode(self, enabled: bool) -> None: ...
     def update_settings(self, settings: dict) -> tuple[bool, str]: ...
+    def save_work_area(self, area_type, points) -> tuple[bool, str]: ...
+    def get_work_area(self, area_type) -> tuple[bool, str, List[Tuple[float, float]]]: ...
+    def load_camera_devices(self) -> CameraDevicesState: ...
+    def save_camera_devices(self, state: CameraDevicesState) -> tuple[bool, str]: ...
 ```
+
+---
+
+## Per-camera orientation (`rotate_degrees`, flips)
+
+Each camera device role (primary, auxiliary) carries its own orientation in the
+`hardware/cameras.json` device file, edited from the Devices app:
+
+| Field | Values | Notes |
+|-------|--------|-------|
+| `rotate_degrees` | `0`, `90`, `180`, `270` | Only multiples of 90 are accepted. Stored input is normalized into that set, so `360` → `0` and `-90` → `270` |
+| `flip_horizontal` | bool | Applied after rotation |
+| `flip_vertical` | bool | Applied after rotation |
+
+The app-layer value object is a frozen `CameraOrientation` dataclass
+(`i_camera_settings_service.py`); `CameraDevicesState` exposes it per role via
+`orientation`, and `transposes_frame` reports whether the role swaps width/height.
+
+Transform order is **rotate first, then flip**, implemented once in
+`src/engine/vision/frame_orientation.py` (`VALID_ROTATION_DEGREES`,
+`normalize_rotation`, `is_transposing`, `apply_orientation`).
+
+Saving is applied live to every role through
+`IVisionService.set_camera_orientation`, which reaches both capture paths:
+- primary — `FrameGrabber`
+- auxiliary — `CameraStreamPublisher`
+
+Invalid values are rejected with
+`"Camera rotation must be one of 0, 90, 180 or 270"`; `bool` is not accepted as an integer.
+
+> **Calibration caveat:** `rotate_degrees` of `90` or `270` transposes the frame, so
+> `VisionService.get_camera_width` / `get_camera_height` return swapped values. The stored
+> camera intrinsics (`cameraMatrix`, `cameraDist`) and the undistort maps are **not**
+> transformed to match, and work-area normalization still uses raw sensor dimensions.
+> Re-run calibration after applying a transposing rotation. The Devices view shows a
+> hint when any role uses `90` or `270`.
 
 ---
 
 ## `CameraSettingsApplicationService`
 
-The live implementation. Constructed with `settings_service` and `vision_service`:
+The live implementation. Constructed with `settings_service`, `vision_service`, an optional
+`work_area_service`, an optional `camera_devices_settings_key`, and an optional
+`camera_orientation_setter` callback:
 
 - `load_settings()` — reads from `SettingsService` via `CommonSettingsID.VISION_CAMERA_SETTINGS`; falls back to defaults if not found
 - `save_settings()` — persists via `SettingsService`
 - `update_settings(dict)` — delegates to `vision_service.updateSettings(dict)`
 - `set_raw_mode(bool)` — forwards directly to `vision_service.rawMode`
+- `save_camera_devices()` — validates and normalizes every role, persists the device file, then pushes each role live through `camera_orientation_setter`
 
 ---
 

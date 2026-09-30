@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from src.engine.repositories.interfaces.settings_serializer import ISettingsSerializer
+from src.engine.vision.frame_orientation import normalize_rotation
 
 
 CameraDevice = int | str
@@ -17,6 +18,7 @@ class CameraDeviceSpec:
     required: bool = False
     flip_horizontal: bool = False
     flip_vertical: bool = False
+    rotate_degrees: int = 0
 
 
 @dataclass
@@ -49,6 +51,7 @@ class CameraDevicesConfigSerializer(ISettingsSerializer[CameraDevicesConfig]):
                     "required": spec.required,
                     "flip_horizontal": spec.flip_horizontal,
                     "flip_vertical": spec.flip_vertical,
+                    "rotate_degrees": spec.rotate_degrees,
                 }
                 for role, spec in settings.cameras.items()
             }
@@ -88,6 +91,9 @@ class CameraDevicesConfigSerializer(ISettingsSerializer[CameraDevicesConfig]):
                 if not isinstance(raw_spec.get(flag, False), bool):
                     raise ValueError(f"Camera role '{role}' {flag} must be true or false")
 
+            # Raises a role-less message on purpose: the allowed set is global.
+            rotate_degrees = normalize_rotation(raw_spec.get("rotate_degrees", 0))
+
             cameras[role] = CameraDeviceSpec(
                 device=device,
                 width=width,
@@ -95,5 +101,6 @@ class CameraDevicesConfigSerializer(ISettingsSerializer[CameraDevicesConfig]):
                 required=bool(raw_spec.get("required", False)),
                 flip_horizontal=raw_spec.get("flip_horizontal", False),
                 flip_vertical=raw_spec.get("flip_vertical", False),
+                rotate_degrees=rotate_degrees,
             )
         return CameraDevicesConfig(cameras=cameras)

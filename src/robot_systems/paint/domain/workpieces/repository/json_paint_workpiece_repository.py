@@ -65,6 +65,9 @@ class JsonPaintWorkpieceRepository:
                         {
                             "id": storage_id,
                             "name": raw.get("name", ""),
+                            "workpieceId": raw.get("workpieceId", ""),
+                            "description": raw.get("description", ""),
+                            "height_mm": raw.get("height_mm", ""),
                             "date": date_dir,
                             "path": json_path,
                             "thumbnail_path": thumb_path if os.path.exists(thumb_path) else None,

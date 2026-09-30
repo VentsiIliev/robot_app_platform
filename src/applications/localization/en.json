@@ -39,6 +39,17 @@
     "Low latency enabled — {count} port(s)": "Low latency enabled — {count} port(s)",
     "Low latency update failed": "Low latency update failed"
   },
+  "SettingsView": {
+    "SETTINGS": "SETTINGS",
+    "STEP": "STEP",
+    "AXIS": "AXIS",
+    "MINIMUM": "MINIMUM",
+    "MAXIMUM": "MAXIMUM",
+    "Save": "Save",
+    "Discard": "Discard",
+    "All changes saved": "All changes saved",
+    "Unsaved changes": "Unsaved changes"
+  },
   "RobotJogWidget": {
     "Cartesian": "Cartesian",
     "Joint": "Joint",

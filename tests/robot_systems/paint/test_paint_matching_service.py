@@ -2,6 +2,7 @@ import unittest
 import json
 import tempfile
 from pathlib import Path
+from unittest.mock import Mock
 
 import numpy as np
 
@@ -10,6 +11,7 @@ from src.robot_systems.paint.processes.paint.plan import pick_largest_contour
 from src.robot_systems.paint.processes.paint.match.workpiece_matching_service import (
     PaintWorkpieceMatchingService,
 )
+from src.robot_systems.paint.domain.workpieces.matching_selection import PaintMatchingSelection
 
 
 def _square(size: float):
@@ -44,6 +46,47 @@ class TestPickLargestContour(unittest.TestCase):
 
 
 class TestPaintWorkpieceMatchingService(unittest.TestCase):
+
+    def test_selection_persists_and_prevents_full_library_scan(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            path = str(Path(tmp_dir) / "paint" / "matching_selection.json")
+            selection = PaintMatchingSelection(path)
+            selection.set_selected_ids(("stored-2", "stored-1"))
+            self.assertEqual(
+                PaintMatchingSelection(path).get_selected_ids(),
+                ("stored-2", "stored-1"),
+            )
+            list_all = Mock(side_effect=AssertionError("full library scan"))
+            load_raw = Mock(return_value=_raw_workpiece())
+            seen = []
+            service = PaintWorkpieceMatchingService(
+                list_saved_workpieces_fn=list_all,
+                load_saved_workpiece_fn=load_raw,
+                selected_workpiece_ids_fn=selection.get_selected_ids,
+                run_matching_fn=lambda candidates, contours: (
+                    seen.extend(candidate.storage_id for candidate in candidates)
+                    or ({"workpieces": []}, 0, [], [])
+                ),
+            )
+
+            service.match_saved_workpieces(_square(1.0))
+
+            self.assertEqual(seen, ["stored-2", "stored-1"])
+            list_all.assert_not_called()
+            self.assertEqual(load_raw.call_count, 2)
+
+            selection.set_selected_ids(None)
+            self.assertIsNone(PaintMatchingSelection(path).get_selected_ids())
+
+            selection.set_selected_ids(())
+            self.assertEqual(PaintMatchingSelection(path).get_selected_ids(), ())
+            load_raw.reset_mock()
+            seen.clear()
+            service.match_saved_workpieces(_square(1.0))
+            list_all.assert_not_called()
+            load_raw.assert_not_called()
+            self.assertEqual(seen, [])
+
 
     def test_matcher_prefers_preserved_camera_contour_over_editable_contour(self):
         raw = _raw_workpiece()

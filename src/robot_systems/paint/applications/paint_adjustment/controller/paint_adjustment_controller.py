@@ -67,9 +67,19 @@ class PaintAdjustmentController(IApplicationController):
         self._settings_timer.setInterval(250)
         self._settings_timer.timeout.connect(self._refresh_preset_configuration)
         self._settings_timer.timeout.connect(self._refresh_adjustment_status)
+        self._hold_timer = QTimer(view)
+        self._hold_timer.timeout.connect(self._repeat_held_adjustment)
+        self._held_direction: str | None = None
+        self._held_units = 0
+        self._drag_active = False
+        self._drag_target: int | None = None
+        self._last_drag_sent: int | None = None
         self._view.more_paint_requested.connect(self._on_more_paint)
         self._view.less_paint_requested.connect(self._on_less_paint)
-        self._view.setting_requested.connect(self._on_setting)
+        self._view.adjustment_released.connect(self._stop_held_adjustment)
+        self._view.dial_drag_started.connect(self._on_dial_drag_started)
+        self._view.position_dragged.connect(self._on_drag_position)
+        self._view.position_requested.connect(self._on_position)
         self._view.refresh_position_requested.connect(self._request_position_read)
         self._view.single_cycle_requested.connect(self._request_single_cycle)
         self._view.next_section_requested.connect(self._request_next_section)
@@ -94,6 +104,9 @@ class PaintAdjustmentController(IApplicationController):
         self._stopped = True
         self._timer.stop()
         self._settings_timer.stop()
+        self._stop_held_adjustment()
+        self._drag_active = False
+        self._drag_target = None
         self._executor.shutdown(wait=False, cancel_futures=True)
         if self._topic is not None:
             self._messaging.unsubscribe(self._topic, self._on_frame)
@@ -178,22 +191,25 @@ class PaintAdjustmentController(IApplicationController):
         except (KeyError, TypeError, ValueError):
             config = None
         available = config is not None
+        if not available:
+            self._stop_held_adjustment()
         if available != self._configuration_available:
             self._view.set_paint_head_available(available)
             self._configuration_available = available
         if config != self._dial_config:
+            self._drag_active = False
+            self._drag_target = None
+            self._last_drag_sent = None
             should_read = (
                 config is not None and config.enabled
                 and self._dial_config is not None and not self._dial_config.enabled
             )
             if config is None:
                 self._view.set_dial_config(0, 1, 0, False)
-                self._view.set_preset_count(0)
             else:
                 self._view.set_dial_config(
                     config.minimum, config.spacing, config.count, config.enabled
                 )
-                self._view.set_preset_count(config.count)
             self._dial_config = config
             if should_read:
                 self._request_position_read()
@@ -244,20 +260,73 @@ class PaintAdjustmentController(IApplicationController):
         image = QImage(rgb.data, width, height, channels * width, QImage.Format.Format_RGB888)
         self._view.set_frame(QPixmap.fromImage(image))
 
-    def _on_more_paint(self, degrees: int) -> None:
-        self._request_command("more", self._model.adjust_paint, "more", degrees)
+    def _on_more_paint(self, units: int) -> None:
+        self._start_held_adjustment("more", units)
 
-    def _on_less_paint(self, degrees: int) -> None:
-        self._request_command("less", self._model.adjust_paint, "less", degrees)
+    def _on_less_paint(self, units: int) -> None:
+        self._start_held_adjustment("less", units)
 
-    def _on_setting(self, setting: int) -> None:
-        self._request_command(f"setting {setting}", self._model.go_to_setting, setting)
+    def _start_held_adjustment(self, direction: str, units: int) -> None:
+        if self._stopped or self._action_pending or self._dial_config is None:
+            return
+        self._held_direction = direction
+        self._held_units = units
+        self._hold_timer.start(400)
+        self._request_command(direction, self._model.adjust_paint_by_register_units, direction, units)
+
+    def _repeat_held_adjustment(self) -> None:
+        if self._held_direction is None:
+            return
+        if self._hold_timer.interval() != 150:
+            self._hold_timer.setInterval(150)
+        if not self._action_pending:
+            direction = self._held_direction
+            self._request_command(
+                direction, self._model.adjust_paint_by_register_units,
+                direction, self._held_units,
+            )
+
+    def _stop_held_adjustment(self) -> None:
+        self._hold_timer.stop()
+        self._held_direction = None
+        self._held_units = 0
+        if self._action_pending:
+            self._view.set_action_pending()
+
+    def _on_position(self, position: int) -> None:
+        self._drag_active = False
+        self._drag_target = position
+        self._send_latest_drag_target()
+
+    def _on_dial_drag_started(self) -> None:
+        self._drag_active = True
+        self._drag_target = None
+        self._last_drag_sent = None
+
+    def _on_drag_position(self, position: int) -> None:
+        if self._stopped or self._dial_config is None:
+            return
+        self._drag_active = True
+        self._drag_target = position
+        self._send_latest_drag_target()
+
+    def _send_latest_drag_target(self) -> None:
+        if self._stopped or self._action_pending or self._drag_target is None:
+            return
+        position = self._drag_target
+        self._drag_target = None
+        if position == self._last_drag_sent:
+            return
+        self._last_drag_sent = position
+        self._request_command(f"position {position}", self._model.go_to_position, position)
 
     def _request_command(self, label: str, command, *args) -> None:
         if self._stopped or self._action_pending:
             return
         self._action_pending = True
-        self._view.set_action_pending()
+        self._view.set_action_pending(
+            self._held_direction, keep_dial_enabled=self._drag_active
+        )
         self._logger.info("Paint-head command requested: %s, args=%s", label, args)
         future = self._executor.submit(command, *args)
         future.add_done_callback(partial(self._emit_adjustment_result, label))
@@ -285,5 +354,9 @@ class PaintAdjustmentController(IApplicationController):
             self._view.set_action_result(
                 value.value, value.register, wrote=value.wrote, relative=value.relative
             )
+            self._send_latest_drag_target()
         else:
+            self._stop_held_adjustment()
+            self._drag_active = False
+            self._drag_target = None
             self._view.set_action_error(error)

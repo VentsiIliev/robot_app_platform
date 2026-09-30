@@ -40,6 +40,7 @@ class _Worker(QObject):
 class _DashboardNoticeBridge(QObject):
     info_ready = pyqtSignal(str, str)
     warning_ready = pyqtSignal(str, str)
+    unknown_workpiece_ready = pyqtSignal(str, str)
 
 
 class PaintDashboardController(
@@ -92,11 +93,16 @@ class PaintDashboardController(
         self._dashboard_notice_bridge = _DashboardNoticeBridge()
         self._dashboard_notice_bridge.info_ready.connect(self._view.show_info)
         self._dashboard_notice_bridge.warning_ready.connect(self._view.show_warning_dialog)
+        self._dashboard_notice_bridge.unknown_workpiece_ready.connect(
+            self._view.show_unknown_workpiece_dialog
+        )
         self._view.start_requested.connect(self._on_start)
+        self._view.scan_again_requested.connect(self._on_scan_again)
         self._view.stop_requested.connect(self._on_stop)
         self._view.pause_requested.connect(self._on_pause)
         self._view.reset_requested.connect(self._on_reset)
         self._view.action_requested.connect(self._on_action)
+        self._view.dashboard_shown.connect(self._refresh_workpiece_selection_indicator)
         self._view.language_changed.connect(self._retranslate)
         self._view.cable_relief_requested.connect(self._on_cable_relief)
         self._view.auxiliary_toggle_requested.connect(self._on_auxiliary_toggle)
@@ -207,6 +213,15 @@ class PaintDashboardController(
 
     def _on_reset(self) -> None:
         self._view.apply_dashboard_state(self._model.reset_errors())
+
+    def _on_scan_again(self) -> None:
+        if self._model.retry_unmatched_workpiece():
+            self._view.apply_dashboard_state(self._model.load())
+        else:
+            self._view.show_warning_dialog(
+                self._t("Scan again unavailable"),
+                self._t("The workpiece is no longer ready for recapture."),
+            )
 
     def _on_unmatched_paint_settings(
         self,
@@ -347,10 +362,14 @@ class PaintDashboardController(
         self._subscribe(PaintDashboardMessageTopics.MESSAGE, self._on_dashboard_message_raw)
 
     def _on_dashboard_message_raw(self, event: object) -> None:
-        title = self._t(str(getattr(event, "title", "") or ""))
+        source_title = str(getattr(event, "title", "") or "")
+        title = self._t(source_title)
         message = self._t(str(getattr(event, "message", "") or ""))
         if str(getattr(event, "level", "info")).lower() == "warning":
-            self._dashboard_notice_bridge.warning_ready.emit(title, message)
+            if source_title == "Unknown Workpiece":
+                self._dashboard_notice_bridge.unknown_workpiece_ready.emit(title, message)
+            else:
+                self._dashboard_notice_bridge.warning_ready.emit(title, message)
         else:
             self._dashboard_notice_bridge.info_ready.emit(title, message)
 
@@ -475,12 +494,23 @@ class PaintDashboardController(
             return
         try:
             self._view.apply_dashboard_state(self._model.load())
+            self._refresh_workpiece_selection_indicator()
             if self._model.get_drying_mode() == "manual":
                 self._refresh_plate_layout()
         except RuntimeError:
             self.stop()
 
+    def _refresh_workpiece_selection_indicator(self) -> None:
+        settings = self._model.get_unmatched_paint_settings()
+        self._view.set_workpiece_selection_indicator(
+            bool(settings.get("matching_enabled", False)),
+            settings.get("selected_workpiece_count"),
+        )
+
     def _on_action(self, action_id: str) -> None:
+        if action_id == "select_workpieces":
+            self._broker.publish(ShellTopics.NAVIGATE, {"app": "WorkpieceLibrary"})
+            return
         if action_id != "debug_contour_transform":
             return
         self._view.set_action_enabled("debug_contour_transform", False)

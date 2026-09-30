@@ -7,6 +7,9 @@ from src.applications.base.broker_subscription_mixin import BrokerSubscriptionMi
 from src.applications.base.i_application_controller import IApplicationController
 from src.applications.camera_settings.mapper import CameraSettingsMapper
 from src.applications.camera_settings.model.camera_settings_model import CameraSettingsModel
+from src.applications.camera_settings.service.i_camera_settings_service import (
+    CameraOrientation,
+)
 from src.applications.camera_settings.view.camera_settings_view import CameraSettingsView
 from src.engine.core.i_messaging_service import IMessagingService
 from src.shared_contracts.events.vision_events import VisionTopics
@@ -125,10 +128,10 @@ class CameraSettingsController(IApplicationController, BrokerSubscriptionMixin, 
     def _save_camera_devices(
         self,
         assignments: dict[str, str],
-        flips: dict[str, tuple[bool, bool]],
+        orientation: dict[str, CameraOrientation],
     ) -> None:
         self._run_in_thread(
-            fn=lambda: self._model.save_camera_devices(assignments, flips),
+            fn=lambda: self._model.save_camera_devices(assignments, orientation),
             on_done=self._on_camera_devices_saved,
             on_error=self._on_camera_devices_error,
         )

@@ -38,6 +38,7 @@ class RobotSettingsController(IApplicationController, BackgroundWorker):
         self._config_bridge.changed.connect(self._on_robot_config_changed)
 
         self._view.save_requested.connect(self._on_save)
+        self._view.discard_requested.connect(self._on_discard)
         self._view.remove_group_requested.connect(self._on_remove_group)
         self._view.set_current_requested.connect(self._on_set_current)
         self._view.move_to_requested.connect(self._on_move_to)
@@ -65,6 +66,10 @@ class RobotSettingsController(IApplicationController, BackgroundWorker):
             self._model.get_expected_movement_groups(),
             definitions=self._model.get_movement_group_definitions(),
         )
+        self._view.mark_saved()
+
+    def _on_discard(self) -> None:
+        self.load()
 
     def stop(self) -> None:
         self._stop_threads()
@@ -92,6 +97,7 @@ class RobotSettingsController(IApplicationController, BackgroundWorker):
         try:
             self._view.update_robot_config(self._model.reload_config())
             self._view.load_targeting_definitions(self._model.reload_targeting_definitions())
+            self._view.mark_saved()
             self._logger.debug("Robot Settings UI refreshed after external config change")
         except Exception:
             self._logger.exception("Failed to refresh Robot Settings after external config change")
@@ -103,6 +109,7 @@ class RobotSettingsController(IApplicationController, BackgroundWorker):
             targeting_definitions = self._view.get_targeting_definitions()
             self._logger.debug("Saving %d fields, %d movement groups", len(flat), len(movement_groups))
             self._model.save(flat, movement_groups, targeting_definitions)
+            self._view.mark_saved()
             self._publish_targeting_changed(targeting_definitions)
             self._logger.info("Robot settings saved")
         except Exception:
@@ -183,6 +190,7 @@ class RobotSettingsController(IApplicationController, BackgroundWorker):
                 self._view.get_movement_groups(),
                 self._view.get_targeting_definitions(),
             )
+            self._view.mark_saved()
             self._publish_targeting_changed(self._view.get_targeting_definitions())
             self._logger.debug("Auto-saved before motion")
         except Exception:

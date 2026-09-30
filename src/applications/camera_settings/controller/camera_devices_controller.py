@@ -7,6 +7,9 @@ from PyQt6.QtCore import QTimer
 from src.applications.base.background_worker import BackgroundWorker
 from src.applications.base.i_application_controller import IApplicationController
 from src.applications.camera_settings.model.camera_settings_model import CameraSettingsModel
+from src.applications.camera_settings.service.i_camera_settings_service import (
+    CameraOrientation,
+)
 from src.applications.camera_settings.view.camera_devices_widget import CameraDevicesWidget
 from src.engine.core.i_messaging_service import IMessagingService
 from src.shared_contracts.events.vision_events import CameraTopics
@@ -66,10 +69,10 @@ class CameraDevicesController(
     def _save(
         self,
         assignments: dict[str, str],
-        flips: dict[str, tuple[bool, bool]],
+        orientation: dict[str, CameraOrientation],
     ) -> None:
         self._run_in_thread(
-            fn=lambda: self._model.save_camera_devices(assignments, flips),
+            fn=lambda: self._model.save_camera_devices(assignments, orientation),
             on_done=self._on_saved,
             on_error=self._on_error,
         )

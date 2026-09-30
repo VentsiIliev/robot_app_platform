@@ -74,5 +74,13 @@ class IPaintAdjustmentService(ABC):
         """Move relative whole degrees, or calculate a dry-run delta."""
 
     @abstractmethod
+    def adjust_paint_by_register_units(self, direction: str, units: int) -> PaintHeadCommandResult:
+        """Move by signed register units, or calculate a dry-run delta."""
+
+    @abstractmethod
     def go_to_setting(self, setting: int) -> PaintHeadCommandResult:
         """Write an absolute preset, or calculate its dry-run register value."""
+
+    @abstractmethod
+    def go_to_position(self, position: int) -> PaintHeadCommandResult:
+        """Write any calibrated register position, or preview it without I/O."""

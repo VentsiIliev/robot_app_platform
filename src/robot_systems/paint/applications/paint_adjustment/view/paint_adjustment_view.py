@@ -1,17 +1,61 @@
 from PyQt6.QtCore import QEvent, Qt, pyqtSignal
-from PyQt6.QtGui import QPixmap
-from PyQt6.QtWidgets import QButtonGroup, QGridLayout, QHBoxLayout, QLabel, QPushButton, QVBoxLayout
+from PyQt6.QtGui import QColor, QPainter, QPen, QPixmap
+from PyQt6.QtWidgets import (
+    QButtonGroup, QFrame, QGridLayout, QHBoxLayout, QLabel, QPushButton,
+    QSizePolicy, QVBoxLayout,
+)
 
 from pl_gui.settings.settings_view.styles import (
     ACTION_BTN_STYLE,
     BG_COLOR,
     BORDER,
+    ERROR_COLOR,
     GHOST_BTN_STYLE,
     LABEL_STYLE,
+    PRIMARY,
+    PRIMARY_LIGHT,
+    TERTIARY_TEXT,
+    TEXT_COLOR,
+    TEXT_ON_PRIMARY,
+    TEXT_PRIMARY,
 )
 from src.applications.base.i_application_view import IApplicationView
 from src.applications.base.widgets.custom_virtual_keyboard import KeyboardDoubleSpinBox, KeyboardSpinBox
 from .paint_head_dial import PaintHeadDial
+
+
+class _CameraPreview(QLabel):
+    """Camera image with an inspection guide while no frame is available."""
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Expanding)
+        self.setMinimumSize(320, 240)
+        self.setStyleSheet(f"background: {TEXT_PRIMARY}; border-radius: 12px;")
+        self._empty_title = ""
+        self._empty_detail = ""
+
+    def set_empty_text(self, title: str, detail: str) -> None:
+        self._empty_title = title
+        self._empty_detail = detail
+        self.update()
+
+    def paintEvent(self, event) -> None:
+        super().paintEvent(event)
+        if self.pixmap() and not self.pixmap().isNull():
+            return
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        guide = QPen(QColor(TERTIARY_TEXT), 1, Qt.PenStyle.DashLine)
+        painter.setPen(guide)
+        painter.drawLine(self.width() // 2, 0, self.width() // 2, self.height())
+        painter.drawLine(0, self.height() // 2, self.width(), self.height() // 2)
+        painter.setPen(QColor(TEXT_ON_PRIMARY))
+        center = self.rect().adjusted(12, -22, -12, 0)
+        painter.drawText(center, Qt.AlignmentFlag.AlignCenter, self._empty_title)
+        painter.setPen(QColor(BORDER))
+        painter.drawText(center.translated(0, 22), Qt.AlignmentFlag.AlignCenter, self._empty_detail)
 
 
 class PaintAdjustmentView(IApplicationView):
@@ -19,7 +63,10 @@ class PaintAdjustmentView(IApplicationView):
 
     more_paint_requested = pyqtSignal(int)
     less_paint_requested = pyqtSignal(int)
-    setting_requested = pyqtSignal(int)
+    adjustment_released = pyqtSignal()
+    dial_drag_started = pyqtSignal()
+    position_dragged = pyqtSignal(int)
+    position_requested = pyqtSignal(int)
     refresh_position_requested = pyqtSignal()
     single_cycle_requested = pyqtSignal(float, float, float)
     next_section_requested = pyqtSignal(float, float, float)
@@ -29,7 +76,6 @@ class PaintAdjustmentView(IApplicationView):
         self._frame: QPixmap | None = None
         self._action_state = "unavailable"
         self._action_value: int | None = None
-        self._action_register: int | None = None
         self._action_error = ""
         self._position_error = ""
         self._position_pending = False
@@ -43,148 +89,210 @@ class PaintAdjustmentView(IApplicationView):
     def setup_ui(self) -> None:
         self.setStyleSheet(f"background-color: {BG_COLOR};")
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(12)
 
-        self._title = QLabel()
-        self._title.setStyleSheet(LABEL_STYLE)
-        layout.addWidget(self._title)
+        top = QHBoxLayout()
+        top.setSpacing(12)
+        camera_card = QFrame()
+        camera_card.setObjectName("cameraCard")
+        camera_card.setStyleSheet(
+            f"QFrame#cameraCard {{ background: {TEXT_PRIMARY}; border-radius: 12px; }}"
+        )
+        camera_layout = QGridLayout(camera_card)
+        camera_layout.setContentsMargins(0, 0, 0, 0)
+        self._preview = _CameraPreview()
+        camera_layout.addWidget(self._preview, 0, 0)
+        self._status = QLabel()
+        self._status.setStyleSheet(
+            f"color: {TEXT_ON_PRIMARY}; background: {TEXT_COLOR}; border-radius: 14px;"
+            "padding: 6px 12px; font-weight: bold;"
+        )
+        camera_layout.addWidget(
+            self._status, 0, 0,
+            Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft,
+        )
+        top.addWidget(camera_card, 1)
 
-        self._preview = QLabel()
-        self._preview.setMinimumSize(320, 240)
-        self._preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._preview.setStyleSheet(f"border: 1px solid {BORDER};")
-        preview_row = QHBoxLayout()
-        preview_row.addWidget(self._preview, 3)
-        dial_column = QVBoxLayout()
+        sidebar = QVBoxLayout()
+        sidebar.setSpacing(12)
+        position_card, position_layout = self._card()
         self._dial_title = QLabel()
         self._dial_title.setStyleSheet(LABEL_STYLE)
-        dial_column.addWidget(self._dial_title)
+        position_layout.addWidget(self._dial_title)
         self._dial = PaintHeadDial()
-        dial_column.addWidget(self._dial, 1)
+        self._dial.setEnabled(False)
+        self._dial.drag_started.connect(self._on_dial_drag_started)
+        self._dial.position_dragged.connect(self._on_dial_dragged)
+        self._dial.position_requested.connect(self._on_dial_position)
+        position_layout.addWidget(self._dial, 1)
         self._position_note = QLabel()
         self._position_note.setWordWrap(True)
-        dial_column.addWidget(self._position_note)
+        self._position_note.setStyleSheet(f"color: {TERTIARY_TEXT}; font-size: 9pt;")
+        position_layout.addWidget(self._position_note)
+        position_footer = QHBoxLayout()
+        position_footer.addStretch(1)
         self._read_position_button = QPushButton()
+        self._read_position_button.setMinimumWidth(180)
         self._read_position_button.setStyleSheet(GHOST_BTN_STYLE)
         self._read_position_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self._read_position_button.clicked.connect(self._on_refresh_position)
-        dial_column.addWidget(self._read_position_button)
-        preview_row.addLayout(dial_column, 1)
-        layout.addLayout(preview_row, 1)
+        position_footer.addWidget(self._read_position_button)
+        position_layout.addLayout(position_footer)
+        sidebar.addWidget(position_card, 1)
 
-        controls = QHBoxLayout()
+        paint_card, paint_layout = self._card()
         self._step_label = QLabel()
-        self._step_label.setStyleSheet(LABEL_STYLE)
-        controls.addWidget(self._step_label)
+        self._step_label.setWordWrap(True)
+        self._step_label.setStyleSheet(f"color: {TERTIARY_TEXT}; font-size: 9pt; font-weight: bold;")
         self._step_input = KeyboardSpinBox()
-        self._step_input.setMinimum(1)
-        self._step_input.setMaximum(2_147_483_647)
+        self._step_input.setRange(1, 65535)
         self._step_input.setValue(1)
-        controls.addWidget(self._step_input)
+        self._step_input.setMinimumHeight(38)
+        self._step_input.setFixedWidth(84)
+        step_header = QHBoxLayout()
+        step_header.addWidget(self._step_label, 1)
+        step_header.addWidget(self._step_input)
+        paint_layout.addLayout(step_header)
+        step_row = QHBoxLayout()
+        step_row.setSpacing(6)
+        self._step_group = QButtonGroup(self)
+        self._step_group.setExclusive(False)
+        self._step_buttons = []
+        for units in (1, 2, 3):
+            button = QPushButton(str(units))
+            button.setCheckable(True)
+            button.setCursor(Qt.CursorShape.PointingHandCursor)
+            button.setStyleSheet(self._small_button_style())
+            self._step_group.addButton(button, units)
+            self._step_buttons.append(button)
+            step_row.addWidget(button, 1)
+        self._step_group.idClicked.connect(self._on_step_preset_clicked)
+        self._step_input.valueChanged.connect(self._sync_step_buttons)
+        self._sync_step_buttons(1)
+        paint_layout.addLayout(step_row)
+        controls = QHBoxLayout()
+        controls.setSpacing(8)
         self._less_button = QPushButton()
         self._less_button.setStyleSheet(GHOST_BTN_STYLE)
         self._less_button.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._less_button.clicked.connect(self._on_less_paint)
-        controls.addWidget(self._less_button)
+        self._less_button.pressed.connect(self._on_less_paint)
+        self._less_button.released.connect(self._on_adjustment_released)
+        controls.addWidget(self._less_button, 1)
         self._more_button = QPushButton()
         self._more_button.setStyleSheet(ACTION_BTN_STYLE)
         self._more_button.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._more_button.clicked.connect(self._on_more_paint)
-        controls.addWidget(self._more_button)
-        layout.addLayout(controls)
+        self._more_button.pressed.connect(self._on_more_paint)
+        self._more_button.released.connect(self._on_adjustment_released)
+        controls.addWidget(self._more_button, 1)
+        paint_layout.addLayout(controls)
+        self._action_note = QLabel()
+        self._action_note.setWordWrap(True)
+        self._action_note.setStyleSheet(f"color: {TERTIARY_TEXT}; font-size: 9pt;")
+        paint_layout.addWidget(self._action_note)
+        sidebar.addWidget(paint_card)
+        top.addLayout(sidebar)
+        top.setStretch(0, 3)
+        top.setStretch(1, 1)
+        layout.addLayout(top, 1)
 
-        presets = QVBoxLayout()
-        self._presets_label = QLabel()
-        self._presets_label.setStyleSheet(LABEL_STYLE)
-        presets.addWidget(self._presets_label)
-        self._preset_group = QButtonGroup(self)
-        self._preset_group.idClicked.connect(self._on_preset_clicked)
-        self._preset_buttons: list[QPushButton] = []
-        self._presets_grid = QGridLayout()
-        self._presets_grid.setSpacing(8)
-        presets.addLayout(self._presets_grid)
-        layout.addLayout(presets)
-
+        bottom_card, bottom_layout = self._card()
         adjustment_fields = QHBoxLayout()
-        self._length_label = QLabel()
-        adjustment_fields.addWidget(self._length_label)
-        self._length_input = KeyboardDoubleSpinBox()
-        self._length_input.setRange(0.1, 100.0)
-        self._length_input.setDecimals(1)
-        self._length_input.setValue(10.0)
-        adjustment_fields.addWidget(self._length_input)
-        self._axis_offset_label = QLabel()
-        adjustment_fields.addWidget(self._axis_offset_label)
-        self._axis_offset_input = KeyboardDoubleSpinBox()
-        self._axis_offset_input.setRange(-200.0, 200.0)
-        self._axis_offset_input.setDecimals(1)
-        adjustment_fields.addWidget(self._axis_offset_input)
-        self._perpendicular_offset_label = QLabel()
-        adjustment_fields.addWidget(self._perpendicular_offset_label)
-        self._perpendicular_offset_input = KeyboardDoubleSpinBox()
-        self._perpendicular_offset_input.setRange(-200.0, 200.0)
-        self._perpendicular_offset_input.setDecimals(1)
-        adjustment_fields.addWidget(self._perpendicular_offset_input)
-        layout.addLayout(adjustment_fields)
+        adjustment_fields.setSpacing(12)
+        self._length_label, self._length_input = self._adjustment_field(
+            adjustment_fields, 0.1, 100.0, 10.0
+        )
+        self._axis_offset_label, self._axis_offset_input = self._adjustment_field(
+            adjustment_fields, -200.0, 200.0, 0.0
+        )
+        self._perpendicular_offset_label, self._perpendicular_offset_input = self._adjustment_field(
+            adjustment_fields, -200.0, 200.0, 0.0
+        )
+        bottom_layout.addLayout(adjustment_fields)
 
         cycle_row = QHBoxLayout()
+        cycle_row.setSpacing(10)
         self._cycle_button = QPushButton()
         self._cycle_button.setStyleSheet(ACTION_BTN_STYLE)
         self._cycle_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self._cycle_button.clicked.connect(self._on_single_cycle)
-        cycle_row.addWidget(self._cycle_button)
+        cycle_row.addWidget(self._cycle_button, 1)
         self._next_button = QPushButton()
         self._next_button.setStyleSheet(ACTION_BTN_STYLE)
         self._next_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self._next_button.clicked.connect(self._on_next_section)
-        cycle_row.addWidget(self._next_button)
+        cycle_row.addWidget(self._next_button, 1)
         self._finish_button = QPushButton()
         self._finish_button.setStyleSheet(GHOST_BTN_STYLE)
         self._finish_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self._finish_button.clicked.connect(self._on_finish_dropoff)
-        cycle_row.addWidget(self._finish_button)
+        cycle_row.addWidget(self._finish_button, 1)
         self._cycle_note = QLabel()
         self._cycle_note.setWordWrap(True)
-        cycle_row.addWidget(self._cycle_note, 1)
-        layout.addLayout(cycle_row)
-
-        self._action_note = QLabel()
-        layout.addWidget(self._action_note)
-
-        self._status = QLabel()
-        self._status.setAlignment(Qt.AlignmentFlag.AlignLeft)
-        layout.addWidget(self._status)
+        self._cycle_note.setStyleSheet(f"color: {TERTIARY_TEXT}; font-size: 9pt;")
+        bottom_layout.addLayout(cycle_row)
+        bottom_layout.addWidget(self._cycle_note)
+        layout.addWidget(bottom_card)
         self.retranslateUi()
 
-    def set_preset_count(self, count: int) -> None:
-        """Rebuild only when the live configured count changes."""
-        if len(self._preset_buttons) == count:
-            return
-        for button in self._preset_buttons:
-            self._preset_group.removeButton(button)
-            self._presets_grid.removeWidget(button)
-            button.deleteLater()
-        self._preset_buttons.clear()
-        for setting in range(1, count + 1):
-            button = QPushButton()
-            button.setStyleSheet(GHOST_BTN_STYLE)
-            button.setCursor(Qt.CursorShape.PointingHandCursor)
-            self._preset_group.addButton(button, setting)
-            self._preset_buttons.append(button)
-            self._presets_grid.addWidget(button, (setting - 1) // 6, (setting - 1) % 6)
-            button.setEnabled(self._more_button.isEnabled())
-            button.setText(self.tr("Setting {number}").format(number=setting))
+    @staticmethod
+    def _card() -> tuple[QFrame, QVBoxLayout]:
+        card = QFrame()
+        card.setObjectName("adjustmentCard")
+        card.setStyleSheet(
+            f"QFrame#adjustmentCard {{ background: {TEXT_ON_PRIMARY}; "
+            f"border: 1px solid {BORDER}; border-radius: 12px; }}"
+        )
+        content = QVBoxLayout(card)
+        content.setContentsMargins(12, 12, 12, 12)
+        content.setSpacing(8)
+        return card, content
+
+    @staticmethod
+    def _small_button_style() -> str:
+        return (
+            f"QPushButton {{ background: white; color: {TEXT_COLOR}; border: 1px solid {BORDER};"
+            "border-radius: 8px; min-height: 38px; font-weight: bold; }"
+            f"QPushButton:checked {{ background: {PRIMARY_LIGHT}; color: {PRIMARY};"
+            f"border-color: {PRIMARY}; }}"
+        )
+
+    @staticmethod
+    def _adjustment_field(row, minimum: float, maximum: float, initial: float):
+        column = QVBoxLayout()
+        column.setSpacing(4)
+        label = QLabel()
+        label.setStyleSheet(f"color: {TERTIARY_TEXT}; font-size: 9pt;")
+        column.addWidget(label)
+        field = KeyboardDoubleSpinBox()
+        field.setRange(minimum, maximum)
+        field.setDecimals(1)
+        field.setValue(initial)
+        field.setMinimumHeight(44)
+        column.addWidget(field)
+        row.addLayout(column, 1)
+        return label, field
+
+    def _on_step_preset_clicked(self, units: int) -> None:
+        self._step_input.setValue(units)
+
+    def _sync_step_buttons(self, value: int) -> None:
+        for button in self._step_buttons:
+            button.setChecked(self._step_group.id(button) == value)
 
     def set_frame(self, pixmap: QPixmap) -> None:
         self._frame = pixmap
         self._scale_frame()
-        self._status.setText(self.tr("Live auxiliary camera"))
+        self._set_camera_status(self.tr("Live auxiliary camera"))
 
     def set_waiting_for_camera(self) -> None:
         self._frame = None
         self._preview.clear()
-        self._status.setText(self.tr("Waiting for auxiliary camera…"))
+        self._set_camera_status(self.tr("Waiting for auxiliary camera…"))
+
+    def _set_camera_status(self, message: str) -> None:
+        self._status.setText(message)
+        self._status.setMinimumWidth(self._status.fontMetrics().horizontalAdvance(message) + 32)
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
@@ -206,8 +314,17 @@ class PaintAdjustmentView(IApplicationView):
     def _on_more_paint(self) -> None:
         self.more_paint_requested.emit(self._step_input.value())
 
-    def _on_preset_clicked(self, setting: int) -> None:
-        self.setting_requested.emit(setting)
+    def _on_adjustment_released(self) -> None:
+        self.adjustment_released.emit()
+
+    def _on_dial_position(self, value: int) -> None:
+        self.position_requested.emit(value)
+
+    def _on_dial_dragged(self, value: int) -> None:
+        self.position_dragged.emit(value)
+
+    def _on_dial_drag_started(self) -> None:
+        self.dial_drag_started.emit()
 
     def _on_refresh_position(self) -> None:
         self.refresh_position_requested.emit()
@@ -291,6 +408,8 @@ class PaintAdjustmentView(IApplicationView):
         self._position_error = ""
         self._position_pending = True
         self._read_position_button.setEnabled(False)
+        self._position_note.setStyleSheet(f"color: {TERTIARY_TEXT}; font-size: 9pt;")
+        self._position_note.setToolTip("")
         self._position_note.setText(self.tr("Reading paint-head position…"))
 
     def set_confirmed_position(self, value: int | None) -> None:
@@ -299,26 +418,30 @@ class PaintAdjustmentView(IApplicationView):
         self._position_error = ""
         self._position_pending = False
         self._read_position_button.setEnabled(self._dial_enabled)
+        self._position_note.setStyleSheet(f"color: {TERTIARY_TEXT}; font-size: 9pt;")
+        self._position_note.setToolTip("")
         self._update_position_note()
 
     def set_position_error(self, message: str) -> None:
         self._position_error = message
         self._position_pending = False
         self._read_position_button.setEnabled(self._dial_enabled)
+        self._position_note.setStyleSheet(f"color: {ERROR_COLOR}; font-size: 9pt; font-weight: bold;")
+        self._position_note.setToolTip(message)
         self._update_position_note()
 
     def _update_position_note(self) -> None:
         if self._position_pending:
             text = self.tr("Reading paint-head position…")
         elif self._position_error:
-            text = self.tr("Position read failed: {error}").format(error=self._position_error)
+            text = self.tr("Paint-head communication issue. It may be unplugged or missing.")
         elif self._dial.preview_value is not None:
             text = self.tr("Dry-run preview: {value} (not moved)").format(
-                value=self._dial.preview_value
+                value=self._dial.format_position(self._dial.preview_value)
             )
         elif self._dial.actual_value is not None:
             text = self.tr("Last confirmed position: {value}").format(
-                value=self._dial.actual_value
+                value=self._dial.format_position(self._dial.actual_value)
             )
         elif not self._dial_enabled:
             text = self.tr("Device disabled; position not read")
@@ -327,28 +450,28 @@ class PaintAdjustmentView(IApplicationView):
         self._position_note.setText(text)
 
     def retranslateUi(self) -> None:
-        self._title.setText(self.tr("Paint Adjustment — Auxiliary Camera"))
-        self._step_label.setText(self.tr("Move by (degrees)"))
+        self._preview.set_empty_text(
+            self.tr("No camera image yet"),
+            self.tr("Live view of the painted section appears here"),
+        )
+        self._step_label.setText(self.tr("Adjust paint · register units"))
         self._less_button.setText(self.tr("− Less paint"))
         self._more_button.setText(self.tr("+ More paint"))
-        self._presets_label.setText(self.tr("Go to setting"))
         self._dial_title.setText(self.tr("Paint-head position"))
         self._read_position_button.setText(self.tr("Read position"))
-        self._cycle_button.setText(self.tr("Start paint adjustment"))
+        self._cycle_button.setText(self.tr("Start adjustment"))
         self._next_button.setText(self.tr("Paint next length"))
         self._finish_button.setText(self.tr("Finish / Dropoff"))
         self._length_label.setText(self.tr("Paint length (mm)"))
-        self._axis_offset_label.setText(self.tr("Inspect paint-axis (mm)"))
+        self._axis_offset_label.setText(self.tr("Inspect along paint axis (mm)"))
         self._perpendicular_offset_label.setText(self.tr("Inspect perpendicular (mm)"))
-        for setting, button in enumerate(self._preset_buttons, start=1):
-            button.setText(self.tr("Setting {number}").format(number=setting))
         self._update_action_note()
         self._update_position_note()
         self._update_cycle_note()
         if self._frame is None:
-            self._status.setText(self.tr("Waiting for auxiliary camera…"))
+            self._set_camera_status(self.tr("Waiting for auxiliary camera…"))
         else:
-            self._status.setText(self.tr("Live auxiliary camera"))
+            self._set_camera_status(self.tr("Live auxiliary camera"))
 
     def changeEvent(self, event) -> None:
         if event.type() == QEvent.Type.LanguageChange:
@@ -360,20 +483,24 @@ class PaintAdjustmentView(IApplicationView):
 
     def set_paint_head_available(self, available: bool) -> None:
         self._action_state = "ready" if available else "unavailable"
+        self._dial.setEnabled(available)
         self._step_input.setEnabled(available)
+        for button in self._step_buttons:
+            button.setEnabled(available)
         self._less_button.setEnabled(available)
         self._more_button.setEnabled(available)
-        for button in self._preset_buttons:
-            button.setEnabled(available)
         self._update_action_note()
 
-    def set_action_pending(self) -> None:
+    def set_action_pending(
+        self, held_direction: str | None = None, *, keep_dial_enabled: bool = False
+    ) -> None:
         self._action_state = "pending"
+        self._dial.setEnabled(keep_dial_enabled)
         self._step_input.setEnabled(False)
-        self._less_button.setEnabled(False)
-        self._more_button.setEnabled(False)
-        for button in self._preset_buttons:
+        for button in self._step_buttons:
             button.setEnabled(False)
+        self._less_button.setEnabled(held_direction == "less")
+        self._more_button.setEnabled(held_direction == "more")
         self._update_action_note()
 
     def set_action_result(self, value: int, register: int, *, wrote: bool, relative: bool) -> None:
@@ -382,7 +509,6 @@ class PaintAdjustmentView(IApplicationView):
             "dry_run_relative" if relative else "dry_run_absolute"
         )
         self._action_value = value
-        self._action_register = register
         if wrote:
             self._dial.set_actual(value)
         elif relative:
@@ -395,6 +521,7 @@ class PaintAdjustmentView(IApplicationView):
 
     def set_action_error(self, message: str) -> None:
         self.set_paint_head_available(True)
+        self._dial.cancel_drag()
         self._action_state = "error"
         self._action_error = message
         self._update_action_note()
@@ -405,15 +532,11 @@ class PaintAdjustmentView(IApplicationView):
         elif self._action_state == "pending":
             text = self.tr("Sending paint-head command…")
         elif self._action_state == "success":
-            text = self.tr("Paint-head position: {value}").format(value=self._action_value)
-        elif self._action_state == "dry_run_relative":
-            text = self.tr("Dry run: register {register} delta {value:+d}; no write.").format(
-                register=self._action_register, value=self._action_value
+            text = self.tr("Paint-head position: {value}").format(
+                value=self._dial.format_position(self._action_value)
             )
-        elif self._action_state == "dry_run_absolute":
-            text = self.tr("Dry run: would write {value} to register {register}.").format(
-                value=self._action_value, register=self._action_register
-            )
+        elif self._action_state in {"dry_run_relative", "dry_run_absolute"}:
+            text = self.tr("Dry run: command simulated; no write.")
         elif self._action_state == "error":
             text = self.tr("Paint-head command failed: {error}").format(error=self._action_error)
         else:

@@ -193,6 +193,7 @@ class TestPaintServiceBuildersAndProviders(unittest.TestCase):
             height=1080,
             flip_horizontal=True,
             flip_vertical=False,
+            rotate_degrees=90,
         )
         camera_config = SimpleNamespace(
             get=MagicMock(return_value=primary),
@@ -212,7 +213,7 @@ class TestPaintServiceBuildersAndProviders(unittest.TestCase):
             camera_device="/dev/primary",
             camera_resolution=(1920, 1080),
             allow_camera_fallback=False,
-            camera_flips=(True, False),
+            camera_orientation=(True, False, 90),
         )
 
     def test_build_vacuum_pump_service_uses_modbus_factory(self) -> None:

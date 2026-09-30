@@ -40,6 +40,26 @@ from src.engine.robot.calibration.robot_calibration_process import (
 
 
 class TestPaintDashboardService(unittest.TestCase):
+    def test_dashboard_settings_report_saved_workpiece_selection_count(self) -> None:
+        config_service = MagicMock()
+        config_service.get_snapshot.return_value = PaintProcessConfig(
+            enable_workpiece_matching=True,
+        )
+        selection = MagicMock()
+        selection.get_selected_ids.return_value = ("stored-1", "stored-2")
+        service = PaintDashboardService(
+            MagicMock(process_id="paint"),
+            paint_process_config_service=config_service,
+            matching_selection=selection,
+        )
+
+        settings = service.get_unmatched_paint_settings()
+
+        self.assertTrue(settings["matching_enabled"])
+        self.assertEqual(settings["selected_workpiece_count"], 2)
+        selection.get_selected_ids.return_value = ()
+        self.assertEqual(service.get_unmatched_paint_settings()["selected_workpiece_count"], 0)
+
     def test_auxiliary_state_reads_active_manual_tray_fan_output(self) -> None:
         process = MagicMock(process_id="paint")
         process.state = ProcessState.IDLE

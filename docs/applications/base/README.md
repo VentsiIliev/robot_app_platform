@@ -230,6 +230,38 @@ It also supports simple consecutive deduplication via `dedupe_key`.
 
 ---
 
+### Styled message boxes with optional actions
+
+**File:** `styled_message_box.py`
+
+`show_warning(parent, title, text)` keeps the standard modal `QMessageBox`
+behavior. Callers that need an operator decision can pass `DialogAction` values
+to render a modal `ActionWarningDialog` instead:
+
+```python
+choice = show_warning(
+    view,
+    translated_title,
+    translated_message,
+    heading=translated_heading,
+    guidance=translated_guidance,
+    status=translated_status,
+    actions=(
+        DialogAction("retry", translated_retry, primary=True),
+        DialogAction("dismiss", translated_dismiss, full_width=True),
+    ),
+)
+```
+
+The return value is the selected action key, or `None` if the dialog is closed
+without choosing one. `heading`, `guidance`, and `status` are optional display
+text. `primary` uses the shared filled button style; `full_width` places that
+button on its own row. Translate labels before calling the shared helper, and
+handle the returned key in the owning view/controller. The shared dialog has no
+process or navigation dependencies.
+
+---
+
 ### `NotificationTextResolver`
 
 **File:** `notification_presenter.py`

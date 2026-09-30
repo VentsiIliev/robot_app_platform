@@ -75,6 +75,12 @@ class StubPaintDashboardService(IPaintDashboardService):
     def reset_errors(self) -> None:
         self._state = "idle"
 
+    def retry_unmatched_workpiece(self) -> bool:
+        if self._state != "error":
+            return False
+        self._state = "running"
+        return True
+
     def get_unmatched_paint_settings(self) -> dict:
         return dict(self._unmatched_paint_settings)
 
