@@ -23,6 +23,7 @@ from src.robot_systems.paint.applications.dashboard.service.paint_dashboard_serv
 )
 from src.robot_systems.paint.calibration.coordinator import PaintCalibrationCoordinator
 from src.robot_systems.paint.component_ids import ProcessID
+from src.robot_systems.paint.hardware.paint_head_device import PaintHeadRangeError
 from src.engine.hardware.vacuum_pump.models.vacuum_pump_config import VacuumPumpConfig
 from src.engine.hardware.vacuum_pump.modbus.modbus_vacuum_pump_transport import (
     ModbusVacuumPumpTransport,
@@ -40,6 +41,31 @@ from src.engine.robot.calibration.robot_calibration_process import (
 
 
 class TestPaintDashboardService(unittest.TestCase):
+    def test_paint_head_range_limit_returns_normal_command_failure(self) -> None:
+        adjust = MagicMock(side_effect=PaintHeadRangeError("target outside range"))
+        service = PaintDashboardService(MagicMock(process_id="paint"), paint_head_adjust=adjust)
+
+        result = service.adjust_paint_head("more", 1)
+
+        self.assertFalse(result.success)
+        self.assertEqual(result.message, "Paint head is at its configured limit.")
+
+    def test_paint_head_adjustment_runs_while_process_is_running(self) -> None:
+        process = MagicMock(process_id="paint")
+        process.state = ProcessState.RUNNING
+        adjust = MagicMock(return_value=SimpleNamespace(wrote=True))
+        service = PaintDashboardService(
+            process,
+            paint_head_available=lambda: True,
+            paint_head_adjust=adjust,
+        )
+
+        self.assertTrue(service.is_paint_head_available())
+        self.assertTrue(service.adjust_paint_head("more", 3).success)
+        self.assertTrue(service.adjust_paint_head("less", 2).success)
+        self.assertEqual(adjust.call_args_list, [call("more", 3), call("less", 2)])
+        self.assertEqual(service.adjust_paint_head("more", 0).message, "Invalid paint-head step.")
+
     def test_dashboard_settings_report_saved_workpiece_selection_count(self) -> None:
         config_service = MagicMock()
         config_service.get_snapshot.return_value = PaintProcessConfig(

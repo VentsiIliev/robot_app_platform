@@ -23,7 +23,8 @@ calibration/
 │   ├── calibration_view.py                   ← Composes preview + workflow tabs
 │   ├── calibration_preview_panel.py          ← Camera preview + activity log
 │   ├── calibration_controls_panel.py         ← Composes the workflow tabs
-│   └── calibration_phase_tabs.py             ← Dedicated tab widgets per calibration phase
+│   ├── calibration_phase_tabs.py             ← Dedicated tab widgets per calibration phase
+│   └── compact_settings_group.py             ← Schema-driven compact settings editor
 ├── controller/
 │   └── calibration_controller.py             ← Wires button signals → model methods
 └── calibration_factory.py
@@ -242,24 +243,19 @@ User presses "View Depth Map"
 
 ## Calibration UI Layout
 
-- Left side:
-  - large camera preview
-  - activity log directly below the preview
-  - generated grid overlay, with unreachable precheck points shown in red after "Verify Grid"
-- Right side:
-  - `System`
-  - `Camera`
-  - `Robot`
-  - `Laser`
-  - `Height Mapping`
-
-The `Height Mapping` tab now owns the area/grid definition controls, and each phase tab exposes the settings groups that directly affect that phase.
+- The phase navigation sits above the workspace: System, Camera, Robot, Tool TCP, and WorkObject. Laser and Height Mapping appear when the system's calibration wiring enables them; both remain enabled by default.
+- The left side keeps the live camera preview, overlay controls, calibration status, and expandable activity log together.
+- The right side shows one phase's actions at a time. Long phases scroll independently; short phases do not show an empty scrollbar.
+- Camera, Robot, Laser, and Height Mapping settings open in compact dialogs. The Camera dialog has separate Camera Calibration and Auto Capture tabs. Cancel restores both calibration and auto capture values; Save persists both through their existing model services.
+- The area picker uses the same dialog styling and returns the selected area ID.
+- Numeric inputs use the shared `KeyboardNumberField` for typed values and large −/+ controls. This includes settings, Tool TCP, WorkObject, height-grid dimensions, and automatic capture controls. The Auto Capture and Stop actions stay visible in the Camera sidebar.
 
 Internally, each phase tab is now its own widget class:
 
 - `SystemCalibrationTab`
 - `CameraCalibrationTab`
 - `RobotCalibrationTab`
+- `ToolTcpCalibrationTab`
 - `LaserCalibrationTab`
 - `HeightMappingTab`
 

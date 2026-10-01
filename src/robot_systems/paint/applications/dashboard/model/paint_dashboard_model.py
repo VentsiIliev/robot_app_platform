@@ -70,6 +70,12 @@ class PaintDashboardModel(IApplicationModel):
     def save_acceleration_scale(self, scale_percent: float):
         return self._service.save_acceleration_scale(scale_percent)
 
+    def is_paint_head_available(self) -> bool:
+        return self._service.is_paint_head_available()
+
+    def adjust_paint_head(self, direction: str, units: int):
+        return self._service.adjust_paint_head(direction, units)
+
     def get_auxiliary_states(self) -> dict[str, bool]:
         return self._service.get_auxiliary_states()
 

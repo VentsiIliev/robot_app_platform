@@ -105,6 +105,12 @@ class ModbusActionService(IModbusActionService):
                 check=True,
                 timeout=60,
             )
+        except subprocess.CalledProcessError as exc:
+            if command[0] == "pkexec" and exc.returncode == 126:
+                raise RuntimeError(
+                    "Authorization not granted; USB serial latency unchanged."
+                ) from exc
+            raise RuntimeError(f"Failed to set USB serial latency: {exc}") from exc
         except Exception as exc:
             raise RuntimeError(f"Failed to set USB serial latency: {exc}") from exc
 

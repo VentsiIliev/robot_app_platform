@@ -105,15 +105,14 @@ QWidget#settingsFooter {{
 }}
 """
 
-SETTINGS_HEADER_STYLE = f"""
-QLabel#settingsHeader {{
-    background: {PRIMARY};
-    color: white;
-    border-radius: 0 0 14px 14px;
-    padding: 12px 16px;
-    font-size: 11pt;
-    font-weight: bold;
-}}
+APP_PAGE_TITLE_STYLE = f"color: {PRIMARY}; font-size: 16pt; font-weight: bold; background: transparent;"
+SETTINGS_HEADER_STYLE = APP_PAGE_TITLE_STYLE
+
+APP_PHASE_TAB_STYLE = f"""
+QTabBar {{ background: white; border: 1px solid {BORDER}; border-radius: 14px; }}
+QTabBar::tab {{ color: {TEXT_COLOR}; background: transparent; border: none;
+    padding: 10px 18px; min-height: 28px; font-size: 11pt; font-weight: bold; }}
+QTabBar::tab:selected {{ color: white; background: {PRIMARY}; border-radius: 10px; }}
 """
 
 SETTINGS_CARD_FRAME_STYLE = f"""

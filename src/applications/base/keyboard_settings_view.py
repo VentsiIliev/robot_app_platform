@@ -6,9 +6,7 @@ from pl_gui.settings.settings_view.styles import BORDER, PRIMARY, TEXT_COLOR
 from pl_gui.settings.settings_view.widget_factory import WidgetHandler
 from src.applications.base.collapsible_settings_view import CollapsibleSettingsView
 from src.applications.base.widgets.custom_virtual_keyboard import (
-    KeyboardDoubleSpinBox,
     KeyboardLineEdit,
-    KeyboardSpinBox,
 )
 from src.applications.base.widgets.keyboard_number_field import KeyboardNumberField
 from src.applications.base.widgets.card_checkbox import CardCheckBox
@@ -17,7 +15,7 @@ from src.applications.base.widgets.card_checkbox import CardCheckBox
 _KEYBOARD_WIDGET_TYPES = ("line_edit", "spinbox", "double_spinbox")
 
 _INPUT_STYLE = f"""
-QLineEdit, QSpinBox, QDoubleSpinBox {{
+QLineEdit {{
     background: white;
     color: {TEXT_COLOR};
     border: 2px solid {BORDER};
@@ -26,7 +24,7 @@ QLineEdit, QSpinBox, QDoubleSpinBox {{
     font-size: 12pt;
     min-height: 56px;
 }}
-QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus {{
+QLineEdit:focus {{
     border-color: {PRIMARY};
 }}
 """
@@ -54,9 +52,8 @@ def _make_keyboard_line_edit(field: SettingField, emit: Callable[[Any], None]) -
     return widget
 
 
-def _make_keyboard_spinbox(field: SettingField, emit: Callable[[Any], None]) -> KeyboardSpinBox:
-    widget = KeyboardSpinBox()
-    widget.setStyleSheet(_INPUT_STYLE)
+def _make_keyboard_spinbox(field: SettingField, emit: Callable[[Any], None]) -> KeyboardNumberField:
+    widget = KeyboardNumberField()
     widget.setRange(int(field.min_val), int(field.max_val))
     widget.setSingleStep(max(1, int(field.step)))
     if field.suffix:
@@ -70,9 +67,8 @@ def _make_keyboard_spinbox(field: SettingField, emit: Callable[[Any], None]) -> 
 def _make_keyboard_double_spinbox(
     field: SettingField,
     emit: Callable[[Any], None],
-) -> KeyboardDoubleSpinBox:
-    widget = KeyboardDoubleSpinBox()
-    widget.setStyleSheet(_INPUT_STYLE)
+) -> KeyboardNumberField:
+    widget = KeyboardNumberField(decimal=True)
     widget.setRange(float(field.min_val), float(field.max_val))
     widget.setSingleStep(float(field.step))
     widget.setDecimals(int(field.decimals))
@@ -136,17 +132,8 @@ def build_with_keyboard_card_handlers(fn: Callable[[], Any]) -> Any:
         return widget
 
     def make_number(field: SettingField, emit: Callable[[Any], None]):
-        decimal = field.widget_type == "double_spinbox"
-        widget = KeyboardNumberField(decimal=decimal)
-        widget.setRange(field.min_val, field.max_val)
-        if decimal:
-            widget.setDecimals(int(field.decimals))
-        widget.setSingleStep(field.step)
-        widget.setSuffix(field.suffix)
-        if field.default is not None:
-            widget.setValue(field.default)
-        widget.valueChanged.connect(emit)
-        return widget
+        factory = _make_keyboard_double_spinbox if field.widget_type == "double_spinbox" else _make_keyboard_spinbox
+        return factory(field, emit)
 
     def make_checkbox(field: SettingField, emit: Callable[[Any], None]):
         widget = CardCheckBox(field.label)

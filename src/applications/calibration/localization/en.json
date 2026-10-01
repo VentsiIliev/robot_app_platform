@@ -7,11 +7,60 @@
     "Calibration is currently running.\nPlease stop it before leaving.": "Calibration is currently running.\nPlease stop it before leaving."
   },
   "CalibrationView": {
+    "Calibration": "Calibration",
+    "Stop": "Stop",
     "Global (shared calibration)": "Global (shared calibration)",
     "Robot Calibration Area": "Robot Calibration Area",
     "Camera-to-TCP Calibration Area": "Camera-to-TCP Calibration Area",
     "Select the area for camera-to-TCP calibration:": "Select the area for camera-to-TCP calibration:",
     "Select the area to calibrate:": "Select the area to calibrate:",
     "not configured": "not configured"
+  },
+  "_BaseCalibrationTab": {
+    "settings": "settings",
+    "Save": "Save",
+    "Cancel": "Cancel"
+  },
+  "CameraCalibrationTab": {
+    "Auto Capture": "Auto Capture"
+  },
+  "IntrinsicAutoCaptureWidget": {
+    "Board type": "Board type",
+    "Board cols": "Board cols",
+    "Board rows": "Board rows",
+    "Square size": "Square size",
+    "ArUco dict": "ArUco dict",
+    "Marker size": "Marker size",
+    "Grid rows": "Grid rows",
+    "Grid cols": "Grid cols",
+    "Tilt angle": "Tilt angle",
+    "Z delta": "Z delta",
+    "Sweep X half-range": "Sweep X half-range",
+    "Sweep Y half-range": "Sweep Y half-range",
+    "Min corners/frame": "Min corners/frame",
+    "RZ yaw variants (±)": "RZ yaw variants (±)",
+    "Auto hand-eye": "Auto hand-eye",
+    "Stabilization delay": "Stabilization delay",
+    "Velocity": "Velocity",
+    "Acceleration": "Acceleration",
+    "Chessboard": "Chessboard",
+    "Enabled": "Enabled",
+    "Auto Capture": "Auto Capture",
+    "Stop Auto Capture": "Stop Auto Capture"
+  },
+  "WorkObjectCalibrationTab": {
+    "WorkObject": "WorkObject",
+    "Capture three points to define the work object frame.": "Capture three points to define the work object frame.",
+    "Work object": "Work object",
+    "User ID": "User ID",
+    "Name": "Name",
+    "Center": "Center",
+    "X direction": "X direction",
+    "Y direction": "Y direction",
+    "Not captured": "Not captured",
+    "Capture": "Capture",
+    "Solve orientation": "Solve orientation",
+    "Save and activate": "Save and activate",
+    "No WorkObject solved": "No WorkObject solved"
   }
 }

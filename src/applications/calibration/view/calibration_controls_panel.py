@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QLabel, QScrollArea, QSpinBox, QTabWidget, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QLabel, QScrollArea, QSizePolicy, QStackedWidget, QTabBar, QVBoxLayout, QWidget
 
 from src.applications.calibration_settings.view.calibration_settings_schema import (
     CALIBRATION_ADAPTIVE_GROUP,
@@ -14,10 +14,11 @@ from src.applications.calibration_settings.view.calibration_settings_schema impo
     VISION_CALIBRATION_GROUP,
 )
 from pl_gui.utils.utils_widgets.MaterialButton import MaterialButton
+from pl_gui.settings.settings_view.styles import (
+    BG_COLOR, PRIMARY, SECONDARY_BG, SECONDARY_HOVER, SECONDARY_PRESSED,
+)
 from src.applications.base.app_styles import (
     APP_DANGER_BUTTON_STYLE,
-    APP_PANEL_BG,
-    APP_PANEL_SPLIT_STYLE,
     APP_PRIMARY_BUTTON_STYLE,
     APP_SECONDARY_BUTTON_STYLE,
     APP_SEQUENCE_BUTTON_STYLE,
@@ -36,26 +37,39 @@ from src.applications.calibration.view.intrinsic_auto_capture_widget import Intr
 from src.applications.calibration_settings.view.workobject_calibration_tab import (
     WorkObjectCalibrationTab,
 )
+from src.applications.base.widgets.keyboard_number_field import KeyboardNumberField
+
+_QUIET_ACTION_STYLE = f"""
+MaterialButton {{ background: {SECONDARY_BG}; color: {PRIMARY}; border: none;
+    border-radius: 8px; font-size: 11pt; font-weight: bold;
+    min-height: 44px; padding: 0 16px; }}
+MaterialButton:hover {{ background: {SECONDARY_HOVER}; }}
+MaterialButton:pressed {{ background: {SECONDARY_PRESSED}; }}
+MaterialButton:disabled {{ background: {SECONDARY_BG}; color: {PRIMARY}; }}
+"""
 
 
 class CalibrationControlsPanel(QWidget):
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, *, show_laser_tab: bool = True, show_height_mapping_tab: bool = True):
         super().__init__(parent)
+        self._show_laser_tab = show_laser_tab
+        self._show_height_mapping_tab = show_height_mapping_tab
         self._crosshair_on = False
         self._magnifier_on = False
         self._height_mapping_content: QWidget | None = None
         self._phase_tabs: list[QWidget] = []
+        self._phase_pages: list[QWidget] = []
         self._build_ui()
 
     def _build_ui(self) -> None:
-        content = QWidget()
-        content.setStyleSheet(f"background: {APP_PANEL_BG};")
-        layout = QVBoxLayout(content)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(12)
-        self._tabs = QTabWidget()
-        self._tabs.setDocumentMode(True)
-        self._tabs.setStyleSheet(f"background: {APP_PANEL_BG};")
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        self.phase_bar = QTabBar()
+        self.phase_bar.setExpanding(False)
+        self.phase_bar.setDrawBase(False)
+        self._tabs = QStackedWidget()
+        self.phase_bar.currentChanged.connect(self._tabs.setCurrentIndex)
 
         self.capture_btn = MaterialButton("Capture Calibration Image")
         self.capture_btn.setStyleSheet(APP_SECONDARY_BUTTON_STYLE)
@@ -69,12 +83,12 @@ class CalibrationControlsPanel(QWidget):
         self.calibrate_robot_btn = MaterialButton("Calibrate Robot")
         self.calibrate_robot_btn.setStyleSheet(APP_PRIMARY_BUTTON_STYLE)
         self.calibrate_camera_tcp_offset_btn = MaterialButton("Calibrate Camera TCP Offset")
-        self.calibrate_camera_tcp_offset_btn.setStyleSheet(APP_PRIMARY_BUTTON_STYLE)
+        self.calibrate_camera_tcp_offset_btn.setStyleSheet(_QUIET_ACTION_STYLE)
         self.calibrate_camera_tcp_offset_btn.setEnabled(False)
         self.calibrate_camera_z_shift_btn = MaterialButton("Calibrate XY Shift vs Z")
-        self.calibrate_camera_z_shift_btn.setStyleSheet(APP_PRIMARY_BUTTON_STYLE)
+        self.calibrate_camera_z_shift_btn.setStyleSheet(_QUIET_ACTION_STYLE)
         self.calibrate_camera_z_shift_btn.setEnabled(False)
-        self.tool_tcp_tool_spin = QSpinBox()
+        self.tool_tcp_tool_spin = KeyboardNumberField()
         self.tool_tcp_tool_spin.setRange(0, 99)
         self.tool_tcp_tool_spin.setValue(1)
         self.tool_tcp_start_btn = MaterialButton("Start Tool TCP")
@@ -95,41 +109,43 @@ class CalibrationControlsPanel(QWidget):
         self.stop_robot_btn.setStyleSheet(APP_DANGER_BUTTON_STYLE)
         self.stop_robot_btn.setEnabled(False)
         self.test_calibration_btn = MaterialButton("▶  Test Calibration")
-        self.test_calibration_btn.setStyleSheet(APP_PRIMARY_BUTTON_STYLE)
+        self.test_calibration_btn.setStyleSheet(_QUIET_ACTION_STYLE)
         self.test_calibration_btn.setEnabled(False)
         self.calibrate_laser_btn = MaterialButton("📡  Calibrate Laser")
         self.calibrate_laser_btn.setStyleSheet(APP_PRIMARY_BUTTON_STYLE)
         self.detect_laser_btn = MaterialButton("🔎  Detect Laser Once")
-        self.detect_laser_btn.setStyleSheet(APP_PRIMARY_BUTTON_STYLE)
+        self.detect_laser_btn.setStyleSheet(_QUIET_ACTION_STYLE)
         self.measure_marker_heights_btn = MaterialButton("📏  Measure Marker Heights")
         self.measure_marker_heights_btn.setStyleSheet(APP_PRIMARY_BUTTON_STYLE)
         self.measure_marker_heights_btn.setEnabled(False)
         self.measure_marker_heights_btn.hide()
         self.verify_saved_model_btn = MaterialButton("🧪  Verify Saved Model")
-        self.verify_saved_model_btn.setStyleSheet(APP_PRIMARY_BUTTON_STYLE)
+        self.verify_saved_model_btn.setStyleSheet(_QUIET_ACTION_STYLE)
         self.verify_saved_model_btn.setEnabled(False)
 
-        self._tabs.addTab(self._build_system_tab(), "System")
-        self._tabs.addTab(self._build_camera_tab(), "Camera")
-        self._tabs.addTab(self._build_robot_tab(), "Robot")
-        self._tabs.addTab(self._build_tool_tcp_tab(), "Tool TCP")
+        self._add_phase(self._build_system_tab(), "System")
+        self._add_phase(self._build_camera_tab(), "Camera")
+        self._add_phase(self._build_robot_tab(), "Robot")
+        self._add_phase(self._build_tool_tcp_tab(), "Tool TCP")
         self.workobject_tab = WorkObjectCalibrationTab()
-        self._tabs.addTab(self.workobject_tab, "WorkObject")
-        self._tabs.addTab(self._build_laser_tab(), "Laser")
-        self._tabs.addTab(self._build_height_tab(), "Height Mapping")
+        self._add_phase(self.workobject_tab, "WorkObject")
+        if self._show_laser_tab:
+            self._add_phase(self._build_laser_tab(), "Laser")
+        if self._show_height_mapping_tab:
+            self._add_phase(self._build_height_tab(), "Height Mapping")
         layout.addWidget(self._tabs, stretch=1)
 
-        scroll = QScrollArea(self)
+    def _add_phase(self, widget: QWidget, title: str) -> None:
+        scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QScrollArea.Shape.NoFrame)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        scroll.setStyleSheet(APP_PANEL_SPLIT_STYLE)
-        scroll.setWidget(content)
-
-        outer = QVBoxLayout(self)
-        outer.setContentsMargins(0, 0, 0, 0)
-        outer.setSpacing(0)
-        outer.addWidget(scroll)
+        scroll.setStyleSheet(f"background: {BG_COLOR}; border: none;")
+        scroll.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Expanding)
+        scroll.setWidget(widget)
+        self._phase_pages.append(widget)
+        self._tabs.addWidget(scroll)
+        self.phase_bar.addTab(title)
 
     def _build_camera_tab(self) -> QWidget:
         tab = CameraCalibrationTab(
@@ -140,6 +156,7 @@ class CalibrationControlsPanel(QWidget):
             auto_capture_widget=self.intrinsic_auto_capture,
             settings_schemas=[VISION_CALIBRATION_GROUP],
         )
+        self.camera_tab = tab
         self._phase_tabs.append(tab)
         return tab
 

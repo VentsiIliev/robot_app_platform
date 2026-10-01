@@ -106,6 +106,40 @@ class _FakeDashboardWidget(QWidget):
 
 
 class TestPaintDashboardUi(unittest.TestCase):
+    def test_paint_head_buttons_remain_available_when_settings_are_locked(self) -> None:
+        drawer = PaintControlsDrawer([])
+        requests = []
+        releases = []
+
+        def capture(direction: str, units: int) -> None:
+            requests.append((direction, units))
+
+        def capture_release() -> None:
+            releases.append(True)
+
+        drawer.paint_head_adjust_requested.connect(capture)
+        drawer.paint_head_adjust_released.connect(capture_release)
+        drawer.set_paint_head_available(True)
+        drawer.set_unmatched_paint_settings_editable(False)
+        drawer.set_unmatched_paint_settings({})
+
+        self.assertTrue(drawer._more_paint_button.isEnabled())
+        self.assertTrue(drawer._less_paint_button.isEnabled())
+        self.assertEqual(drawer._more_paint_button.text(), "+")
+        self.assertEqual(drawer._less_paint_button.text(), "−")
+        drawer._paint_head_step.setValue(3)
+        drawer._more_paint_button.click()
+        drawer._less_paint_button.click()
+        self.assertEqual(requests, [("more", 3), ("less", 3)])
+        self.assertEqual(releases, [True, True])
+        self.assertFalse(drawer._paint_head_status.isVisible())
+        drawer.set_paint_head_busy(True)
+        self.assertTrue(drawer._more_paint_button.isEnabled())
+        drawer.set_paint_head_busy(False)
+        self.assertTrue(drawer._more_paint_button.isEnabled())
+        drawer.set_paint_head_status("", True)
+        self.assertTrue(drawer._paint_head_status.isHidden())
+
     def test_compact_select_workpieces_follows_matching_setting_and_emits_action(self) -> None:
         os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
         app = QApplication.instance() or QApplication([])

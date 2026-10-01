@@ -3,6 +3,10 @@ from __future__ import annotations
 from src.engine.hardware.communication.i_register_transport import IRegisterTransport
 
 
+class PaintHeadRangeError(ValueError):
+    """A requested paint-head target exceeds its configured safe range."""
+
+
 class PaintHeadDevice:
     """Apply paint-head presets or relative degree moves and verify writes."""
 
@@ -50,7 +54,9 @@ class PaintHeadDevice:
         if isinstance(position, bool) or not isinstance(position, int):
             raise ValueError("Paint-head target must be a whole register value")
         if not self._min_value <= position <= self._max_value:
-            raise ValueError(f"Paint-head target {position} is outside the configured range")
+            raise PaintHeadRangeError(
+                f"Paint-head target {position} is outside the configured range"
+            )
         return position
 
     def register_for_setting(self, setting: int) -> int:

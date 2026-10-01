@@ -1,6 +1,8 @@
 # `src/robot_systems/paint/applications/` — Paint Applications
 
-The paint robot system currently has one paint-owned application package plus a larger set of shared applications wired with paint-specific services.
+The paint robot system has paint-owned application packages plus shared applications wired with paint-specific services.
+
+The Paint Adjustment screen uses the shared page-title style and `KeyboardNumberField` for its register step and paint length and inspection offsets. This keeps its touch controls consistent with the Calibration and Settings screens.
 
 The shell registration happens in:
 
@@ -105,6 +107,16 @@ snapshot; the updated settings are captured at the start of the next workpiece
 cycle. When disabled, the previous stopped-state-only editing behavior is kept.
 Drying-mode and tray-state edits remain locked during an active process.
 
+The dashboard also shows a separate Paint Control section directly below
+Apply All. Its +/− buttons move the paint head by the chosen register-unit step
+through the shared Paint Adjustment service. The step defaults to 1 and can be
+edited from the dashboard. Holding a button repeats the move without overlapping
+hardware commands, and reaching a configured paint-head limit stops repetition
+and shows a limit message. The buttons remain available while
+the paint process runs, provided the paint head is configured; paint-settings
+editability does not gate these commands. Hardware writes run in a background
+worker so the dashboard remains responsive.
+
 `PaintDashboardUiConfig.show_resolved_paint_speed_values`, configured by
 `paint_system_config.SHOW_RESOLVED_PAINT_SPEED_VALUES`, displays the live
 Velocity and Acceleration values derived from each combined Speed input. It is
@@ -145,6 +157,8 @@ Most UI screens are shared platform applications that receive paint-specific ser
 | `CameraSettings` | paint vision settings storage |
 | `CalibrationSettings` | paint calibration settings storage |
 | `Calibration` | paint calibration coordinator and observer bindings |
+
+The Paint calibration wiring hides the Laser and Height Mapping tabs because those workflows are not currently needed. Other systems retain the default calibration tabs.
 
 ### Utility and test applications
 

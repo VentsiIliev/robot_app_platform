@@ -272,22 +272,9 @@ def _build_dashboard_application(robot_system):
 def _build_paint_adjustment_application(robot_system):
     from src.applications.base.widget_application import WidgetApplication
     from src.robot_systems.paint.applications.paint_adjustment import PaintAdjustmentFactory
-    from src.robot_systems.paint.applications.paint_adjustment.service.paint_adjustment_service import (
-        PaintAdjustmentService,
-    )
-
-    service = PaintAdjustmentService(
-        robot_system._settings_service,
-        start_single_cycle=robot_system._main_process.start_manual_single_cycle,
-        get_cycle_state=lambda: robot_system._main_process.state.value,
-        start_adjustment=robot_system._main_process.start_adjustment_cycle,
-        paint_next=robot_system._main_process.paint_next_adjustment_section,
-        finish_adjustment=robot_system._main_process.finish_adjustment_cycle,
-        get_adjustment_status=robot_system._main_process.adjustment_status,
-    )
     return WidgetApplication(
         widget_factory=lambda messaging: PaintAdjustmentFactory().build(
-            service, messaging=messaging
+            robot_system._paint_adjustment_service, messaging=messaging
         )
     )
 
@@ -1236,7 +1223,9 @@ def _build_calibration_application(robot_system):
     jog_service = build_robot_system_jog_service(robot_system)
     return WidgetApplication(
         widget_factory=lambda ms: CalibrationFactory(
-            work_area_definitions=robot_system.get_work_area_definitions()
+            work_area_definitions=robot_system.get_work_area_definitions(),
+            show_laser_tab=False,
+            show_height_mapping_tab=False,
         ).build(service, messaging=ms, jog_service=jog_service)
     )
 

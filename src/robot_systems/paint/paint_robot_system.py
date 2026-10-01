@@ -724,8 +724,23 @@ class PaintRobotSystem(BaseRobotSystem):
             service_checker=self.health_registry.check,
         )
         self.register_managed_resource(self._main_process)
+        from src.robot_systems.paint.applications.paint_adjustment.service.paint_adjustment_service import (
+            PaintAdjustmentService,
+        )
+
+        self._paint_adjustment_service = PaintAdjustmentService(
+            self._settings_service,
+            start_single_cycle=self._main_process.start_manual_single_cycle,
+            get_cycle_state=lambda: self._main_process.state.value,
+            start_adjustment=self._main_process.start_adjustment_cycle,
+            paint_next=self._main_process.paint_next_adjustment_section,
+            finish_adjustment=self._main_process.finish_adjustment_cycle,
+            get_adjustment_status=self._main_process.adjustment_status,
+        )
         self._dashboard_service = PaintDashboardService(
             self._main_process,
+            paint_head_available=self._paint_adjustment_service.is_paint_head_available,
+            paint_head_adjust=self._paint_adjustment_service.adjust_paint_by_register_units,
             capture_snapshot_service=self._paint_capture_snapshot_service,
             path_preparation_service=self._paint_path_preparation_service,
             resolver_getter=lambda: self.get_shared_vision_resolver()[1],

@@ -6,6 +6,7 @@ from src.applications.calibration.controller.calibration_controller import Calib
 from src.applications.calibration.service.i_calibration_service import RobotCalibrationPreview
 from src.applications.calibration.model.calibration_model import CalibrationModel
 from src.applications.calibration_settings.calibration_settings_data import CalibrationSettingsData
+from src.applications.intrinsic_calibration_capture.service.i_intrinsic_capture_service import IntrinsicCaptureConfig
 from src.shared_contracts.events.vision_events import VisionTopics
 from src.engine.robot.configuration import RobotCalibrationSettings
 from src.engine.robot.height_measuring.settings import HeightMeasuringModuleSettings
@@ -256,6 +257,14 @@ class TestCalibrationControllerHandlers(unittest.TestCase):
         ctrl._on_save_calibration_settings({"calib_vision_chessboard_width": 12})
         model.save_calibration_settings.assert_called_once()
         view.append_log.assert_called_once_with("✓ Calibration settings saved")
+
+    def test_on_save_intrinsic_capture_config_updates_model(self):
+        ctrl, model, _, _ = _make_ctrl()
+        config = IntrinsicCaptureConfig(chessboard_width=12)
+
+        ctrl._on_save_intrinsic_capture_config(config)
+
+        model.save_intrinsic_capture_config.assert_called_once_with(config)
 
 
 class TestCalibrationControllerCameraFrame(unittest.TestCase):

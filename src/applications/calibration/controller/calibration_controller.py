@@ -10,6 +10,7 @@ from src.applications.calibration.view.calibration_view import CalibrationView
 from src.applications.height_measuring.service.i_height_measuring_app_service import LaserDetectionResult
 from src.applications.intrinsic_calibration_capture.service.i_intrinsic_capture_service import (
     INTRINSIC_CAPTURE_PROGRESS_TOPIC,
+    IntrinsicCaptureConfig,
 )
 from src.engine.core.i_messaging_service import IMessagingService
 from src.robot_systems.glue.component_ids import ProcessID
@@ -187,6 +188,7 @@ class CalibrationController(IApplicationController):
         self._view.calibrate_camera_requested.connect(self._on_calibrate_camera)
         self._view.intrinsic_auto_capture_requested.connect(self._on_intrinsic_auto_capture)
         self._view.intrinsic_auto_capture_stop_requested.connect(self._on_stop_intrinsic_auto_capture)
+        self._view.intrinsic_capture_config_save_requested.connect(self._on_save_intrinsic_capture_config)
         self._view.calibrate_robot_requested.connect(self._on_calibrate_robot)
         self._view.calibrate_sequence_requested.connect(self._on_calibrate_sequence)
         self._view.calibrate_camera_tcp_offset_requested.connect(self._on_calibrate_camera_tcp_offset)
@@ -238,6 +240,9 @@ class CalibrationController(IApplicationController):
         self._view.set_intrinsic_auto_capture_running(self._model.is_intrinsic_auto_capture_running())
         if ok:
             self._poll_intrinsic_auto_capture()
+
+    def _on_save_intrinsic_capture_config(self, config: IntrinsicCaptureConfig) -> None:
+        self._model.save_intrinsic_capture_config(config)
 
     def _on_stop_intrinsic_auto_capture(self) -> None:
         self._model.stop_intrinsic_auto_capture()

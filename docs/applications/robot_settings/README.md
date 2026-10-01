@@ -94,6 +94,8 @@ User clicks Save
 | Safety | `SAFETY_LIMITS_GROUP` | x/y/z/rx/ry/rz min+max bounds |
 | Movement Groups | `MovementGroupsTab` (raw) | Named positions: name, position string, vel, acc |
 | Targeting | `TargetingDefinitionsTab` (raw) | Generic named points and frames supplied by the active robot system |
+
+The Targeting tab uses the shared `KeyboardNumberField` for editable camera-to-TCP X/Y offsets, including read-only inherited area values.
 | Calibration | `CALIBRATION_ADAPTIVE_GROUP`, `CALIBRATION_MARKER_GROUP`, `CALIBRATION_AXIS_MAPPING_GROUP`, `CALIBRATION_CAMERA_TCP_GROUP` | Adaptive movement params, marker/z settings, axis-mapping settings, standalone camera-TCP settings, and optional in-main-calibration TCP capture settings |
 
 ---

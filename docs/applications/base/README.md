@@ -297,6 +297,8 @@ This sits above the lower-level `pl_gui.settings.settings_view.styles` palette:
 
 Views should prefer importing shared application styles from `src/applications/base/app_styles.py` instead of creating new per-application style modules for common patterns.
 
+For page titles, use `APP_PAGE_TITLE_STYLE` from `pl_gui.settings.settings_view.styles` and place the title above tabs and content. Settings, Calibration, Paint Adjustment, and Workpiece Library follow this layout.
+
 ---
 
 ### Virtual Keyboard
@@ -456,6 +458,12 @@ Applications that do not enable the frame selector continue to behave like norma
 ---
 
 ## Design Notes
+
+### Shared numeric control
+
+Use `KeyboardNumberField` from `src/applications/base/widgets/keyboard_number_field.py` for directly owned integer and decimal inputs. It combines typed entry and the shared virtual keyboard with large −/+ buttons, units, bounds, and press-and-hold stepping. Configure it with `decimal=True` when needed, then `setRange()`, `setSingleStep()`, `setDecimals()`, `setSuffix()`, and `setValue()`.
+
+Schema-based forms built through `KeyboardSettingsView` or `build_with_keyboard_setting_handlers()` use the same control for `spinbox` and `double_spinbox` fields. Widget providers that require an actual `QSpinBox` or `QDoubleSpinBox` subclass continue to use `VirtualKeyboardWidgetFactory`.
 
 - **GC ownership**: PyQt6 weak-references Python bound methods as signal slots. If no strong ref holds the controller, it is GC'd and all signal connections die silently. `ApplicationFactory.build()` assigns `view._controller = controller` to transfer ownership to the view.
 - **`IApplicationView` extends `AppWidget`**: Required for shell integration. `AppWidget` provides `on_language_changed()` and the hooks `AppShell` uses to show/hide panels.

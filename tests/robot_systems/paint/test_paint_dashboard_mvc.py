@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import unittest
+import time
+import os
 from types import SimpleNamespace
 from unittest.mock import ANY, MagicMock, patch
 
@@ -80,6 +82,15 @@ class TestPaintDashboardModel(unittest.TestCase):
 
         service.relieve_cable.assert_called_once_with()
         service.set_auxiliary_enabled.assert_called_once_with("fan", True)
+
+    def test_paint_head_adjustment_delegates_through_service(self) -> None:
+        service = MagicMock()
+        service.is_paint_head_available.return_value = True
+        model = PaintDashboardModel(service)
+
+        self.assertTrue(model.is_paint_head_available())
+        model.adjust_paint_head("more", 3)
+        service.adjust_paint_head.assert_called_once_with("more", 3)
 
     def test_model_maps_drying_mode_to_service(self):
         service = MagicMock()
@@ -165,6 +176,86 @@ class TestPaintDashboardController(unittest.TestCase):
         view.destroyed = _signal()
         view.isVisible.return_value = True
         return view
+
+    def test_paint_head_command_is_independent_of_running_settings(self) -> None:
+        controller = PaintDashboardController.__new__(PaintDashboardController)
+        controller._model = MagicMock()
+        controller._view = MagicMock()
+        controller._paint_head_pending = False
+        controller._paint_head_held_direction = None
+        controller._paint_head_held_units = 0
+        controller._paint_head_hold_timer = MagicMock()
+        controller._run_background = MagicMock()
+        controller._model.load.return_value = DashboardState(process_state="running")
+
+        controller._on_paint_head_adjust("more", 3)
+
+        self.assertTrue(controller._paint_head_pending)
+        controller._view.set_paint_head_busy.assert_called_once_with(True)
+        command, callback = controller._run_background.call_args.args
+        command()
+        controller._model.adjust_paint_head.assert_called_once_with("more", 3)
+        self.assertEqual(callback, controller._on_paint_head_adjusted)
+
+    def test_held_paint_head_command_repeats_without_overlapping_and_stops_on_limit(self) -> None:
+        controller = PaintDashboardController.__new__(PaintDashboardController)
+        controller._view = MagicMock()
+        controller._view_ok = MagicMock(return_value=True)
+        controller._model = MagicMock()
+        controller._paint_head_pending = False
+        controller._paint_head_held_direction = None
+        controller._paint_head_held_units = 0
+        controller._paint_head_hold_timer = MagicMock()
+        controller._paint_head_hold_timer.interval.return_value = 400
+        controller._run_background = MagicMock()
+
+        controller._on_paint_head_adjust("more", 2)
+        controller._repeat_held_paint_head_adjust()
+        self.assertEqual(controller._run_background.call_count, 1)
+
+        controller._on_paint_head_adjusted(SimpleNamespace(success=True, message=""))
+        controller._repeat_held_paint_head_adjust()
+        self.assertEqual(controller._run_background.call_count, 2)
+        command, _callback = controller._run_background.call_args.args
+        command()
+        controller._model.adjust_paint_head.assert_called_once_with("more", 2)
+
+        controller._on_paint_head_adjusted(
+            SimpleNamespace(success=False, message="Paint head is at its configured limit.")
+        )
+        controller._repeat_held_paint_head_adjust()
+        self.assertEqual(controller._run_background.call_count, 2)
+        self.assertIsNone(controller._paint_head_held_direction)
+        controller._paint_head_hold_timer.stop.assert_called_once_with()
+
+    def test_finished_worker_cleanup_does_not_query_deleted_threads(self) -> None:
+        controller = PaintDashboardController.__new__(PaintDashboardController)
+        finished = MagicMock()
+        other = MagicMock()
+        other.isRunning.side_effect = RuntimeError("wrapped C/C++ object has been deleted")
+        controller._workers = [(finished, MagicMock()), (other, MagicMock())]
+
+        controller._cleanup_finished_worker(finished)
+
+        self.assertEqual([thread for thread, _worker in controller._workers], [other])
+        other.isRunning.assert_not_called()
+
+    def test_background_worker_is_removed_before_qt_deletes_thread(self) -> None:
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        app = QApplication.instance() or QApplication([])
+        controller = PaintDashboardController.__new__(PaintDashboardController)
+        controller._workers = []
+        results = []
+
+        controller._run_background(lambda: "done", results.append)
+
+        deadline = time.monotonic() + 2.0
+        while controller._workers and time.monotonic() < deadline:
+            app.processEvents()
+            time.sleep(0.005)
+        app.processEvents()
+        self.assertEqual(results, ["done"])
+        self.assertEqual(controller._workers, [])
 
     def test_camera_selection_subscribes_to_selected_topic_and_stops_on_hide(self) -> None:
         app = QApplication.instance() or QApplication([])

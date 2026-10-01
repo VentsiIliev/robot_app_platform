@@ -28,6 +28,7 @@ from pl_gui.settings.settings_view.styles import (
     LABEL_STYLE,
     PRIMARY,
     PRIMARY_DARK,
+    ERROR_COLOR,
     TEXT_COLOR,
 )
 from src.applications.base.widgets.custom_virtual_keyboard import KeyboardDoubleSpinBox, KeyboardSpinBox
@@ -83,6 +84,8 @@ class PaintControlsDrawer(QWidget):
     unmatched_paint_settings_requested = pyqtSignal(object)
     acceleration_scale_requested = pyqtSignal(float)
     drying_mode_requested = pyqtSignal(str)
+    paint_head_adjust_requested = pyqtSignal(str, int)
+    paint_head_adjust_released = pyqtSignal()
 
     def __init__(
         self,
@@ -90,6 +93,7 @@ class PaintControlsDrawer(QWidget):
         *,
         show_manual_controls: bool = True,
         show_unmatched_paint_controls: bool = True,
+        show_paint_head_control: bool = True,
         show_acceleration_scale_control: bool = True,
         show_shortcuts: bool = True,
         compact_layout: bool = False,
@@ -130,6 +134,7 @@ class PaintControlsDrawer(QWidget):
             show_resolved_speed_values and use_combined_speed_control
         )
         self._shortcut_buttons: dict[str, QPushButton] = {}
+        self._paint_head_available = False
         self._title = QLabel()
         self._title.setStyleSheet(LABEL_STYLE)
         self._title.setVisible(show_manual_controls)
@@ -278,6 +283,47 @@ class PaintControlsDrawer(QWidget):
         self._unmatched_apply.clicked.connect(self._on_unmatched_paint_settings)
         unmatched_layout.addWidget(self._unmatched_apply)
         layout.addWidget(self._unmatched_box)
+
+        self._paint_head_box = QGroupBox()
+        self._paint_head_box.setStyleSheet(GROUP_STYLE)
+        self._paint_head_box.setVisible(show_paint_head_control)
+        paint_head_layout = QVBoxLayout(self._paint_head_box)
+        paint_head_buttons = QHBoxLayout()
+        paint_head_buttons.setSpacing(8)
+        self._paint_head_step_label = QLabel()
+        self._paint_head_step_label.setStyleSheet(LABEL_STYLE)
+        paint_head_buttons.addWidget(self._paint_head_step_label)
+        self._paint_head_step = KeyboardSpinBox()
+        self._paint_head_step.setRange(1, 65535)
+        self._paint_head_step.setValue(1)
+        self._paint_head_step.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
+        self._paint_head_step.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._paint_head_step.setFixedHeight(48)
+        self._paint_head_step.setFixedWidth(90)
+        self._paint_head_step.setStyleSheet(
+            f"background: white; color: {TEXT_COLOR}; border: 1px solid {BORDER}; "
+            "border-radius: 8px; font-size: 13pt;"
+        )
+        paint_head_buttons.addWidget(self._paint_head_step)
+        self._less_paint_button = QPushButton()
+        self._less_paint_button.setStyleSheet(GHOST_BTN_STYLE)
+        self._less_paint_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._less_paint_button.pressed.connect(self._request_less_paint)
+        self._less_paint_button.released.connect(self._release_paint_adjustment)
+        paint_head_buttons.addWidget(self._less_paint_button, 1)
+        self._more_paint_button = QPushButton()
+        self._more_paint_button.setStyleSheet(ACTION_BTN_STYLE)
+        self._more_paint_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._more_paint_button.pressed.connect(self._request_more_paint)
+        self._more_paint_button.released.connect(self._release_paint_adjustment)
+        paint_head_buttons.addWidget(self._more_paint_button, 1)
+        paint_head_layout.addLayout(paint_head_buttons)
+        self._paint_head_status = QLabel()
+        self._paint_head_status.setWordWrap(True)
+        self._paint_head_status.setStyleSheet(f"color: {ERROR_COLOR}; background: transparent;")
+        self._paint_head_status.hide()
+        paint_head_layout.addWidget(self._paint_head_status)
+        layout.addWidget(self._paint_head_box)
 
         self._acceleration_scale_box = QGroupBox()
         self._acceleration_scale_box.setStyleSheet(GROUP_STYLE)
@@ -703,6 +749,31 @@ class PaintControlsDrawer(QWidget):
     def _on_cable_relief(self) -> None:
         self.cable_relief_requested.emit()
 
+    def _request_less_paint(self) -> None:
+        self.paint_head_adjust_requested.emit("less", self._paint_head_step.value())
+
+    def _request_more_paint(self) -> None:
+        self.paint_head_adjust_requested.emit("more", self._paint_head_step.value())
+
+    def _release_paint_adjustment(self) -> None:
+        self.paint_head_adjust_released.emit()
+
+    def set_paint_head_available(self, available: bool) -> None:
+        self._paint_head_available = bool(available)
+        self._less_paint_button.setEnabled(available)
+        self._more_paint_button.setEnabled(available)
+        self.set_paint_head_status(
+            "" if available else self.tr("Paint head is not available."), available
+        )
+
+    def set_paint_head_busy(self, busy: bool) -> None:
+        if busy:
+            self._paint_head_status.hide()
+
+    def set_paint_head_status(self, message: str, success: bool) -> None:
+        self._paint_head_status.setText("" if success else message)
+        self._paint_head_status.setVisible(not success and bool(message))
+
     def _on_drying_mode(self) -> None:
         next_mode = {"auto": "manual", "manual": "demo", "demo": "auto"}
         self.drying_mode_requested.emit(next_mode[self._drying_mode])
@@ -808,6 +879,12 @@ class PaintControlsDrawer(QWidget):
         self._unmatched_apply.setText(
             self.tr("Apply All") if self._concise_layout else self.tr("Apply")
         )
+        self._paint_head_box.setTitle(self.tr("Paint Control"))
+        self._paint_head_step_label.setText(self.tr("Step"))
+        self._less_paint_button.setText("−")
+        self._more_paint_button.setText("+")
+        self._less_paint_button.setAccessibleName(self.tr("Less paint"))
+        self._more_paint_button.setAccessibleName(self.tr("More paint"))
         self._relief_button.setText(self.tr("Relieve Cable (Unwind J6)"))
         self._shortcuts_box.setTitle(self.tr("Application Shortcuts"))
         for item in self._configs:

@@ -19,6 +19,7 @@ class PaintDashboardUiConfig:
     show_left_drawer: bool = True
     show_manual_controls: bool = False
     show_unmatched_paint_controls: bool = True
+    show_paint_head_control: bool = True
     show_acceleration_scale_control: bool = True
     show_bottom_quick_controls: bool = True
     show_drying_mode_control: bool = True

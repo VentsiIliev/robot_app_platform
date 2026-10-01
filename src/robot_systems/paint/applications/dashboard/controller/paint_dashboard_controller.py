@@ -75,8 +75,13 @@ class PaintDashboardController(
         self._dashboard_live_view_paused = False
         self._workers: list[tuple[QThread, _Worker]] = []
         self._pending_auxiliary: dict[str, bool] = {}
+        self._paint_head_pending = False
+        self._paint_head_held_direction: str | None = None
+        self._paint_head_held_units = 0
         self._production_start_pending = False
         timer_parent = self._view if isinstance(self._view, QObject) else None
+        self._paint_head_hold_timer = QTimer(timer_parent)
+        self._paint_head_hold_timer.timeout.connect(self._repeat_held_paint_head_adjust)
         self._status_timer = QTimer(timer_parent)
         self._status_timer.setInterval(1000)
         self._status_timer.timeout.connect(self._refresh_dashboard_status)
@@ -110,6 +115,8 @@ class PaintDashboardController(
         self._view.unmatched_paint_settings_requested.connect(
             self._on_unmatched_paint_settings
         )
+        self._view.paint_head_adjust_requested.connect(self._on_paint_head_adjust)
+        self._view.paint_head_adjust_released.connect(self._stop_held_paint_head_adjust)
         self._view.acceleration_scale_requested.connect(self._on_acceleration_scale)
         self._view.drying_mode_requested.connect(self._on_drying_mode)
         self._view.new_tray_requested.connect(self._on_new_tray)
@@ -130,6 +137,7 @@ class PaintDashboardController(
             self._model.get_unmatched_paint_settings()
         )
         self._view.set_acceleration_scale(self._model.get_acceleration_scale())
+        self._view.set_paint_head_available(self._model.is_paint_head_available())
         self._run_background(self._model.get_auxiliary_states, self._on_auxiliary_states_loaded)
         self._view.set_drying_mode(self._model.get_drying_mode())
         self._refresh_plate_layout()
@@ -147,6 +155,7 @@ class PaintDashboardController(
         self._dashboard_live_view_paused = False
         self._model.resume_vision_for_dashboard_exit()
         self._status_timer.stop()
+        self._stop_held_paint_head_adjust()
         self._camera_display_timer.stop()
         self._unsubscribe_auxiliary_camera()
         self._unsubscribe_all()
@@ -241,6 +250,53 @@ class PaintDashboardController(
                 self._model.get_unmatched_paint_settings()
             )
         self._show_command_result(self._t("Painting"), result)
+
+    def _on_paint_head_adjust(self, direction: str, units: int) -> None:
+        if direction not in {"more", "less"}:
+            return
+        self._paint_head_held_direction = direction
+        self._paint_head_held_units = units
+        self._paint_head_hold_timer.start(400)
+        self._send_paint_head_adjust(direction, units)
+
+    def _repeat_held_paint_head_adjust(self) -> None:
+        direction = self._paint_head_held_direction
+        if direction is None:
+            return
+        if not self._view_ok():
+            self._stop_held_paint_head_adjust()
+            return
+        if self._paint_head_hold_timer.interval() != 150:
+            self._paint_head_hold_timer.setInterval(150)
+        self._send_paint_head_adjust(direction, self._paint_head_held_units)
+
+    def _stop_held_paint_head_adjust(self) -> None:
+        self._paint_head_hold_timer.stop()
+        self._paint_head_held_direction = None
+        self._paint_head_held_units = 0
+
+    def _send_paint_head_adjust(self, direction: str, units: int) -> None:
+        if self._paint_head_pending:
+            return
+        self._paint_head_pending = True
+        self._view.set_paint_head_busy(True)
+        self._run_background(
+            partial(self._model.adjust_paint_head, direction, units),
+            self._on_paint_head_adjusted,
+        )
+
+    def _on_paint_head_adjusted(self, result: object) -> None:
+        self._paint_head_pending = False
+        if not bool(getattr(result, "success", False)):
+            self._stop_held_paint_head_adjust()
+        if not self._view_ok():
+            self._stop_held_paint_head_adjust()
+            return
+        self._view.set_paint_head_busy(False)
+        self._view.set_paint_head_status(
+            self._t(str(getattr(result, "message", "") or "Command failed.")),
+            bool(getattr(result, "success", False)),
+        )
 
     def _on_cable_relief(self) -> None:
         self._view.set_cable_relief_busy(True)
@@ -528,13 +584,13 @@ class PaintDashboardController(
         worker.finished.connect(on_done)
         worker.finished.connect(thread.quit)
         worker.finished.connect(worker.deleteLater)
+        thread.finished.connect(partial(self._cleanup_finished_worker, thread))
         thread.finished.connect(thread.deleteLater)
-        thread.finished.connect(self._cleanup_finished_workers)
         self._workers.append((thread, worker))
         thread.start()
 
-    def _cleanup_finished_workers(self) -> None:
-        self._workers = [pair for pair in self._workers if pair[0].isRunning()]
+    def _cleanup_finished_worker(self, finished_thread: QThread) -> None:
+        self._workers = [pair for pair in self._workers if pair[0] is not finished_thread]
 
     def _on_contour_transform_debug_finished(self, result) -> None:
         if not self._view_ok():

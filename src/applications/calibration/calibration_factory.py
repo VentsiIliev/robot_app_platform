@@ -10,15 +10,27 @@ from src.shared_contracts.declarations import WorkAreaDefinition
 
 
 class CalibrationFactory(ApplicationFactory):
-    def __init__(self, work_area_definitions: list[WorkAreaDefinition] | None = None):
+    def __init__(
+        self,
+        work_area_definitions: list[WorkAreaDefinition] | None = None,
+        *,
+        show_laser_tab: bool = True,
+        show_height_mapping_tab: bool = True,
+    ):
         self._messaging = None
         self._work_area_definitions = list(work_area_definitions or [])
+        self._show_laser_tab = show_laser_tab
+        self._show_height_mapping_tab = show_height_mapping_tab
 
     def _create_model(self, service: ICalibrationService) -> CalibrationModel:
         return CalibrationModel(service)
 
     def _create_view(self) -> CalibrationView:
-        return CalibrationView(work_area_definitions=self._work_area_definitions)
+        return CalibrationView(
+            work_area_definitions=self._work_area_definitions,
+            show_laser_tab=self._show_laser_tab,
+            show_height_mapping_tab=self._show_height_mapping_tab,
+        )
 
     def _create_controller(self, model: IApplicationModel, view: IApplicationView) -> IApplicationController:
         assert isinstance(model, CalibrationModel)

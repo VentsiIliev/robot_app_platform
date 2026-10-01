@@ -2,6 +2,8 @@
 
 Browse, view, and manage saved workpiece definitions. Displays the catalogue of all stored workpieces, supports metadata editing, deletion, and opening a workpiece in the editor via a broker event.
 
+The library view uses the shared page-title palette, card and table colors, and touch-sized actions used across application screens.
+
 ---
 
 ## MVC Structure

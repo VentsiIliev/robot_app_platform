@@ -15,6 +15,10 @@ class ModbusSettingsView(IApplicationView):
 
 Pure Qt widget. Renders a settings form for Modbus configuration, a port detection button, and a connection test button. Contains zero business logic.
 
+The page uses the shared Settings page title, card styles, footer styles, and compact phase tabs. Connection profile and slave dialogs use the shared virtual-keyboard text fields and `KeyboardNumberField` touch steppers for timeout, address, and retries.
+
+The connection page groups the serial port, saved profiles, and connection tools in compact cards. A persistent footer shows pending changes and offers Save and Discard; Discard restores the last loaded or successfully saved configuration.
+
 ### Outbound Signals
 
 | Signal | Emitted when |

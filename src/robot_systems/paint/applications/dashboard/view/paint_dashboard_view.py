@@ -214,6 +214,8 @@ class PaintDashboardView(IApplicationView):
     auxiliary_toggle_requested = pyqtSignal(str, bool)
     application_shortcut_requested = pyqtSignal(str)
     unmatched_paint_settings_requested = pyqtSignal(object)
+    paint_head_adjust_requested = pyqtSignal(str, int)
+    paint_head_adjust_released = pyqtSignal()
     acceleration_scale_requested = pyqtSignal(float)
     drying_mode_requested = pyqtSignal(str)
     new_tray_requested = pyqtSignal()
@@ -699,6 +701,7 @@ class PaintDashboardView(IApplicationView):
             self._auxiliary_toggles,
             show_manual_controls=self._ui_config.show_manual_controls,
             show_unmatched_paint_controls=self._ui_config.show_unmatched_paint_controls,
+            show_paint_head_control=self._ui_config.show_paint_head_control,
             show_acceleration_scale_control=self._ui_config.show_acceleration_scale_control,
             show_shortcuts=self._ui_config.show_application_shortcuts,
             compact_layout=not self._ui_config.show_camera_preview,
@@ -721,6 +724,8 @@ class PaintDashboardView(IApplicationView):
         widget.unmatched_paint_settings_requested.connect(
             self.unmatched_paint_settings_requested
         )
+        widget.paint_head_adjust_requested.connect(self.paint_head_adjust_requested)
+        widget.paint_head_adjust_released.connect(self.paint_head_adjust_released)
         widget.acceleration_scale_requested.connect(
             self.acceleration_scale_requested
         )
@@ -1362,6 +1367,18 @@ class PaintDashboardView(IApplicationView):
             widget.set_unmatched_paint_settings_editable(editable)
         if self._quick_controls is not None:
             self._quick_controls.set_settings_editable(editable)
+
+    def set_paint_head_available(self, available: bool) -> None:
+        for widget in self._control_widgets():
+            widget.set_paint_head_available(available)
+
+    def set_paint_head_busy(self, busy: bool) -> None:
+        for widget in self._control_widgets():
+            widget.set_paint_head_busy(busy)
+
+    def set_paint_head_status(self, message: str, success: bool) -> None:
+        for widget in self._control_widgets():
+            widget.set_paint_head_status(message, success)
 
     def set_acceleration_scale(self, value: float) -> None:
         for widget in self._control_widgets():

@@ -30,6 +30,7 @@ from pl_gui.settings.settings_view.styles import (
 from src.applications.base.app_dialog import AppDialog, DIALOG_CHECKBOX_STYLE, DIALOG_INPUT_STYLE
 from src.applications.base.styled_message_box import ask_yes_no, show_warning
 from src.applications.base.widgets.custom_virtual_keyboard import KeyboardLineEdit
+from src.applications.base.widgets.keyboard_number_field import KeyboardNumberField
 
 
 def _t(text: str) -> str:
@@ -248,16 +249,18 @@ class TargetingDefinitionsTab(QWidget):
         row.addWidget(self._local_tcp)
         layout.addLayout(row)
         values = QHBoxLayout()
-        self._tcp_x = KeyboardLineEdit()
-        self._tcp_y = KeyboardLineEdit()
-        self._tcp_x.setStyleSheet(_TARGET_INPUT_STYLE)
-        self._tcp_y.setStyleSheet(_TARGET_INPUT_STYLE)
+        self._tcp_x = KeyboardNumberField(decimal=True)
+        self._tcp_y = KeyboardNumberField(decimal=True)
+        for edit in (self._tcp_x, self._tcp_y):
+            edit.setRange(-1_000_000.0, 1_000_000.0)
+            edit.setDecimals(3)
+            edit.setSingleStep(0.1)
         self._tcp_x_label = QLabel(_t("X (mm)"))
         self._tcp_y_label = QLabel(_t("Y (mm)"))
         for label, edit in ((self._tcp_x_label, self._tcp_x), (self._tcp_y_label, self._tcp_y)):
             values.addWidget(label)
             values.addWidget(edit)
-            edit.editingFinished.connect(self._on_tcp_value_changed)
+            edit.valueChanged.connect(self._on_tcp_value_changed)
         self._tcp_residual_count = QLabel()
         values.addWidget(self._tcp_residual_count)
         layout.addLayout(values)
@@ -441,7 +444,7 @@ class TargetingDefinitionsTab(QWidget):
         values = self._tcp_values()
         for edit, key in ((self._tcp_x, "x_mm"), (self._tcp_y, "y_mm")):
             edit.blockSignals(True)
-            edit.setText(f"{float(values.get(key, 0.0)):.3f}")
+            edit.setValue(float(values.get(key, 0.0)))
             edit.setReadOnly(bool(area and area not in self._tcp_by_area))
             edit.blockSignals(False)
         self._tcp_residual_count.setText(
@@ -472,12 +475,8 @@ class TargetingDefinitionsTab(QWidget):
 
     def _on_tcp_value_changed(self) -> None:
         values = self._tcp_values()
-        try:
-            x_mm = float(self._tcp_x.text().strip())
-            y_mm = float(self._tcp_y.text().strip())
-        except ValueError:
-            self._show_tcp_scope()
-            return
+        x_mm = self._tcp_x.value()
+        y_mm = self._tcp_y.value()
         if values.get("x_mm") == x_mm and values.get("y_mm") == y_mm:
             return
         values["x_mm"] = x_mm

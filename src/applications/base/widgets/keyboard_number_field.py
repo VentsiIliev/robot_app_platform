@@ -58,7 +58,7 @@ class KeyboardNumberField(QFrame):
         self._spin = KeyboardDoubleSpinBox() if decimal else KeyboardSpinBox()
         self._spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
         self._spin.setAlignment(Qt.AlignmentFlag.AlignRight)
-        self._spin.setMinimumWidth(0)
+        self._spin.setMinimumWidth(56)
         self._spin.setFixedHeight(48)
         self._spin.setStyleSheet(f"""
             QAbstractSpinBox {{
@@ -73,8 +73,10 @@ class KeyboardNumberField(QFrame):
 
         self._decrease = QPushButton("−")
         self._decrease.setObjectName("decrease")
+        self._decrease.setAccessibleName("Decrease value")
         self._increase = QPushButton("+")
         self._increase.setObjectName("increase")
+        self._increase.setAccessibleName("Increase value")
         for button in (self._decrease, self._increase):
             button.setFixedWidth(button_width)
             button.setFixedHeight(48)
@@ -93,6 +95,7 @@ class KeyboardNumberField(QFrame):
         self._unit.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._unit.setFixedHeight(48)
         self._unit.hide()
+        self._special_text = ""
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(1, 1, 1, 1)
@@ -101,9 +104,22 @@ class KeyboardNumberField(QFrame):
         layout.addWidget(self._spin, 1)
         layout.addWidget(self._unit)
         layout.addWidget(self._increase)
+        self._sync_limits()
 
     def _on_value_changed(self, value) -> None:
+        self._sync_limits()
         self.valueChanged.emit(value)
+
+    def _sync_limits(self) -> None:
+        can_decrease = not self._spin.isReadOnly() and self._spin.value() > self._spin.minimum()
+        can_increase = not self._spin.isReadOnly() and self._spin.value() < self._spin.maximum()
+        if self._decrease.isEnabled() != can_decrease:
+            self._decrease.setEnabled(can_decrease)
+        if self._increase.isEnabled() != can_increase:
+            self._increase.setEnabled(can_increase)
+        self._unit.setVisible(bool(self._unit.text()) and not (
+            self._special_text and self._spin.value() == self._spin.minimum()
+        ))
 
     def _start_decrease(self) -> None:
         self._start_hold(-1)
@@ -135,7 +151,12 @@ class KeyboardNumberField(QFrame):
         self._hold_direction = 0
 
     def eventFilter(self, watched, event) -> bool:
-        if watched in (self._decrease, self._increase) and event.type() in (
+        holding_button = (
+            watched is self._decrease and self._hold_direction < 0
+        ) or (
+            watched is self._increase and self._hold_direction > 0
+        )
+        if holding_button and event.type() in (
             QEvent.Type.Leave, QEvent.Type.Hide, QEvent.Type.EnabledChange,
         ):
             self._stop_hold()
@@ -143,6 +164,15 @@ class KeyboardNumberField(QFrame):
 
     def setRange(self, minimum, maximum) -> None:
         self._spin.setRange(minimum, maximum)
+        self._sync_limits()
+
+    def setMinimum(self, minimum) -> None:
+        self._spin.setMinimum(minimum)
+        self._sync_limits()
+
+    def setMaximum(self, maximum) -> None:
+        self._spin.setMaximum(maximum)
+        self._sync_limits()
 
     def setSingleStep(self, step) -> None:
         self._spin.setSingleStep(step)
@@ -152,10 +182,20 @@ class KeyboardNumberField(QFrame):
 
     def setSuffix(self, suffix: str) -> None:
         self._unit.setText(suffix.strip())
-        self._unit.setVisible(bool(suffix.strip()))
+        self._sync_limits()
+
+    def setSpecialValueText(self, text: str) -> None:
+        self._special_text = text
+        self._spin.setSpecialValueText(text)
+        self._sync_limits()
+
+    def setReadOnly(self, read_only: bool) -> None:
+        self._spin.setReadOnly(read_only)
+        self._sync_limits()
 
     def setValue(self, value) -> None:
         self._spin.setValue(value)
+        self._sync_limits()
 
     def value(self):
         return self._spin.value()

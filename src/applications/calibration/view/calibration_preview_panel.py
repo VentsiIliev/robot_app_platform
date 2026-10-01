@@ -10,9 +10,10 @@ from PyQt6.QtWidgets import (
     QFormLayout,
     QHBoxLayout,
     QLabel,
+    QProgressBar,
+    QPushButton,
     QTextEdit,
     QSizePolicy,
-    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
@@ -29,7 +30,8 @@ from src.applications.base.app_styles import (
     section_hint,
     section_label,
 )
-from src.applications.base.widgets.custom_virtual_keyboard import KeyboardSpinBox
+from pl_gui.settings.settings_view.styles import BORDER, PRIMARY, PRIMARY_LIGHT, TEXT_COLOR
+from src.applications.base.widgets.keyboard_number_field import KeyboardNumberField
 from src.shared_contracts.declarations import WorkAreaDefinition
 
 _GRID_POINT_COLOR = QColor("#FF7043")
@@ -183,23 +185,23 @@ class CalibrationAreaGridPanel(QWidget):
             section_hint("Choose a work area, mark its four corners on the preview, then generate and verify the grid.")
         )
 
-        area_top = QHBoxLayout()
+        area_top = QVBoxLayout()
         area_top.setSpacing(12)
 
         form = QFormLayout()
         self.work_area_combo = QComboBox()
         for definition in self._work_area_definitions:
             self.work_area_combo.addItem(definition.label, definition.id)
-        self.grid_rows_spin = KeyboardSpinBox()
+        self.grid_rows_spin = KeyboardNumberField()
         self.grid_rows_spin.setRange(2, 50)
         self.grid_rows_spin.setValue(5)
-        self.grid_cols_spin = KeyboardSpinBox()
+        self.grid_cols_spin = KeyboardNumberField()
         self.grid_cols_spin.setRange(2, 50)
         self.grid_cols_spin.setValue(4)
         form.addRow("Area:", self.work_area_combo)
         form.addRow("Rows:", self.grid_rows_spin)
         form.addRow("Cols:", self.grid_cols_spin)
-        area_top.addLayout(form, stretch=0)
+        area_top.addLayout(form)
 
         area_actions = QVBoxLayout()
         area_actions.setSpacing(8)
@@ -217,7 +219,7 @@ class CalibrationAreaGridPanel(QWidget):
         self.verify_area_grid_btn.setEnabled(False)
         area_actions.addWidget(self.verify_area_grid_btn)
         area_actions.addStretch()
-        area_top.addLayout(area_actions, stretch=1)
+        area_top.addLayout(area_actions)
         area_layout.addLayout(area_top)
 
         area_bottom = QHBoxLayout()
@@ -353,8 +355,8 @@ class CalibrationPreviewPanel(QWidget):
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 12, 12, 12)
-        layout.setSpacing(12)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
 
         preview_card = QWidget()
         preview_card.setStyleSheet(APP_CARD_STYLE)
@@ -362,10 +364,14 @@ class CalibrationPreviewPanel(QWidget):
         preview_layout.setContentsMargins(0, 0, 0, 0)
         preview_layout.setSpacing(0)
 
-        caption = QLabel("Camera Preview")
-        caption.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        caption.setFixedHeight(24)
-        caption.setStyleSheet(APP_CAPTION_STYLE)
+        self.preview_toolbar = QWidget()
+        toolbar_layout = QHBoxLayout(self.preview_toolbar)
+        toolbar_layout.setContentsMargins(12, 6, 12, 6)
+        toolbar_layout.setSpacing(8)
+        live_label = QLabel("●  Live preview")
+        live_label.setStyleSheet(f"color: {PRIMARY}; font-weight: bold; background: transparent;")
+        toolbar_layout.addWidget(live_label)
+        toolbar_layout.addStretch()
 
         self.preview_label = _GridCameraView()
         self.preview_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
@@ -374,14 +380,14 @@ class CalibrationPreviewPanel(QWidget):
         if self._work_area_definitions:
             self.preview_label.set_active_area(self._work_area_definitions[0].id)
 
-        preview_layout.addWidget(caption, stretch=0)
+        preview_layout.addWidget(self.preview_toolbar, stretch=0)
         preview_layout.addWidget(self.preview_label, stretch=1)
 
         status_bar = QWidget()
         status_bar.setStyleSheet(_CALIB_STATUS_BAR_STYLE)
         status_layout = QHBoxLayout(status_bar)
         status_layout.setContentsMargins(12, 8, 12, 8)
-        status_layout.setSpacing(16)
+        status_layout.setSpacing(8)
         self.calibration_state_label = QLabel("State: idle")
         self.calibration_target_label = QLabel("Target: -")
         self.calibration_progress_label = QLabel("Progress: 0/0")
@@ -394,25 +400,59 @@ class CalibrationPreviewPanel(QWidget):
         ):
             widget.setStyleSheet(_CALIB_STATUS_LABEL_STYLE)
             status_layout.addWidget(widget)
-        status_layout.addStretch(1)
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setRange(0, 1)
+        self.progress_bar.setValue(0)
+        self.progress_bar.setTextVisible(False)
+        self.progress_bar.setMaximumHeight(8)
+        self.progress_bar.setStyleSheet(
+            f"QProgressBar {{ background: {PRIMARY_LIGHT}; border: none; border-radius: 4px; }}"
+            f"QProgressBar::chunk {{ background: {PRIMARY}; border-radius: 4px; }}"
+        )
+        status_layout.insertWidget(3, self.progress_bar, stretch=1)
         preview_layout.addWidget(status_bar, stretch=0)
 
         log_card = QWidget()
-        log_card.setStyleSheet(APP_CARD_STYLE)
+        log_card.setStyleSheet(f"background: white; border-top: 1px solid {BORDER};")
         log_layout = QVBoxLayout(log_card)
-        log_layout.setContentsMargins(16, 12, 16, 16)
-        log_layout.setSpacing(10)
-        log_layout.addWidget(section_label("Activity"))
-        log_layout.addWidget(section_hint("Live task output and verification reports appear here."))
+        log_layout.setContentsMargins(12, 6, 12, 8)
+        log_layout.setSpacing(6)
+        self.activity_toggle = QPushButton("Activity  ·  No activity yet  ▾")
+        self.activity_toggle.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.activity_toggle.setStyleSheet(
+            f"QPushButton {{ text-align: left; color: {TEXT_COLOR}; background: transparent; border: none; font-weight: bold; padding: 4px; }}"
+        )
+        self.activity_toggle.clicked.connect(self._toggle_activity)
+        log_layout.addWidget(self.activity_toggle)
 
         self.log = QTextEdit()
         self.log.setReadOnly(True)
         self.log.setStyleSheet(APP_LOG_STYLE)
-        self.log.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        log_layout.addWidget(self.log, stretch=1)
+        self.log.setMaximumHeight(170)
+        self.log.hide()
+        self.log.textChanged.connect(self._update_activity_summary)
+        log_layout.addWidget(self.log)
 
-        layout.addWidget(preview_card, stretch=5)
-        layout.addWidget(log_card, stretch=2)
+        preview_layout.addWidget(log_card)
+        layout.addWidget(preview_card, stretch=1)
+
+    def add_preview_action(self, button: QWidget) -> None:
+        self.preview_toolbar.layout().addWidget(button)
+
+    def add_stop_action(self, button: QWidget) -> None:
+        button.setMinimumWidth(72)
+        self.calibration_error_label.parentWidget().layout().addWidget(button)
+
+    def _toggle_activity(self) -> None:
+        self.log.setVisible(not self.log.isVisible())
+        self._update_activity_summary()
+
+    def _update_activity_summary(self) -> None:
+        lines = self.log.toPlainText().splitlines()
+        latest = lines[-1] if lines else "No activity yet"
+        if len(latest) > 90:
+            latest = latest[:87] + "..."
+        self.activity_toggle.setText(f"Activity  ·  {latest}  {'▴' if self.log.isVisible() else '▾'}")
 
     def set_robot_calibration_status(self, payload: dict | None) -> None:
         if not payload:
@@ -421,12 +461,16 @@ class CalibrationPreviewPanel(QWidget):
             self.calibration_progress_label.setText("Progress: 0/0")
             self.calibration_error_label.setText("Error: -")
             self.calibration_error_label.setStyleSheet(_CALIB_STATUS_ERROR_IDLE_STYLE)
+            self.progress_bar.setRange(0, 1)
+            self.progress_bar.setValue(0)
             return
 
         state_name = str(payload.get("state_name") or "idle")
         active_target = payload.get("active_target_id")
         current_index = int(payload.get("current_marker_index") or 0)
         total_targets = int(payload.get("total_targets") or 0)
+        self.progress_bar.setRange(0, max(total_targets, 1))
+        self.progress_bar.setValue(min(current_index + 1, total_targets) if total_targets else 0)
         current_error = payload.get("current_error_mm")
         threshold = payload.get("alignment_threshold_mm")
 

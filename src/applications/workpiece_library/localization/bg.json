@@ -14,6 +14,7 @@
     "{count} workpiece(s) selected": "Избрани {count} детайла"
   },
   "WorkpieceLibraryView": {
+    "Workpiece Library": "Библиотека с детайли",
     "Select": "Избор",
     "Shape": "Форма",
     "Select All": "Избери всички",

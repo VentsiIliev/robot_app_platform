@@ -7,11 +7,60 @@
     "Calibration is currently running.\nPlease stop it before leaving.": "Калибрацията в момента работи.\nМоля, спрете я преди да излезете."
   },
   "CalibrationView": {
+    "Calibration": "Калибрация",
+    "Stop": "Стоп",
     "Global (shared calibration)": "Глобална (споделена калибрация)",
     "Robot Calibration Area": "Зона за калибрация на робота",
     "Camera-to-TCP Calibration Area": "Зона за калибрация камера към TCP",
     "Select the area for camera-to-TCP calibration:": "Изберете зона за калибрация камера към TCP:",
     "Select the area to calibrate:": "Изберете зоната за калибриране:",
     "not configured": "не е конфигурирана"
+  },
+  "_BaseCalibrationTab": {
+    "settings": "настройки",
+    "Save": "Запази",
+    "Cancel": "Отказ"
+  },
+  "CameraCalibrationTab": {
+    "Auto Capture": "Автоматично заснемане"
+  },
+  "IntrinsicAutoCaptureWidget": {
+    "Board type": "Тип на шаблона",
+    "Board cols": "Колони на шаблона",
+    "Board rows": "Редове на шаблона",
+    "Square size": "Размер на квадрат",
+    "ArUco dict": "ArUco речник",
+    "Marker size": "Размер на маркер",
+    "Grid rows": "Редове на решетката",
+    "Grid cols": "Колони на решетката",
+    "Tilt angle": "Ъгъл на наклон",
+    "Z delta": "Разлика по Z",
+    "Sweep X half-range": "Полуобхват по X",
+    "Sweep Y half-range": "Полуобхват по Y",
+    "Min corners/frame": "Мин. ъгли на кадър",
+    "RZ yaw variants (±)": "Варианти по RZ (±)",
+    "Auto hand-eye": "Автоматична координация ръка–око",
+    "Stabilization delay": "Изчакване за стабилизиране",
+    "Velocity": "Скорост",
+    "Acceleration": "Ускорение",
+    "Chessboard": "Шахматна дъска",
+    "Enabled": "Включено",
+    "Auto Capture": "Автоматично заснемане",
+    "Stop Auto Capture": "Спри автоматичното заснемане"
+  },
+  "WorkObjectCalibrationTab": {
+    "WorkObject": "Работен обект",
+    "Capture three points to define the work object frame.": "Запишете три точки, за да определите координатната система на работния обект.",
+    "Work object": "Работен обект",
+    "User ID": "Потребителски ID",
+    "Name": "Име",
+    "Center": "Център",
+    "X direction": "Посока X",
+    "Y direction": "Посока Y",
+    "Not captured": "Не е записано",
+    "Capture": "Запиши",
+    "Solve orientation": "Изчисли ориентация",
+    "Save and activate": "Запази и активирай",
+    "No WorkObject solved": "Няма изчислен работен обект"
   }
 }

@@ -4,6 +4,7 @@ import logging
 import os
 from dataclasses import replace
 from pathlib import Path
+from typing import Callable
 
 import numpy as np
 
@@ -15,6 +16,7 @@ from src.engine.robot.path_preparation.pixel_to_mm import (
     PixelToMmContext,
 )
 from src.shared_contracts.events.process_events import ProcessState
+from src.robot_systems.paint.hardware.paint_head_device import PaintHeadRangeError
 from src.robot_systems.paint.applications.dashboard.dashboard_state import DashboardCardState, DashboardState
 from src.robot_systems.paint.applications.dashboard.service.i_paint_dashboard_service import (
     ContourTransformDebugResult,
@@ -40,6 +42,8 @@ class PaintDashboardService(IPaintDashboardService):
         allow_running_paint_settings_updates: bool = False,
         production_start_guard=None,
         paint_process_config_service=None,
+        paint_head_available: Callable[[], bool] | None = None,
+        paint_head_adjust: Callable[[str, int], object] | None = None,
         matching_selection=None,
         plate_layout_service=None,
         target_point_name: str = "camera",
@@ -52,6 +56,8 @@ class PaintDashboardService(IPaintDashboardService):
         self._robot_service = robot_service
         self._vision_service = vision_service
         self._paint_process_config_service = paint_process_config_service
+        self._paint_head_available = paint_head_available
+        self._paint_head_adjust = paint_head_adjust
         self._matching_selection = matching_selection
         self._plate_layout_service = plate_layout_service
         self._production_start_guard = production_start_guard
@@ -255,6 +261,30 @@ class PaintDashboardService(IPaintDashboardService):
             self._logger.exception("Could not save process acceleration scale")
             return DashboardCommandResult(False, f"Could not save process acceleration scale: {exc}")
         return DashboardCommandResult(True, "Process acceleration scale saved.")
+
+    def is_paint_head_available(self) -> bool:
+        return bool(self._paint_head_available and self._paint_head_available())
+
+    def adjust_paint_head(self, direction: str, units: int) -> DashboardCommandResult:
+        """Move the configured number of register units regardless of process state."""
+        if direction not in {"more", "less"}:
+            return DashboardCommandResult(False, "Invalid paint-head direction.")
+        if isinstance(units, bool) or not isinstance(units, int) or not 1 <= units <= 65535:
+            return DashboardCommandResult(False, "Invalid paint-head step.")
+        if self._paint_head_adjust is None:
+            return DashboardCommandResult(False, "Paint head is not available.")
+        try:
+            result = self._paint_head_adjust(direction, units)
+        except PaintHeadRangeError:
+            return DashboardCommandResult(False, "Paint head is at its configured limit.")
+        except ValueError as exc:
+            return DashboardCommandResult(False, str(exc))
+        except Exception as exc:
+            self._logger.exception("Dashboard paint-head adjustment failed")
+            return DashboardCommandResult(False, f"Paint-head command failed: {exc}")
+        if not bool(getattr(result, "wrote", False)):
+            return DashboardCommandResult(False, "Paint head is disabled; no write was sent.")
+        return DashboardCommandResult(True, "")
 
     def relieve_cable(self) -> DashboardCommandResult:
         if self._robot_service is None:

@@ -7,6 +7,7 @@ from PyQt6.QtWidgets import (
 
 from pl_gui.settings.settings_view.styles import (
     ACTION_BTN_STYLE,
+    APP_PAGE_TITLE_STYLE,
     BG_COLOR,
     BORDER,
     ERROR_COLOR,
@@ -20,7 +21,7 @@ from pl_gui.settings.settings_view.styles import (
     TEXT_PRIMARY,
 )
 from src.applications.base.i_application_view import IApplicationView
-from src.applications.base.widgets.custom_virtual_keyboard import KeyboardDoubleSpinBox, KeyboardSpinBox
+from src.applications.base.widgets.keyboard_number_field import KeyboardNumberField
 from .paint_head_dial import PaintHeadDial
 
 
@@ -92,6 +93,10 @@ class PaintAdjustmentView(IApplicationView):
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(12)
 
+        self._page_title = QLabel()
+        self._page_title.setStyleSheet(APP_PAGE_TITLE_STYLE)
+        layout.addWidget(self._page_title)
+
         top = QHBoxLayout()
         top.setSpacing(12)
         camera_card = QFrame()
@@ -145,11 +150,10 @@ class PaintAdjustmentView(IApplicationView):
         self._step_label = QLabel()
         self._step_label.setWordWrap(True)
         self._step_label.setStyleSheet(f"color: {TERTIARY_TEXT}; font-size: 9pt; font-weight: bold;")
-        self._step_input = KeyboardSpinBox()
+        self._step_input = KeyboardNumberField()
         self._step_input.setRange(1, 65535)
         self._step_input.setValue(1)
-        self._step_input.setMinimumHeight(38)
-        self._step_input.setFixedWidth(84)
+        self._step_input.setMinimumWidth(160)
         step_header = QHBoxLayout()
         step_header.addWidget(self._step_label, 1)
         step_header.addWidget(self._step_input)
@@ -264,11 +268,10 @@ class PaintAdjustmentView(IApplicationView):
         label = QLabel()
         label.setStyleSheet(f"color: {TERTIARY_TEXT}; font-size: 9pt;")
         column.addWidget(label)
-        field = KeyboardDoubleSpinBox()
+        field = KeyboardNumberField(decimal=True)
         field.setRange(minimum, maximum)
         field.setDecimals(1)
         field.setValue(initial)
-        field.setMinimumHeight(44)
         column.addWidget(field)
         row.addLayout(column, 1)
         return label, field
@@ -450,6 +453,7 @@ class PaintAdjustmentView(IApplicationView):
         self._position_note.setText(text)
 
     def retranslateUi(self) -> None:
+        self._page_title.setText(self.tr("Paint Adjustment — Auxiliary Camera"))
         self._preview.set_empty_text(
             self.tr("No camera image yet"),
             self.tr("Live view of the painted section appears here"),

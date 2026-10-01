@@ -284,15 +284,15 @@ and numeric fields. Do not create app-local keyboards.
 Directly owned form fields:
 
 ```python
-from src.applications.base.widgets.custom_virtual_keyboard import (
-    KeyboardDoubleSpinBox,
-    KeyboardLineEdit,
-    KeyboardSpinBox,
-)
+from src.applications.base.widgets.custom_virtual_keyboard import KeyboardLineEdit
+from src.applications.base.widgets.keyboard_number_field import KeyboardNumberField
 
 self._name = KeyboardLineEdit()
-self._count = KeyboardSpinBox()
-self._offset_mm = KeyboardDoubleSpinBox()
+self._count = KeyboardNumberField()
+self._count.setRange(0, 100)
+self._offset_mm = KeyboardNumberField(decimal=True)
+self._offset_mm.setRange(-50.0, 50.0)
+self._offset_mm.setSuffix(" mm")
 ```
 
 Schema-driven settings screens:
@@ -326,6 +326,11 @@ from src.applications.base.widgets.virtual_keyboard_widget_factory import (
 
 builder.with_widgets(VirtualKeyboardWidgetFactory())
 ```
+
+Use `KeyboardNumberField` for directly owned numeric fields. It supplies the
+same large −/+ controls, typed entry, bounds, units, and hold-to-step behavior
+across application views. Keep `KeyboardSpinBox` or `KeyboardDoubleSpinBox`
+only where a widget-provider contract requires a Qt spin-box subclass.
 
 ### Dialogs with editable fields
 

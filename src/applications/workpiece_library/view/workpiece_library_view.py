@@ -3,21 +3,18 @@ from typing import List, Optional
 
 import qtawesome as qta
 from PyQt6.QtCore import QEvent, QTimer, pyqtSignal, Qt, QSize
-from PyQt6.QtGui import QFont, QIcon, QPixmap
+from PyQt6.QtGui import QIcon, QPixmap
 from PyQt6.QtWidgets import (
-    QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
+    QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QTableWidget, QTableWidgetItem,
     QHeaderView, QGroupBox, QSizePolicy, QWidget,
-    QFrame, QScrollArea, QSplitter,
-)
-from PyQt6.QtWidgets import (
-    QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
-    QPushButton, QTableWidget, QTableWidgetItem,
-    QHeaderView, QGroupBox, QSizePolicy, QWidget,
-    QFrame, QScrollArea, QSplitter, QComboBox,    # ← add QComboBox
+    QFrame, QScrollArea, QSplitter, QComboBox,
 )
 
-
+from pl_gui.settings.settings_view.styles import (
+    APP_PAGE_TITLE_STYLE, BG_COLOR, BORDER, PRIMARY, PRIMARY_HOVER,
+    SECONDARY_BG, TERTIARY_TEXT, TEXT_COLOR,
+)
 from pl_gui.utils.utils_widgets.table_helpers import make_table
 from src.applications.base.i_application_view import IApplicationView
 from src.applications.base.widgets.custom_virtual_keyboard import KeyboardLineEdit
@@ -25,13 +22,13 @@ from src.applications.workpiece_library.domain.workpiece_schema import Workpiece
 
 _logger = logging.getLogger(__name__)
 
-_ACCENT     = "#905BA9"
-_ACCENT_HOV = "#7A4D92"
-_BG         = "#ffffff"
-_BG_ALT     = "#f5f5f5"
-_BORDER     = "#cccccc"
-_TEXT       = "#111111"
-_MUTED      = "#666666"
+_ACCENT = PRIMARY
+_ACCENT_HOV = PRIMARY_HOVER
+_BG = BG_COLOR
+_BG_ALT = SECONDARY_BG
+_BORDER = BORDER
+_TEXT = TEXT_COLOR
+_MUTED = TERTIARY_TEXT
 
 
 class WorkpieceLibraryView(IApplicationView):
@@ -61,6 +58,7 @@ class WorkpieceLibraryView(IApplicationView):
     # ── IApplicationView ─────────────────────────────────────────────
 
     def setup_ui(self) -> None:
+        self.setObjectName("workpieceLibrary")
         self.setStyleSheet(self._stylesheet())
         root = QVBoxLayout(self)
         root.setContentsMargins(12, 12, 12, 12)
@@ -81,6 +79,7 @@ class WorkpieceLibraryView(IApplicationView):
         self._status = QLabel()
         self._status.setStyleSheet(f"color: {_MUTED}; font-size: 12px;")
         root.addWidget(self._status)
+        self.retranslateUi()
 
     def clean_up(self) -> None:
         pass
@@ -261,19 +260,9 @@ class WorkpieceLibraryView(IApplicationView):
         layout = QHBoxLayout(w)
         layout.setContentsMargins(0, 0, 0, 4)
 
-        icon_lbl = QLabel()
-        icon_lbl.setPixmap(
-            qta.icon("fa5s.archive", color=_ACCENT).pixmap(QSize(28, 28))
-        )
-        layout.addWidget(icon_lbl)
-
-        title = QLabel("Workpiece Library")
-        f = QFont()
-        f.setPointSize(16)
-        f.setBold(True)
-        title.setFont(f)
-        title.setStyleSheet(f"color: {_TEXT};")
-        layout.addWidget(title)
+        self._title_label = QLabel()
+        self._title_label.setStyleSheet(APP_PAGE_TITLE_STYLE)
+        layout.addWidget(self._title_label)
         layout.addStretch()
         return w
 
@@ -304,6 +293,7 @@ class WorkpieceLibraryView(IApplicationView):
         btn_refresh.setIcon(qta.icon("fa5s.sync-alt", color="white"))
         btn_refresh.setToolTip("Refresh")
         btn_refresh.setFixedSize(36, 36)
+        btn_refresh.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_refresh.clicked.connect(self.refresh_requested)
         layout.addWidget(btn_refresh)
         return w
@@ -359,6 +349,7 @@ class WorkpieceLibraryView(IApplicationView):
         scroll.setFrameShape(QFrame.Shape.NoFrame)
 
         container = QWidget()
+        container.setStyleSheet("background: white;")
         self._detail_layout = QVBoxLayout(container)
         self._detail_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         self._detail_layout.setSpacing(4)
@@ -404,6 +395,7 @@ class WorkpieceLibraryView(IApplicationView):
         self._btn_save.setMinimumHeight(44)
         self._btn_save.setMinimumWidth(140)
         self._btn_save.setEnabled(False)
+        self._btn_save.setCursor(Qt.CursorShape.PointingHandCursor)
         self._btn_save.clicked.connect(self._on_save)
 
         self._btn_delete = QPushButton(
@@ -412,6 +404,7 @@ class WorkpieceLibraryView(IApplicationView):
         self._btn_delete.setMinimumHeight(44)
         self._btn_delete.setMinimumWidth(140)
         self._btn_delete.setEnabled(False)
+        self._btn_delete.setCursor(Qt.CursorShape.PointingHandCursor)
         self._btn_delete.clicked.connect(self._on_delete)
 
         self._btn_open = QPushButton(
@@ -421,6 +414,7 @@ class WorkpieceLibraryView(IApplicationView):
         self._btn_open.setMinimumHeight(44)
         self._btn_open.setMinimumWidth(160)
         self._btn_open.setEnabled(False)
+        self._btn_open.setCursor(Qt.CursorShape.PointingHandCursor)
         self._btn_open.clicked.connect(self._on_open_in_editor)
 
         self._detail_actions.addWidget(self._btn_open)
@@ -492,6 +486,8 @@ class WorkpieceLibraryView(IApplicationView):
         self._emit_selection()
 
     def retranslateUi(self) -> None:
+        if hasattr(self, "_title_label"):
+            self._title_label.setText(self.tr("Workpiece Library"))
         if not self._selection_enabled or not hasattr(self, "_btn_match_all"):
             return
         self._btn_match_all.setText(self.tr("Select All"))
@@ -537,32 +533,33 @@ class WorkpieceLibraryView(IApplicationView):
     @staticmethod
     def _stylesheet() -> str:
         return f"""
-            QWidget {{ background-color: {_BG}; color: {_TEXT}; }}
+            QWidget#workpieceLibrary {{ background-color: {_BG}; color: {_TEXT}; }}
             QGroupBox {{
-                font-weight: bold; font-size: 13px;
-                border: 2px solid {_BORDER}; border-radius: 6px;
+                background: white; color: {_TEXT}; font-weight: bold; font-size: 10pt;
+                border: 1px solid {_BORDER}; border-radius: 10px;
                 margin-top: 1ex; padding-top: 10px;
             }}
-            QGroupBox::title {{ subcontrol-origin: margin; left: 10px; padding: 0 4px; }}
+            QGroupBox::title {{ subcontrol-origin: margin; left: 10px; padding: 0 4px; color: {_ACCENT}; }}
             QTableWidget {{
-                gridline-color: #d0d0d0; background-color: {_BG};
+                gridline-color: {_BORDER}; background-color: white;
                 alternate-background-color: {_BG_ALT}; color: {_TEXT};
             }}
-            QTableWidget::item:selected {{ background-color: {_ACCENT}; color: white; }}
+            QTableWidget::item:selected {{ background-color: {_BG_ALT}; color: {_TEXT}; }}
             QHeaderView::section {{
-                background-color: #f0f0f0; color: {_TEXT};
-                padding: 4px; border: 1px solid #d0d0d0; font-weight: bold;
+                background-color: {_BG_ALT}; color: {_ACCENT};
+                padding: 8px; border: none; border-bottom: 1px solid {_BORDER}; font-weight: bold;
             }}
             QLineEdit {{
-                border: 1px solid {_BORDER}; border-radius: 4px;
-                padding: 4px 8px; background: white; color: {_TEXT};
+                border: 1px solid {_BORDER}; border-radius: 8px;
+                padding: 8px 12px; background: white; color: {_TEXT}; min-height: 28px;
             }}
             QLineEdit:focus {{ border-color: {_ACCENT}; }}
             QPushButton {{
                 background-color: {_ACCENT}; border: none; color: white;
-                padding: 8px 16px; font-size: 13px; border-radius: 4px;
+                padding: 8px 16px; font-size: 11pt; font-weight: bold;
+                min-height: 44px; border-radius: 8px;
             }}
             QPushButton:hover  {{ background-color: {_ACCENT_HOV}; }}
-            QPushButton:disabled {{ background-color: #cccccc; color: #888888; }}
-            QScrollArea {{ border: none; background: transparent; }}
+            QPushButton:disabled {{ background-color: {_BG_ALT}; color: {_MUTED}; }}
+            QScrollArea {{ border: none; background: white; }}
         """

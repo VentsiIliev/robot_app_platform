@@ -70,8 +70,7 @@ class TestTargetingDefinitionsTab(unittest.TestCase):
         tab._tcp_area.setCurrentIndex(tab._tcp_area.findData("magazine"))
         self.assertEqual(emissions, [])
         tab._local_tcp.setChecked(True)
-        tab._tcp_x.setText("12")
-        tab._on_tcp_value_changed()
+        tab._tcp_x.setValue(12)
 
         saved = tab.get_values()
         self.assertEqual(saved["points"][0]["x_mm"], 1)

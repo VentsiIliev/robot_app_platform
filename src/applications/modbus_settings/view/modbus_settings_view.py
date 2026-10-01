@@ -1,20 +1,26 @@
+from copy import deepcopy
+
 from PyQt6.QtCore import QEvent, pyqtSignal, Qt
-from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
-    QVBoxLayout, QHBoxLayout, QWidget, QPushButton, QLabel,
-    QComboBox, QScrollArea, QTabWidget, QSizePolicy, QDialog, QGroupBox,
-    QDialogButtonBox, QFormLayout, QLineEdit, QSpinBox, QDoubleSpinBox,
+    QVBoxLayout, QHBoxLayout, QWidget, QPushButton, QLabel, QFrame,
+    QComboBox, QScrollArea, QStackedWidget, QTabBar, QSizePolicy, QDialog,
+    QFormLayout,
     QTableWidget, QTableWidgetItem, QHeaderView,
 )
 
 
 from pl_gui.settings.settings_view.group_widget import GenericSettingGroup
 from pl_gui.settings.settings_view.styles import (
-    ACTION_BTN_STYLE, GHOST_BTN_STYLE, BG_COLOR, BORDER, GROUP_STYLE,
-    PRIMARY, PRIMARY_DARK, LABEL_STYLE, TAB_WIDGET_STYLE, SAVE_BUTTON_STYLE,
+    ACTION_BTN_STYLE, GHOST_BTN_STYLE, BG_COLOR, BORDER,
+    PRIMARY, PRIMARY_DARK, PRIMARY_LIGHT, SECONDARY_BG, TEXT_COLOR,
+    STATUS_OK, ERROR_COLOR, APP_PHASE_TAB_STYLE,
+    SETTINGS_CARD_FRAME_STYLE, SETTINGS_FIELD_LABEL_STYLE,
+    SETTINGS_FOOTER_STYLE, SETTINGS_HEADER_STYLE, SAVE_BUTTON_STYLE,
 )
 from src.applications.base.i_application_view import IApplicationView
 from src.applications.base.app_dialog import AppDialog, DIALOG_COMBO_STYLE, DIALOG_INPUT_STYLE
+from src.applications.base.widgets.custom_virtual_keyboard import KeyboardLineEdit
+from src.applications.base.widgets.keyboard_number_field import KeyboardNumberField
 from src.applications.base.keyboard_settings_view import build_with_keyboard_setting_handlers
 from src.applications.base.styled_message_box import ask_yes_no, show_warning
 from src.applications.modbus_settings.model.mapper import ModbusSettingsMapper
@@ -24,27 +30,29 @@ from src.engine.hardware.communication.transport_registry import DEFAULT_TRANSPO
 _TABLE_STYLE = f"""
 QTableWidget {{
     background-color: white;
-    color: #333333;
+    color: {TEXT_COLOR};
     border: 1px solid {BORDER};
     gridline-color: {BORDER};
-    selection-background-color: rgba(144, 91, 169, 0.16);
-    selection-color: #333333;
-    alternate-background-color: #FAFAFA;
+    selection-background-color: {SECONDARY_BG};
+    selection-color: {TEXT_COLOR};
+    alternate-background-color: {BG_COLOR};
 }}
 QHeaderView::section {{
-    background-color: {BG_COLOR};
-    color: #333333;
+    background-color: {PRIMARY};
+    color: white;
     border: none;
-    border-bottom: 1px solid {BORDER};
-    padding: 8px;
+    padding: 10px;
     font-weight: bold;
 }}
 """
 
+_CARD_HINT_STYLE = SETTINGS_FIELD_LABEL_STYLE
+_TOOL_LABEL_STYLE = f"color: {TEXT_COLOR}; font-size: 10pt; font-weight: bold; background: transparent;"
+
 _COMBO_STYLE = f"""
 QComboBox {{
     background: white;
-    color: #333333;
+    color: {TEXT_COLOR};
     border: 2px solid {BORDER};
     border-radius: 8px;
     padding: 8px 16px;
@@ -55,28 +63,17 @@ QComboBox:hover {{ border-color: {PRIMARY}; }}
 QComboBox::drop-down {{ border: none; width: 40px; }}
 QComboBox QAbstractItemView {{
     background: white;
-    color: #333333;
-    selection-background-color: rgba(122, 90, 248, 0.12);
+    color: {TEXT_COLOR};
+    selection-background-color: {PRIMARY_LIGHT};
     selection-color: {PRIMARY_DARK};
     font-size: 11pt;
     padding: 8px;
 }}
 """
 
-_STATUS_BASE = f"""
-    QLabel {{
-        border: 2px solid {BORDER};
-        border-radius: 8px;
-        padding: 8px 16px;
-        font-size: 11pt;
-        font-weight: bold;
-        background: white;
-        min-height: 40px;
-    }}
-"""
-_STATUS_IDLE = _STATUS_BASE + "QLabel { color: #888888; }"
-_STATUS_OK   = _STATUS_BASE + "QLabel { color: #2E7D32; border-color: #2E7D32; }"
-_STATUS_FAIL = _STATUS_BASE + "QLabel { color: #C62828; border-color: #C62828; }"
+_STATUS_IDLE = _CARD_HINT_STYLE
+_STATUS_OK = f"color: {STATUS_OK}; font-size: 9pt; background: transparent;"
+_STATUS_FAIL = f"color: {ERROR_COLOR}; font-size: 9pt; background: transparent;"
 
 
 def _make_scroll(widget: QWidget) -> QScrollArea:
@@ -109,33 +106,68 @@ class ModbusSettingsView(IApplicationView):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
+        self.setStyleSheet(f"background: {BG_COLOR};")
 
         # Groups — owned here, not by SettingsView
         build_with_keyboard_setting_handlers(self._build_setting_groups)
+        self._translated_labels: list[tuple[QLabel, str]] = []
 
-        # Tab widget — built manually so we control QScrollArea policies
-        self._tabs = QTabWidget()
-        self._tabs.setStyleSheet(TAB_WIDGET_STYLE)
-        self._tabs.addTab(_make_scroll(self._build_connection_tab()), "Connection")
-        self._tabs.addTab(_make_scroll(self._build_device_tab()),     "Slaves")
+        self._phase_bar = QTabBar()
+        self._phase_bar.setExpanding(False)
+        self._phase_bar.setDrawBase(False)
+        self._phase_bar.setStyleSheet(APP_PHASE_TAB_STYLE)
+        self._tabs = QStackedWidget()
+        self._tabs.addWidget(_make_scroll(self._build_connection_tab()))
+        self._phase_bar.addTab("Connection")
+        self._tabs.addWidget(_make_scroll(self._build_device_tab()))
+        self._phase_bar.addTab("Slaves")
+        self._phase_bar.currentChanged.connect(self._tabs.setCurrentIndex)
 
-        # Save button
-        self._save_btn = QPushButton("Save")
-        self._save_btn.setStyleSheet(SAVE_BUTTON_STYLE)
-        self._save_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._save_btn.clicked.connect(self._on_inner_save_btn)
+        self._title_label = QLabel()
+        self._title_label.setStyleSheet(SETTINGS_HEADER_STYLE)
 
-        # Centre content
         content = QWidget()
         content.setStyleSheet(f"background: {BG_COLOR};")
         content_layout = QVBoxLayout(content)
-        content_layout.setContentsMargins(16, 16, 16, 16)
+        content_layout.setContentsMargins(10, 16, 10, 0)
         content_layout.setSpacing(12)
-        content_layout.addWidget(self._tabs)
-        content_layout.addWidget(self._save_btn)
+        content_layout.addWidget(self._title_label)
+        content_layout.addWidget(self._phase_bar, alignment=Qt.AlignmentFlag.AlignLeft)
+        content_layout.addWidget(self._tabs, stretch=1)
 
-        layout.addWidget(content)
-        layout.addWidget(self._build_action_bar())
+        layout.addWidget(content, stretch=1)
+        layout.addWidget(self._build_save_bar())
+        self.retranslateUi()
+
+    def _build_card(self, title: str) -> tuple[QFrame, QVBoxLayout, QHBoxLayout]:
+        card = QFrame()
+        card.setObjectName("settingsCard")
+        card.setStyleSheet(SETTINGS_CARD_FRAME_STYLE)
+        outer = QVBoxLayout(card)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+        header = QWidget()
+        header.setObjectName("settingsCardHeader")
+        header_row = QHBoxLayout(header)
+        header_row.setContentsMargins(16, 10, 16, 10)
+        label = QLabel(title)
+        label.setObjectName("settingsCardTitle")
+        self._translated_labels.append((label, title))
+        header_row.addWidget(label)
+        outer.addWidget(header)
+        body = QWidget()
+        body.setObjectName("settingsCardContent")
+        body_layout = QVBoxLayout(body)
+        body_layout.setContentsMargins(16, 14, 16, 16)
+        body_layout.setSpacing(14)
+        outer.addWidget(body)
+        return card, body_layout, header_row
+
+    @staticmethod
+    def _size_table(table: QTableWidget) -> None:
+        header_height = table.horizontalHeader().height() or 40
+        rows_height = sum(table.rowHeight(row) for row in range(table.rowCount()))
+        table.setFixedHeight(min(280, max(88, header_height + rows_height + 4)))
 
     def _build_setting_groups(self) -> None:
         self._connection_group = GenericSettingGroup(CONNECTION_GROUP)
@@ -147,27 +179,26 @@ class ModbusSettingsView(IApplicationView):
         w = QWidget()
         w.setStyleSheet(f"background: {BG_COLOR};")
         lay = QVBoxLayout(w)
-        lay.setContentsMargins(16, 16, 16, 16)
-        lay.setSpacing(16)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(14)
         lay.addWidget(self._build_port_row())
-        lay.addWidget(self._build_profile_row(), stretch=1)
+        lay.addWidget(self._build_profile_row())
+        lay.addWidget(self._build_action_bar())
+        lay.addStretch()
         return w
 
     def _build_device_tab(self) -> QWidget:
         w = QWidget()
         w.setStyleSheet(f"background: {BG_COLOR};")
         lay = QVBoxLayout(w)
-        lay.setContentsMargins(16, 16, 16, 16)
-        lay.setSpacing(16)
-        lay.addWidget(self._build_slave_row(), stretch=1)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(14)
+        lay.addWidget(self._build_slave_row())
+        lay.addStretch()
         return w
 
     def _build_slave_row(self) -> QWidget:
-        row_widget = QGroupBox("Modbus Slaves")
-        row_widget.setStyleSheet(GROUP_STYLE)
-        row = QVBoxLayout(row_widget)
-        row.setContentsMargins(0, 0, 0, 0)
-        row.setSpacing(12)
+        row_widget, row, _header = self._build_card("MODBUS SLAVES")
 
         self._slave_table = QTableWidget(0, 5)
         self._slave_table.setHorizontalHeaderLabels(["Name", "Slave ID", "Profile", "Transport", "Retries"])
@@ -176,9 +207,7 @@ class ModbusSettingsView(IApplicationView):
         self._slave_table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
         self._slave_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self._slave_table.setStyleSheet(_TABLE_STYLE)
-        self._slave_table.setSizePolicy(
-            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
-        )
+        self._slave_table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self._slave_table.itemSelectionChanged.connect(self._on_slave_table_selection)
 
         self._slave_combo = QComboBox()
@@ -189,7 +218,7 @@ class ModbusSettingsView(IApplicationView):
         self._slave_profile_combo.setVisible(False)
         self._slave_transport_combo.setVisible(False)
         self._add_slave_btn = QPushButton("Add Slave")
-        self._add_slave_btn.setStyleSheet(GHOST_BTN_STYLE)
+        self._add_slave_btn.setStyleSheet(ACTION_BTN_STYLE)
         self._add_slave_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._add_slave_btn.clicked.connect(self._on_add_slave)
 
@@ -213,11 +242,7 @@ class ModbusSettingsView(IApplicationView):
         return row_widget
 
     def _build_profile_row(self) -> QWidget:
-        row_widget = QGroupBox("Connection Profiles")
-        row_widget.setStyleSheet(GROUP_STYLE)
-        row = QVBoxLayout(row_widget)
-        row.setContentsMargins(0, 0, 0, 0)
-        row.setSpacing(12)
+        row_widget, row, _header = self._build_card("CONNECTION PROFILES")
 
         self._profile_table = QTableWidget(0, 4)
         self._profile_table.setHorizontalHeaderLabels(["Name", "Port", "Baudrate", "Format"])
@@ -226,9 +251,7 @@ class ModbusSettingsView(IApplicationView):
         self._profile_table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
         self._profile_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self._profile_table.setStyleSheet(_TABLE_STYLE)
-        self._profile_table.setSizePolicy(
-            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
-        )
+        self._profile_table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self._profile_table.itemSelectionChanged.connect(self._on_profile_table_selection)
 
         self._profile_combo = QComboBox()
@@ -236,7 +259,7 @@ class ModbusSettingsView(IApplicationView):
         self._profile_combo.currentTextChanged.connect(self._on_profile_changed)
 
         self._add_profile_btn = QPushButton("Add Profile")
-        self._add_profile_btn.setStyleSheet(GHOST_BTN_STYLE)
+        self._add_profile_btn.setStyleSheet(ACTION_BTN_STYLE)
         self._add_profile_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._add_profile_btn.clicked.connect(self._on_add_profile)
 
@@ -259,40 +282,40 @@ class ModbusSettingsView(IApplicationView):
         return row_widget
 
     def _build_port_row(self) -> QWidget:
-        row_widget = QWidget()
-        row_widget.setStyleSheet("background: transparent;")
-        row = QHBoxLayout(row_widget)
-        row.setContentsMargins(0, 0, 0, 0)
+        row_widget, body, _header = self._build_card("PORT")
+        lbl = QLabel("SERIAL PORT")
+        lbl.setStyleSheet(_CARD_HINT_STYLE)
+        self._translated_labels.append((lbl, "SERIAL PORT"))
+        body.addWidget(lbl)
+        row = QHBoxLayout()
         row.setSpacing(12)
-
-        lbl = QLabel("Port")
-        lbl.setStyleSheet(LABEL_STYLE)
-        lbl.setFixedWidth(80)
 
         self._port_combo = QComboBox()
         self._port_combo.setStyleSheet(_COMBO_STYLE)
-        self._port_combo.setFont(QFont("Arial", 12, QFont.Weight.Bold))
         self._port_combo.addItem("COM5")
         self._port_combo.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
         )
+        self._port_combo.currentTextChanged.connect(self._refresh_dirty)
 
-        row.addWidget(lbl)
         row.addWidget(self._port_combo, stretch=1)
+        self._btn_detect = QPushButton("Detect Ports")
+        self._btn_detect.setStyleSheet(GHOST_BTN_STYLE)
+        self._btn_detect.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_detect.clicked.connect(self._on_inner_detect)
+        row.addWidget(self._btn_detect)
+        body.addLayout(row)
         return row_widget
 
     # ── Action bar ────────────────────────────────────────────────────────
 
     def _build_action_bar(self) -> QWidget:
-        bar = QWidget()
-        bar.setStyleSheet(f"background: {BG_COLOR}; border-top: 1px solid {BORDER};")
-        row = QHBoxLayout(bar)
-        row.setContentsMargins(16, 12, 16, 12)
-        row.setSpacing(12)
-
-        self._btn_detect = QPushButton("Detect Ports")
-        self._btn_detect.setStyleSheet(GHOST_BTN_STYLE)
-        self._btn_detect.setCursor(Qt.CursorShape.PointingHandCursor)
+        bar, body, header = self._build_card("CONNECTION TOOLS")
+        self._status_pristine = True
+        self._status_label = QLabel("Not tested")
+        self._status_label.setStyleSheet(_STATUS_IDLE)
+        header.addStretch()
+        header.addWidget(self._status_label)
 
         self._btn_permission = QPushButton("Give Permission")
         self._btn_permission.setStyleSheet(GHOST_BTN_STYLE)
@@ -306,27 +329,110 @@ class ModbusSettingsView(IApplicationView):
         self._btn_test.setStyleSheet(ACTION_BTN_STYLE)
         self._btn_test.setCursor(Qt.CursorShape.PointingHandCursor)
 
-        self._status_label = QLabel("—")
-        self._status_label.setStyleSheet(_STATUS_IDLE)
-        self._status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
-        row.addWidget(self._btn_detect)
-        row.addWidget(self._btn_permission)
-        row.addWidget(self._btn_low_latency)
-        row.addWidget(self._btn_test)
-        row.addStretch()
-        row.addWidget(self._status_label)
-
-        self._btn_detect.clicked.connect(self._on_inner_detect)
+        self._add_tool_row(body, "Give permission", "Allow this user to open the serial port", self._btn_permission)
+        self._add_tool_row(body, "Set low latency", "Reduce USB serial adapter latency", self._btn_low_latency)
+        self._add_tool_row(body, "Test connection", "Send a test request using the selected port", self._btn_test)
         self._btn_permission.clicked.connect(self._on_inner_permission)
         self._btn_low_latency.clicked.connect(self._on_inner_low_latency)
         self._btn_test.clicked.connect(self._on_inner_test)
+        return bar
+
+    def _add_tool_row(self, layout: QVBoxLayout, title: str, hint: str, button: QPushButton) -> None:
+        row = QHBoxLayout()
+        row.setSpacing(12)
+        labels = QVBoxLayout()
+        labels.setSpacing(1)
+        name = QLabel(title)
+        name.setStyleSheet(_TOOL_LABEL_STYLE)
+        description = QLabel(hint)
+        description.setStyleSheet(_CARD_HINT_STYLE)
+        self._translated_labels.extend(((name, title), (description, hint)))
+        labels.addWidget(name)
+        labels.addWidget(description)
+        row.addLayout(labels)
+        row.addStretch()
+        button.setFixedWidth(200)
+        row.addWidget(button)
+        layout.addLayout(row)
+
+    def _build_save_bar(self) -> QWidget:
+        bar = QWidget()
+        bar.setObjectName("settingsFooter")
+        bar.setStyleSheet(SETTINGS_FOOTER_STYLE)
+        row = QHBoxLayout(bar)
+        row.setContentsMargins(20, 10, 20, 10)
+        row.setSpacing(12)
+        self._status_dot = QFrame()
+        self._status_dot.setFixedSize(10, 10)
+        row.addWidget(self._status_dot)
+        self._save_status_label = QLabel()
+        row.addWidget(self._save_status_label)
+        row.addStretch()
+        self._discard_btn = QPushButton("Discard")
+        self._discard_btn.setStyleSheet(GHOST_BTN_STYLE)
+        self._discard_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._discard_btn.clicked.connect(self._on_discard)
+        row.addWidget(self._discard_btn)
+        self._save_btn = QPushButton("Save")
+        self._save_btn.setStyleSheet(SAVE_BUTTON_STYLE)
+        self._save_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._save_btn.clicked.connect(self._on_inner_save_btn)
+        row.addWidget(self._save_btn)
+        self._set_dirty(False)
         return bar
 
     # ── Named forwarders ─────────────────────────────────────────────────
 
     def _on_inner_save_btn(self) -> None:
         self.save_requested.emit(self.get_values())
+
+    def _on_discard(self) -> None:
+        if not hasattr(self, "_saved_profiles"):
+            return
+        self._profiles = deepcopy(self._saved_profiles)
+        self._slaves = deepcopy(self._saved_slaves)
+        self._profile_combo.blockSignals(True)
+        self._profile_combo.clear()
+        self._profile_combo.addItems(list(self._profiles))
+        self._profile_combo.setCurrentText("default")
+        self._profile_combo.blockSignals(False)
+        self._active_profile = "default"
+        self._load_profile("default")
+        self._reload_profile_table()
+        self._slave_combo.blockSignals(True)
+        self._slave_combo.clear()
+        self._slave_combo.addItems(list(self._slaves))
+        self._slave_combo.setCurrentText("default")
+        self._slave_combo.blockSignals(False)
+        self._slave_profile_combo.blockSignals(True)
+        self._slave_profile_combo.clear()
+        self._slave_profile_combo.addItems(list(self._profiles))
+        self._slave_profile_combo.blockSignals(False)
+        self._active_slave = "default"
+        self._load_slave("default")
+        self._reload_slave_table()
+        self._set_dirty(False)
+
+    def _set_dirty(self, dirty: bool) -> None:
+        self._save_btn.setEnabled(dirty)
+        self._discard_btn.setEnabled(dirty)
+        color = PRIMARY if dirty else STATUS_OK
+        self._save_status_label.setStyleSheet(
+            f"color: {color}; background: transparent; font-size: 10pt;"
+        )
+        self._status_dot.setStyleSheet(f"background: {color}; border-radius: 5px;")
+        self._save_status_label.setText(
+            self.tr("Unsaved changes") if dirty else self.tr("All changes saved")
+        )
+
+    def _refresh_dirty(self, *_args) -> None:
+        if not hasattr(self, "_saved_profiles"):
+            return
+        dirty = (
+            self.get_profile_values() != self._saved_profiles
+            or self.get_slave_values() != self._saved_slaves
+        )
+        self._set_dirty(dirty)
 
     def _on_inner_detect(self) -> None:
         self.detect_ports_requested.emit()
@@ -382,6 +488,9 @@ class ModbusSettingsView(IApplicationView):
         self._active_slave = "default"
         self._load_slave("default")
         self._reload_slave_table()
+        self._saved_profiles = deepcopy(self.get_profile_values())
+        self._saved_slaves = deepcopy(self.get_slave_values())
+        self._set_dirty(False)
 
     def _reload_profile_table(self) -> None:
         self._profile_table.blockSignals(True)
@@ -399,6 +508,7 @@ class ModbusSettingsView(IApplicationView):
                 ),
             )
         self._profile_table.blockSignals(False)
+        self._size_table(self._profile_table)
         if self._profiles:
             self._profile_table.selectRow(max(0, list(self._profiles).index(self._profile_combo.currentText())))
 
@@ -414,6 +524,7 @@ class ModbusSettingsView(IApplicationView):
             self._slave_table.setItem(row, 3, QTableWidgetItem(str(values.get("transport_type", ""))))
             self._slave_table.setItem(row, 4, QTableWidgetItem(str(values.get("max_retries", ""))))
         self._slave_table.blockSignals(False)
+        self._size_table(self._slave_table)
         if self._slaves:
             self._slave_table.selectRow(max(0, list(self._slaves).index(self._slave_combo.currentText())))
 
@@ -505,6 +616,7 @@ class ModbusSettingsView(IApplicationView):
         self._slave_combo.addItem(name)
         self._slave_combo.setCurrentText(name)
         self._reload_slave_table()
+        self._refresh_dirty()
 
     def _on_edit_slave(self) -> None:
         name = self._slave_combo.currentText()
@@ -532,6 +644,7 @@ class ModbusSettingsView(IApplicationView):
         self._active_slave = updated_name
         self._load_slave(updated_name)
         self._reload_slave_table()
+        self._refresh_dirty()
 
     def _on_remove_slave(self) -> None:
         name = self._slave_combo.currentText()
@@ -543,6 +656,7 @@ class ModbusSettingsView(IApplicationView):
         self._slave_combo.removeItem(self._slave_combo.currentIndex())
         self._slave_combo.setCurrentText("default")
         self._reload_slave_table()
+        self._refresh_dirty()
 
     def _on_add_profile(self) -> None:
         dlg = _ModbusProfileDialog(self._profiles.get("default"), parent=self)
@@ -561,6 +675,7 @@ class ModbusSettingsView(IApplicationView):
         for descriptor in DEFAULT_TRANSPORT_REGISTRY.descriptors():
             self._slave_transport_combo.addItem(descriptor.label, descriptor.key)
         self._reload_profile_table()
+        self._refresh_dirty()
 
     def _on_edit_profile(self) -> None:
         name = self._profile_combo.currentText()
@@ -578,9 +693,15 @@ class ModbusSettingsView(IApplicationView):
         for slave in self._slaves.values():
             if slave.get("profile_name") == name:
                 slave["profile_name"] = updated_name
-        self._profile_combo.clear()
-        self._profile_combo.addItems(list(self._profiles))
-        self._profile_combo.setCurrentText(updated_name)
+        self._profile_combo.blockSignals(True)
+        try:
+            self._profile_combo.clear()
+            self._profile_combo.addItems(list(self._profiles))
+            self._profile_combo.setCurrentText(updated_name)
+        finally:
+            self._profile_combo.blockSignals(False)
+        self._active_profile = updated_name
+        self._load_profile(updated_name)
         self._slave_profile_combo.clear()
         self._slave_profile_combo.addItems(list(self._profiles))
         self._slave_transport_combo.clear()
@@ -588,6 +709,7 @@ class ModbusSettingsView(IApplicationView):
             self._slave_transport_combo.addItem(descriptor.label, descriptor.key)
         self._reload_profile_table()
         self._reload_slave_table()
+        self._refresh_dirty()
 
     def _on_remove_profile(self) -> None:
         name = self._profile_combo.currentText()
@@ -604,6 +726,7 @@ class ModbusSettingsView(IApplicationView):
         self._slave_profile_combo.clear()
         self._slave_profile_combo.addItems(list(self._profiles))
         self._reload_profile_table()
+        self._refresh_dirty()
 
     def get_values(self) -> dict:
         values = {}
@@ -621,6 +744,7 @@ class ModbusSettingsView(IApplicationView):
         return {name: dict(values) for name, values in self._slaves.items()}
 
     def set_detected_ports(self, ports: list) -> None:
+        self._status_pristine = False
         self._port_combo.blockSignals(True)
         self._port_combo.clear()
         if ports:
@@ -634,12 +758,14 @@ class ModbusSettingsView(IApplicationView):
             self._status_label.setStyleSheet(_STATUS_FAIL)
             self._status_label.setText("No serial ports detected")
         self._port_combo.blockSignals(False)
+        self._refresh_dirty()
         self._btn_detect.setEnabled(True)
         self._btn_permission.setEnabled(True)
         self._btn_low_latency.setEnabled(True)
         self._btn_test.setEnabled(True)
 
     def set_connection_result(self, success: bool, port: str = "") -> None:
+        self._status_pristine = False
         if success:
             self._status_label.setStyleSheet(_STATUS_OK)
             self._status_label.setText(f"✓ Connected — {port}")
@@ -652,10 +778,16 @@ class ModbusSettingsView(IApplicationView):
         self._btn_test.setEnabled(True)
 
     def set_save_result(self, success: bool, message: str) -> None:
-        self._status_label.setStyleSheet(_STATUS_OK if success else _STATUS_FAIL)
-        self._status_label.setText(message)
+        if success:
+            self._saved_profiles = deepcopy(self.get_profile_values())
+            self._saved_slaves = deepcopy(self.get_slave_values())
+            self._set_dirty(False)
+        else:
+            self._save_status_label.setStyleSheet(_STATUS_FAIL)
+            self._save_status_label.setText(message)
 
     def set_permission_result(self, success: bool, ports: list) -> None:
+        self._status_pristine = False
         if success:
             self._status_label.setStyleSheet(_STATUS_OK)
             self._status_label.setText(f"Permission updated — {len(ports)} port(s)")
@@ -673,6 +805,7 @@ class ModbusSettingsView(IApplicationView):
         ports: list,
         error: str = "",
     ) -> None:
+        self._status_pristine = False
         if success:
             self._status_label.setStyleSheet(_STATUS_OK)
             self._status_label.setText(
@@ -689,6 +822,7 @@ class ModbusSettingsView(IApplicationView):
         self._btn_low_latency.setEnabled(not busy)
         self._btn_test.setEnabled(not busy)
         if busy:
+            self._status_pristine = False
             self._status_label.setStyleSheet(_STATUS_IDLE)
             self._status_label.setText("Working…")
 
@@ -698,7 +832,30 @@ class ModbusSettingsView(IApplicationView):
         pass
 
     def retranslateUi(self) -> None:
+        self._title_label.setText((self.tr("SETTINGS") or "SETTINGS").capitalize())
+        self._phase_bar.setTabText(0, self.tr("Connection"))
+        self._phase_bar.setTabText(1, self.tr("Slaves"))
+        for label, source in self._translated_labels:
+            label.setText(self.tr(source))
+        for button, source in (
+            (self._btn_detect, "Detect Ports"),
+            (self._btn_permission, "Give Permission"),
+            (self._btn_test, "Test Connection"),
+            (self._add_profile_btn, "Add Profile"),
+            (self._edit_profile_btn, "Edit Profile"),
+            (self._remove_profile_btn, "Remove Profile"),
+            (self._add_slave_btn, "Add Slave"),
+            (self._edit_slave_btn, "Edit Slave"),
+            (self._remove_slave_btn, "Remove Slave"),
+            (self._discard_btn, "Discard"),
+            (self._save_btn, "Save"),
+        ):
+            button.setText(self.tr(source))
         self._btn_low_latency.setText(self.tr("Set Low Latency"))
+        if self._status_pristine:
+            self._status_label.setText(self.tr("Not tested"))
+        if hasattr(self, "_saved_profiles"):
+            self._refresh_dirty()
 
     def changeEvent(self, event) -> None:
         if event.type() == QEvent.Type.LanguageChange:
@@ -708,7 +865,7 @@ class ModbusSettingsView(IApplicationView):
 
 class _ModbusProfileDialog(AppDialog):
     def __init__(self, values: dict | None = None, name: str = "", parent=None):
-        super().__init__("Modbus Connection Profile", min_width=460, parent=parent)
+        super().__init__("Modbus Connection Profile", min_width=560, parent=parent)
         values = values or {}
         root = QVBoxLayout(self)
         root.setContentsMargins(24, 24, 24, 24)
@@ -716,9 +873,9 @@ class _ModbusProfileDialog(AppDialog):
         form_host = QWidget(self)
         form = QFormLayout(form_host)
         form.setSpacing(12)
-        self._name = QLineEdit(name)
+        self._name = KeyboardLineEdit(name)
         self._name.setEnabled(name != "default")
-        self._port = QLineEdit(str(values.get("port", "COM5")))
+        self._port = KeyboardLineEdit(str(values.get("port", "COM5")))
         self._baudrate = QComboBox()
         self._baudrate.addItems(["9600", "19200", "38400", "57600", "115200", "230400", "460800"])
         self._baudrate.setCurrentText(str(values.get("baudrate", 115200)))
@@ -731,12 +888,13 @@ class _ModbusProfileDialog(AppDialog):
         self._stopbits = QComboBox()
         self._stopbits.addItems(["1", "2"])
         self._stopbits.setCurrentText(str(values.get("stopbits", 1)))
-        self._timeout = QDoubleSpinBox()
+        self._timeout = KeyboardNumberField(decimal=True)
         self._timeout.setRange(0.001, 10.0)
         self._timeout.setDecimals(3)
         self._timeout.setSingleStep(0.001)
         self._timeout.setValue(float(values.get("timeout", 0.01)))
-        for widget in (self._name, self._port, self._timeout):
+        self._timeout.setSuffix("s")
+        for widget in (self._name, self._port):
             widget.setStyleSheet(DIALOG_INPUT_STYLE)
         for widget in (self._baudrate, self._parity, self._bytesize, self._stopbits):
             widget.setStyleSheet(DIALOG_COMBO_STYLE)
@@ -772,7 +930,7 @@ class _ModbusSlaveDialog(AppDialog):
         transport_descriptors=(),
         parent=None,
     ):
-        super().__init__("Modbus Slave", min_width=440, parent=parent)
+        super().__init__("Modbus Slave", min_width=560, parent=parent)
         values = values or {}
         root = QVBoxLayout(self)
         root.setContentsMargins(24, 24, 24, 24)
@@ -780,9 +938,9 @@ class _ModbusSlaveDialog(AppDialog):
         form_host = QWidget(self)
         form = QFormLayout(form_host)
         form.setSpacing(12)
-        self._name = QLineEdit(name)
+        self._name = KeyboardLineEdit(name)
         self._name.setEnabled(name != "default")
-        self._address = QSpinBox()
+        self._address = KeyboardNumberField()
         self._address.setRange(1, 247)
         self._address.setValue(int(values.get("slave_address", 10)))
         self._profile = QComboBox()
@@ -797,11 +955,10 @@ class _ModbusSlaveDialog(AppDialog):
             str(values.get("transport_type", "modbus_register"))
         )
         self._transport.setCurrentIndex(max(0, transport_index))
-        self._retries = QSpinBox()
+        self._retries = KeyboardNumberField()
         self._retries.setRange(1, 100)
         self._retries.setValue(int(values.get("max_retries", 30)))
-        for widget in (self._name, self._address, self._retries):
-            widget.setStyleSheet(DIALOG_INPUT_STYLE)
+        self._name.setStyleSheet(DIALOG_INPUT_STYLE)
         self._profile.setStyleSheet(DIALOG_COMBO_STYLE)
         self._transport.setStyleSheet(DIALOG_COMBO_STYLE)
         form.addRow("Name", self._name)

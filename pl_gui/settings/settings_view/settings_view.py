@@ -43,7 +43,7 @@ class _SettingsTabBar(QTabBar):
 
     def tabSizeHint(self, index: int) -> QSize:
         width = max(90, self.fontMetrics().horizontalAdvance(self.tabText(index)) + 44)
-        return QSize(width + (16 if index == 0 else 0), 56)
+        return QSize(width + (16 if index == 0 else 0), 48)
 
     def paintEvent(self, event) -> None:
         painter = QPainter(self)
@@ -123,7 +123,10 @@ class SettingsView(QWidget):
         self._page_header = QLabel()
         self._page_header.setObjectName("settingsHeader")
         self._page_header.setStyleSheet(SETTINGS_HEADER_STYLE)
-        layout.addWidget(self._page_header)
+        title_row = QHBoxLayout()
+        title_row.setContentsMargins(20, 16, 20, 0)
+        title_row.addWidget(self._page_header)
+        layout.addLayout(title_row)
         layout.addSpacing(12)
         layout.addWidget(self._tabs)
 
@@ -169,7 +172,7 @@ class SettingsView(QWidget):
             self.retranslateUi()
 
     def retranslateUi(self) -> None:
-        self._page_header.setText(self.tr("SETTINGS") or "SETTINGS")
+        self._page_header.setText((self.tr("SETTINGS") or "SETTINGS").capitalize())
         self._save_btn.setText(self.tr("Save") or "Save")
         self._discard_btn.setText(self.tr("Discard") or "Discard")
         self._status_label.setText(

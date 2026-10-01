@@ -34,6 +34,7 @@ class StubPaintDashboardService(IPaintDashboardService):
         self._acceleration_scale = 100.0
         self._drying_mode = "auto"
         self._plate_layout = {"width_mm": 200.0, "height_mm": 200.0, "placements": [], "pending": None}
+        self._paint_head_position = 10
 
     def get_process_id(self) -> str:
         return self._process_id
@@ -111,6 +112,17 @@ class StubPaintDashboardService(IPaintDashboardService):
 
     def relieve_cable(self) -> DashboardCommandResult:
         return DashboardCommandResult(True, "Cable relief completed.")
+
+    def is_paint_head_available(self) -> bool:
+        return True
+
+    def adjust_paint_head(self, direction: str, units: int) -> DashboardCommandResult:
+        if direction not in {"more", "less"}:
+            return DashboardCommandResult(False, "Invalid paint-head direction.")
+        if isinstance(units, bool) or not isinstance(units, int) or not 1 <= units <= 65535:
+            return DashboardCommandResult(False, "Invalid paint-head step.")
+        self._paint_head_position += units if direction == "more" else -units
+        return DashboardCommandResult(True, "")
 
     def get_auxiliary_states(self) -> dict[str, bool]:
         return dict(self._auxiliary_states)

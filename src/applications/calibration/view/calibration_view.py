@@ -10,19 +10,17 @@ from PyQt6.QtGui import QImage, QPixmap, QTextCursor
 from PyQt6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
+    QComboBox,
     QFormLayout,
     QHBoxLayout,
-    QDoubleSpinBox,
-    QInputDialog,
-    QSpinBox,
+    QScrollArea,
     QVBoxLayout,
+    QLabel,
+    QWidget,
 )
 
 from src.applications.base.i_application_view import IApplicationView
-from src.applications.base.widgets.custom_virtual_keyboard import (
-    KeyboardDoubleSpinBox,
-    KeyboardSpinBox,
-)
+from src.applications.base.widgets.keyboard_number_field import KeyboardNumberField
 from src.applications.calibration.view.calibration_controls_panel import CalibrationControlsPanel
 from src.applications.calibration.view.calibration_preview_panel import (
     CalibrationAreaGridPanel,
@@ -36,6 +34,7 @@ from src.applications.base.styled_message_box import show_warning
 from src.applications.calibration.service.i_calibration_service import RobotCalibrationPreview
 from src.applications.intrinsic_calibration_capture.service.i_intrinsic_capture_service import IntrinsicCaptureConfig
 from src.shared_contracts.declarations import WorkAreaDefinition
+from pl_gui.settings.settings_view.styles import APP_PAGE_TITLE_STYLE, APP_PHASE_TAB_STYLE, BG_COLOR, BORDER, PRIMARY, SECONDARY_BG, TEXT_COLOR
 
 _CROSSHAIR_COLOR = (0, 255, 80)
 _CROSSHAIR_THICKNESS = 1
@@ -71,6 +70,55 @@ class TcpOffsetCalibrationDialogResult:
     recenter_alignment_threshold_mm: float
 
 
+class _CalibrationAreaDialog(QDialog):
+    def __init__(self, title: str, prompt: str, options: list[tuple[str, str]], current_id: str, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle(title)
+        self.setModal(True)
+        self.setFixedWidth(480)
+        self.setStyleSheet(f"QDialog {{ background: white; }}")
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(24, 20, 24, 20)
+        layout.setSpacing(14)
+        heading = QLabel(title)
+        heading.setStyleSheet(f"color: {TEXT_COLOR}; font-size: 15pt; font-weight: bold;")
+        layout.addWidget(heading)
+        description = QLabel(prompt)
+        description.setWordWrap(True)
+        description.setStyleSheet(f"color: {PRIMARY}; font-size: 10pt;")
+        layout.addWidget(description)
+        self._areas = QComboBox()
+        for label, area_id in options:
+            self._areas.addItem(label, area_id)
+        index = self._areas.findData(current_id)
+        self._areas.setCurrentIndex(max(index, 0))
+        self._areas.setMinimumHeight(44)
+        self._areas.setStyleSheet(
+            f"QComboBox {{ background: white; color: {TEXT_COLOR}; border: 1px solid {BORDER}; "
+            "border-radius: 8px; padding: 0 12px; }"
+        )
+        layout.addWidget(self._areas)
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        for button, bg, fg in (
+            (buttons.button(QDialogButtonBox.StandardButton.Ok), PRIMARY, "white"),
+            (buttons.button(QDialogButtonBox.StandardButton.Cancel), SECONDARY_BG, PRIMARY),
+        ):
+            button.setMinimumSize(110, 44)
+            button.setCursor(Qt.CursorShape.PointingHandCursor)
+            button.setStyleSheet(
+                f"QPushButton {{ background: {bg}; color: {fg}; border: none; "
+                "border-radius: 8px; font-weight: bold; }"
+            )
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    def area_id(self) -> str:
+        return str(self._areas.currentData())
+
+
 class _ZShiftCalibrationDialog(QDialog):
     def __init__(
         self,
@@ -88,17 +136,17 @@ class _ZShiftCalibrationDialog(QDialog):
         root = QVBoxLayout(self)
         form = QFormLayout()
 
-        self._marker_id = KeyboardSpinBox(self)
+        self._marker_id = KeyboardNumberField(parent=self)
         self._marker_id.setRange(0, 10_000)
         self._marker_id.setValue(int(marker_id))
         form.addRow("Reference marker ID:", self._marker_id)
 
-        self._samples = KeyboardSpinBox(self)
+        self._samples = KeyboardNumberField(parent=self)
         self._samples.setRange(1, 1000)
         self._samples.setValue(int(samples))
         form.addRow("Samples:", self._samples)
 
-        self._z_step_mm = KeyboardDoubleSpinBox(self)
+        self._z_step_mm = KeyboardNumberField(decimal=True, parent=self)
         self._z_step_mm.setRange(-100.0, 100.0)
         self._z_step_mm.setDecimals(3)
         self._z_step_mm.setSingleStep(0.1)
@@ -106,7 +154,7 @@ class _ZShiftCalibrationDialog(QDialog):
         self._z_step_mm.setSuffix(" mm")
         form.addRow("Z step per sample:", self._z_step_mm)
 
-        self._settle_time_s = KeyboardDoubleSpinBox(self)
+        self._settle_time_s = KeyboardNumberField(decimal=True, parent=self)
         self._settle_time_s.setRange(0.0, 30.0)
         self._settle_time_s.setDecimals(2)
         self._settle_time_s.setSingleStep(0.1)
@@ -155,16 +203,18 @@ class _TcpOffsetCalibrationDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Camera TCP Offset Calibration")
         self.setModal(True)
+        self.resize(620, 680)
 
         root = QVBoxLayout(self)
-        form = QFormLayout()
+        form_host = QWidget()
+        form = QFormLayout(form_host)
 
-        self._marker_id = KeyboardSpinBox(self)
+        self._marker_id = KeyboardNumberField(parent=self)
         self._marker_id.setRange(0, 10_000)
         self._marker_id.setValue(int(marker_id))
         form.addRow("Reference marker ID:", self._marker_id)
 
-        self._rotation_step_deg = KeyboardDoubleSpinBox(self)
+        self._rotation_step_deg = KeyboardNumberField(decimal=True, parent=self)
         self._rotation_step_deg.setRange(-180.0, 180.0)
         self._rotation_step_deg.setDecimals(3)
         self._rotation_step_deg.setSingleStep(1.0)
@@ -172,12 +222,12 @@ class _TcpOffsetCalibrationDialog(QDialog):
         self._rotation_step_deg.setSuffix(" deg")
         form.addRow("Rotation step:", self._rotation_step_deg)
 
-        self._iterations = KeyboardSpinBox(self)
+        self._iterations = KeyboardNumberField(parent=self)
         self._iterations.setRange(1, 1000)
         self._iterations.setValue(int(iterations))
         form.addRow("Iterations:", self._iterations)
 
-        self._approach_z = KeyboardDoubleSpinBox(self)
+        self._approach_z = KeyboardNumberField(decimal=True, parent=self)
         self._approach_z.setRange(-10000.0, 10000.0)
         self._approach_z.setDecimals(3)
         self._approach_z.setSingleStep(1.0)
@@ -185,7 +235,7 @@ class _TcpOffsetCalibrationDialog(QDialog):
         self._approach_z.setSuffix(" mm")
         form.addRow("Approach Z:", self._approach_z)
 
-        self._approach_rx = KeyboardDoubleSpinBox(self)
+        self._approach_rx = KeyboardNumberField(decimal=True, parent=self)
         self._approach_rx.setRange(-360.0, 360.0)
         self._approach_rx.setDecimals(3)
         self._approach_rx.setSingleStep(1.0)
@@ -193,7 +243,7 @@ class _TcpOffsetCalibrationDialog(QDialog):
         self._approach_rx.setSuffix(" deg")
         form.addRow("Approach RX:", self._approach_rx)
 
-        self._approach_ry = KeyboardDoubleSpinBox(self)
+        self._approach_ry = KeyboardNumberField(decimal=True, parent=self)
         self._approach_ry.setRange(-360.0, 360.0)
         self._approach_ry.setDecimals(3)
         self._approach_ry.setSingleStep(1.0)
@@ -201,7 +251,7 @@ class _TcpOffsetCalibrationDialog(QDialog):
         self._approach_ry.setSuffix(" deg")
         form.addRow("Approach RY:", self._approach_ry)
 
-        self._approach_rz = KeyboardDoubleSpinBox(self)
+        self._approach_rz = KeyboardNumberField(decimal=True, parent=self)
         self._approach_rz.setRange(-360.0, 360.0)
         self._approach_rz.setDecimals(3)
         self._approach_rz.setSingleStep(1.0)
@@ -209,17 +259,17 @@ class _TcpOffsetCalibrationDialog(QDialog):
         self._approach_rz.setSuffix(" deg")
         form.addRow("Approach RZ:", self._approach_rz)
 
-        self._velocity = KeyboardSpinBox(self)
+        self._velocity = KeyboardNumberField(parent=self)
         self._velocity.setRange(1, 100)
         self._velocity.setValue(int(velocity))
         form.addRow("Velocity:", self._velocity)
 
-        self._acceleration = KeyboardSpinBox(self)
+        self._acceleration = KeyboardNumberField(parent=self)
         self._acceleration.setRange(1, 100)
         self._acceleration.setValue(int(acceleration))
         form.addRow("Acceleration:", self._acceleration)
 
-        self._settle_time_s = KeyboardDoubleSpinBox(self)
+        self._settle_time_s = KeyboardNumberField(decimal=True, parent=self)
         self._settle_time_s.setRange(0.0, 30.0)
         self._settle_time_s.setDecimals(2)
         self._settle_time_s.setSingleStep(0.1)
@@ -227,12 +277,12 @@ class _TcpOffsetCalibrationDialog(QDialog):
         self._settle_time_s.setSuffix(" s")
         form.addRow("Settle time:", self._settle_time_s)
 
-        self._recenter_max_iterations = KeyboardSpinBox(self)
+        self._recenter_max_iterations = KeyboardNumberField(parent=self)
         self._recenter_max_iterations.setRange(1, 1000)
         self._recenter_max_iterations.setValue(int(recenter_max_iterations))
         form.addRow("Recenter iterations:", self._recenter_max_iterations)
 
-        self._recenter_stability_wait_s = KeyboardDoubleSpinBox(self)
+        self._recenter_stability_wait_s = KeyboardNumberField(decimal=True, parent=self)
         self._recenter_stability_wait_s.setRange(0.0, 30.0)
         self._recenter_stability_wait_s.setDecimals(2)
         self._recenter_stability_wait_s.setSingleStep(0.1)
@@ -240,7 +290,7 @@ class _TcpOffsetCalibrationDialog(QDialog):
         self._recenter_stability_wait_s.setSuffix(" s")
         form.addRow("Recenter wait:", self._recenter_stability_wait_s)
 
-        self._recenter_alignment_threshold_mm = KeyboardDoubleSpinBox(self)
+        self._recenter_alignment_threshold_mm = KeyboardNumberField(decimal=True, parent=self)
         self._recenter_alignment_threshold_mm.setRange(0.01, 100.0)
         self._recenter_alignment_threshold_mm.setDecimals(3)
         self._recenter_alignment_threshold_mm.setSingleStep(0.1)
@@ -248,7 +298,10 @@ class _TcpOffsetCalibrationDialog(QDialog):
         self._recenter_alignment_threshold_mm.setSuffix(" mm")
         form.addRow("Recenter threshold:", self._recenter_alignment_threshold_mm)
 
-        root.addLayout(form)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setWidget(form_host)
+        root.addWidget(scroll)
 
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel,
@@ -284,6 +337,7 @@ class CalibrationView(IApplicationView):
     calibrate_camera_requested = pyqtSignal()
     intrinsic_auto_capture_requested = pyqtSignal()
     intrinsic_auto_capture_stop_requested = pyqtSignal()
+    intrinsic_capture_config_save_requested = pyqtSignal(object)
     calibrate_robot_requested = pyqtSignal()
     calibrate_sequence_requested = pyqtSignal()
     calibrate_camera_tcp_offset_requested = pyqtSignal()
@@ -310,10 +364,19 @@ class CalibrationView(IApplicationView):
     work_area_changed = pyqtSignal(str)
     measurement_area_changed = pyqtSignal()
 
-    def __init__(self, work_area_definitions: list[WorkAreaDefinition] | None = None, parent=None):
+    def __init__(
+        self,
+        work_area_definitions: list[WorkAreaDefinition] | None = None,
+        parent=None,
+        *,
+        show_laser_tab: bool = True,
+        show_height_mapping_tab: bool = True,
+    ):
         self._crosshair_on = False
         self._magnifier_on = False
         self._robot_overlay_payload: dict | None = None
+        self._show_laser_tab = show_laser_tab
+        self._show_height_mapping_tab = show_height_mapping_tab
         self._calibration_work_area_definitions = list(work_area_definitions or [])
         self._work_area_definitions = [
             definition for definition in (work_area_definitions or []) if definition.supports_height_mapping
@@ -321,9 +384,10 @@ class CalibrationView(IApplicationView):
         super().__init__("Calibration", parent)
 
     def setup_ui(self) -> None:
-        root = QHBoxLayout(self)
-        root.setContentsMargins(0, 0, 0, 0)
-        root.setSpacing(0)
+        root = QVBoxLayout(self)
+        root.setContentsMargins(20, 16, 20, 20)
+        root.setSpacing(14)
+        self.setStyleSheet(f"background: {BG_COLOR};")
         self._preview_panel = CalibrationPreviewPanel(self._work_area_definitions)
         self._area_grid_panel = CalibrationAreaGridPanel(
             self._preview_panel.preview_label,
@@ -331,11 +395,35 @@ class CalibrationView(IApplicationView):
         )
         self._preview_panel.preview_label.corner_updated.connect(self._area_grid_panel._on_measurement_area_changed)
         self._preview_panel.preview_label.empty_clicked.connect(self._area_grid_panel._on_measurement_area_empty_clicked)
-        self._controls_panel = CalibrationControlsPanel()
+        self._controls_panel = CalibrationControlsPanel(
+            show_laser_tab=self._show_laser_tab,
+            show_height_mapping_tab=self._show_height_mapping_tab,
+        )
         self._controls_panel.set_height_mapping_content(self._area_grid_panel)
-        root.addWidget(self._preview_panel, stretch=3)
-        root.addWidget(self._controls_panel, stretch=2)
+        self._preview_panel.add_preview_action(self._controls_panel.crosshair_btn)
+        self._preview_panel.add_preview_action(self._controls_panel.magnifier_btn)
+        self._preview_panel.add_stop_action(self._controls_panel.stop_robot_btn)
+
+        self._title_label = QLabel()
+        self._title_label.setStyleSheet(APP_PAGE_TITLE_STYLE)
+        root.addWidget(self._title_label)
+        phase_bar = self._controls_panel.phase_bar
+        phase_bar.setStyleSheet(APP_PHASE_TAB_STYLE)
+        root.addWidget(phase_bar, alignment=Qt.AlignmentFlag.AlignLeft)
+
+        workspace = QHBoxLayout()
+        workspace.setSpacing(16)
+        self._controls_panel.setMinimumWidth(400)
+        self._controls_panel.setMaximumWidth(440)
+        workspace.addWidget(self._preview_panel, stretch=7)
+        workspace.addWidget(self._controls_panel, stretch=3)
+        root.addLayout(workspace, stretch=1)
+        self.retranslateUi()
         self._connect_signals()
+
+    def retranslateUi(self) -> None:
+        self._title_label.setText(self.tr("Calibration"))
+        self._controls_panel.stop_robot_btn.setText(self.tr("Stop"))
 
     def can_close(self) -> bool:
         if hasattr(self, "_controller") and self._controller.is_calibrating():
@@ -361,6 +449,7 @@ class CalibrationView(IApplicationView):
         self._controls_panel.calibrate_camera_btn.clicked.connect(self.calibrate_camera_requested.emit)
         self._controls_panel.intrinsic_auto_capture.start_requested.connect(self.intrinsic_auto_capture_requested.emit)
         self._controls_panel.intrinsic_auto_capture.stop_requested.connect(self.intrinsic_auto_capture_stop_requested.emit)
+        self._controls_panel.camera_tab.auto_capture_config_saved.connect(self._on_intrinsic_capture_config_saved)
         self._controls_panel.calibrate_robot_btn.clicked.connect(self.calibrate_robot_requested.emit)
         self._controls_panel.calibrate_sequence_btn.clicked.connect(self.calibrate_sequence_requested.emit)
         self._controls_panel.calibrate_camera_tcp_offset_btn.clicked.connect(
@@ -403,6 +492,9 @@ class CalibrationView(IApplicationView):
 
     def _emit_save_calibration_settings(self) -> None:
         self.save_calibration_settings_requested.emit(self._controls_panel.get_settings_values())
+
+    def _on_intrinsic_capture_config_saved(self, config: IntrinsicCaptureConfig) -> None:
+        self.intrinsic_capture_config_save_requested.emit(config)
 
     def set_stop_calibration_enabled(self, enabled: bool) -> None:
         self._controls_panel.set_stop_calibration_enabled(enabled)
@@ -562,22 +654,16 @@ class CalibrationView(IApplicationView):
             )
             for definition in self._calibration_work_area_definitions
         )
-        labels = [label for label, _area_id in options]
-        current = next(
-            (index for index, (_label, area_id) in enumerate(options) if area_id == current_area_id),
-            0,
-        )
-        selected_label, accepted = QInputDialog.getItem(
-            self,
+        dialog = _CalibrationAreaDialog(
             self.tr("Robot Calibration Area"),
             self.tr("Select the area to calibrate:"),
-            labels,
-            current,
-            False,
+            options,
+            current_area_id,
+            self,
         )
-        if not accepted:
+        if dialog.exec() != QDialog.DialogCode.Accepted:
             return None
-        return next(area_id for label, area_id in options if label == selected_label)
+        return dialog.area_id()
 
     def prompt_camera_tcp_calibration_area(self, current_area_id: str = "global") -> str | None:
         options = [(self.tr("Global (shared calibration)"), "global")]
@@ -585,22 +671,16 @@ class CalibrationView(IApplicationView):
             (definition.label, definition.id)
             for definition in self._calibration_work_area_definitions
         )
-        labels = [label for label, _area_id in options]
-        current = next(
-            (index for index, (_label, area_id) in enumerate(options) if area_id == current_area_id),
-            0,
-        )
-        selected_label, accepted = QInputDialog.getItem(
-            self,
+        dialog = _CalibrationAreaDialog(
             self.tr("Camera-to-TCP Calibration Area"),
             self.tr("Select the area for camera-to-TCP calibration:"),
-            labels,
-            current,
-            False,
+            options,
+            current_area_id,
+            self,
         )
-        if not accepted:
+        if dialog.exec() != QDialog.DialogCode.Accepted:
             return None
-        return next(area_id for label, area_id in options if label == selected_label)
+        return dialog.area_id()
 
     @property
     def work_area_definitions(self) -> list[WorkAreaDefinition]:

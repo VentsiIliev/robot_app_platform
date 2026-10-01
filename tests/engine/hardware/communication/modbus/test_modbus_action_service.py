@@ -1,3 +1,4 @@
+import subprocess
 import unittest
 from unittest.mock import MagicMock, patch, patch as mock_patch
 import sys
@@ -282,6 +283,26 @@ class TestModbusActionServiceLowLatency(unittest.TestCase):
         service = ModbusActionService()
         with patch.object(service, "_serial_latency_targets", return_value=[]):
             with self.assertRaisesRegex(RuntimeError, "No USB serial ports"):
+                service.set_serial_port_low_latency()
+
+    def test_dismissed_authorization_has_clear_error(self):
+        service = ModbusActionService()
+        with (
+            patch.object(
+                service,
+                "_serial_latency_targets",
+                return_value=[("/dev/ttyUSB0", Path("/sys/class/tty/ttyUSB0/device/latency_timer"))],
+            ),
+            patch(
+                "src.engine.hardware.communication.modbus.modbus_action_service.os.geteuid",
+                return_value=1000,
+            ),
+            patch(
+                "src.engine.hardware.communication.modbus.modbus_action_service.subprocess.run",
+                side_effect=subprocess.CalledProcessError(126, ["pkexec", "tee"]),
+            ),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "Authorization not granted"):
                 service.set_serial_port_low_latency()
 
     def test_returns_empty_when_permission_command_fails(self):

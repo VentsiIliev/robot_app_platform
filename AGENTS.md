@@ -293,6 +293,7 @@ from pl_gui.settings.settings_view.styles import (
 | Element | Rule |
 |---------|------|
 | Widget background | `self.setStyleSheet(f"background-color: {BG_COLOR};")`  |
+| Page title | Use `APP_PAGE_TITLE_STYLE` from the shared styles palette; place the title above tabs and content |
 | `QGroupBox` | `box.setStyleSheet(GROUP_STYLE)` |
 | Primary action button | `btn.setStyleSheet(ACTION_BTN_STYLE)` |
 | Secondary action button | `btn.setStyleSheet(GHOST_BTN_STYLE)` |
@@ -309,26 +310,26 @@ The repo has a shared virtual keyboard implementation for touch-oriented forms. 
 Shared entry points:
 - Global enable/disable flag: `src/applications/base/config/virtual_keyboard_config.py`
 - Reusable widgets: `KeyboardLineEdit`, `KeyboardSpinBox`, `KeyboardDoubleSpinBox` in `src/applications/base/widgets/custom_virtual_keyboard.py`
+- Standard touch numeric control: `KeyboardNumberField` in `src/applications/base/widgets/keyboard_number_field.py` — editable value with large −/+ buttons, units, bounds, and press-and-hold stepping
 - Reusable widget factory: `VirtualKeyboardWidgetFactory` in `src/applications/base/widgets/virtual_keyboard_widget_factory.py`
 
 Rules:
-- If an application owns its form widgets directly, instantiate the shared keyboard widgets explicitly instead of plain `QLineEdit` / `QSpinBox` / `QDoubleSpinBox`
+- For directly owned numeric fields, use `KeyboardNumberField(decimal=True/False)` so the same touch controls appear across applications; use `KeyboardLineEdit` for text
+- For schema-driven settings, use `build_with_keyboard_setting_handlers()` or `KeyboardSettingsView`; their numeric handlers create `KeyboardNumberField`
+- Use `KeyboardSpinBox` / `KeyboardDoubleSpinBox` only when a third-party widget contract requires an actual Qt spin-box subclass, and keep its virtual keyboard behavior
 - If an application already has a widget-provider or widget-factory seam, inject `VirtualKeyboardWidgetFactory()` there instead of patching every field manually
 - Keep the single-flag behavior intact; do not add app-local keyboard enable flags unless the task explicitly requires a second level of control
-- When wiring spin boxes, prefer the shared keyboard widgets directly; they already handle focus, popup placement, and embedded line-edit event filtering
+- Do not create an app-local −/+ wrapper around a spin box; configure `KeyboardNumberField` with `setRange`, `setSingleStep`, `setDecimals`, `setSuffix`, and `setValue`
 - When updating a form that already uses a shared settings/group framework, verify whether the real runtime path is that framework or a legacy dialog before patching
 
 Typical direct usage:
 ```python
-from src.applications.base.widgets.custom_virtual_keyboard import (
-    KeyboardDoubleSpinBox,
-    KeyboardLineEdit,
-    KeyboardSpinBox,
-)
+from src.applications.base.widgets.custom_virtual_keyboard import KeyboardLineEdit
+from src.applications.base.widgets.keyboard_number_field import KeyboardNumberField
 
 self._name = KeyboardLineEdit()
-self._count = KeyboardSpinBox()
-self._offset = KeyboardDoubleSpinBox()
+self._count = KeyboardNumberField()
+self._offset = KeyboardNumberField(decimal=True)
 ```
 
 Typical factory usage:
