@@ -4,6 +4,7 @@ import logging
 import os
 import time
 import unittest
+from threading import Event
 from unittest.mock import MagicMock
 
 import numpy as np
@@ -127,7 +128,7 @@ class PaintAdjustmentTests(unittest.TestCase):
         self.assertTrue(view._read_position_button.isEnabled())
         view.clean_up()
 
-    def test_dragging_dial_previews_intermediate_value_and_sends_on_release(self) -> None:
+    def test_dragging_dial_sends_positions_before_release(self) -> None:
         service = StubPaintAdjustmentService()
         original_go_to_position = service.go_to_position
         service.go_to_position = MagicMock(wraps=original_go_to_position)
@@ -142,16 +143,66 @@ class PaintAdjustmentTests(unittest.TestCase):
         top = QPoint(center.x(), center.y() - radius)
         between = QPoint(center.x() + radius // 2, center.y() - round(radius * 0.866))
         QTest.mousePress(dial, Qt.MouseButton.LeftButton, pos=top)
+        self._wait_for_action(view._controller)
+        service.go_to_position.assert_called_once_with(235)
         QTest.mouseMove(dial, between)
+        self._wait_for_action(view._controller)
         self.assertEqual(dial.preview_value, 216)
         self.assertEqual(dial.format_position(dial.preview_value), "1.5")
-        service.go_to_position.assert_not_called()
+        self.assertEqual(service.go_to_position.call_args_list[-1].args, (216,))
         QTest.mouseRelease(dial, Qt.MouseButton.LeftButton, pos=between)
         self._wait_for_action(view._controller)
-        service.go_to_position.assert_called_once_with(216)
+        self.assertEqual(service.go_to_position.call_count, 2)
         self.assertEqual(dial.actual_value, 216)
         self.assertIn("1.5", view._position_note.text())
         view.clean_up()
+
+    def test_dial_sends_latest_release_target_after_slow_write(self) -> None:
+        service = StubPaintAdjustmentService()
+        original_go_to_position = service.go_to_position
+        first_started = Event()
+        finish_first = Event()
+
+        def slow_first_position(position: int):
+            if position == 235:
+                first_started.set()
+                finish_first.wait(2.0)
+            return original_go_to_position(position)
+
+        service.go_to_position = MagicMock(side_effect=slow_first_position)
+        view = PaintAdjustmentFactory().build(service, messaging=MagicMock())
+        try:
+            self._wait_for_position_read(view._controller)
+            view.resize(1400, 900)
+            view.show()
+            self._app.processEvents()
+            dial = view._dial
+            radius = min(dial.width(), dial.height()) // 2 - 42
+            center = QPoint(dial.width() // 2, dial.height() // 2)
+            top = QPoint(center.x(), center.y() - radius)
+            between = QPoint(center.x() + radius // 2, center.y() - round(radius * 0.866))
+            second = QPoint(center.x() + round(radius * 0.866), center.y() - radius // 2)
+
+            QTest.mousePress(dial, Qt.MouseButton.LeftButton, pos=top)
+            self.assertTrue(first_started.wait(1.0))
+            QTest.mouseMove(dial, between)
+            QTest.mouseMove(dial, second)
+            QTest.mouseRelease(dial, Qt.MouseButton.LeftButton, pos=second)
+            finish_first.set()
+            deadline = time.monotonic() + 2.0
+            while (view._controller._action_pending or
+                   service.go_to_position.call_count < 2) and time.monotonic() < deadline:
+                self._app.processEvents()
+                time.sleep(0.005)
+
+            self.assertEqual(
+                [call.args for call in service.go_to_position.call_args_list],
+                [(235,), (197,)],
+            )
+            self.assertEqual(dial.actual_value, 197)
+        finally:
+            finish_first.set()
+            view.clean_up()
 
     def test_auxiliary_subscription_preview_buttons_and_cleanup(self) -> None:
         broker = MagicMock()
