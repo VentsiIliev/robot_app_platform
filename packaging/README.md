@@ -1,10 +1,25 @@
+# Robot platform packaging
+
+Use [Platform installer and updates](platform/README.md) for independent system/profile installers, dedicated update-source configs, signing and data-preserving updates. The commands below retain the older Paint build/publishing workflow.
+
 # Paint standalone build
+
+The Ubuntu remote support controller is installed separately from the
+application bundle. See [Network Settings](../docs/applications/network_settings/README.md)
+for the installer, boot behavior, and validation path.
+The build stages its complete installation payload inside
+`paint-robot/installation/remote-support/`, so release archives carry the
+installer without requiring the repository on the robot. The final product
+installer can invoke that payload with the configured HMI user.
+The platform's rebranded RustDesk installer is included by default.
+`PL_SUPPORT_VENDOR_INSTALLER` can select an alternate script; it must support
+`--provision-only`. See the [payload guide](remote_support/README.md).
 
 This profile creates a PyInstaller `onedir` distribution for the paint robot
 system. It bundles Python and pip-installed runtime dependencies, so Python is
 not required on the target machine.
 
-The profile explicitly excludes the glue and welding robot systems. Shared
+The Paint target excludes all other robot systems. Shared
 platform modules and shared applications are included when they are imported
 by the paint application.
 
@@ -62,7 +77,9 @@ Use `--skip-tests` only when the same commit has already passed the test suite.
 
 ## Runtime data
 
-This first build preserves the application's current storage behavior and
-places paint settings inside the bundle. Before installing the application
-under a read-only system directory such as `/opt`, move mutable settings,
-users, calibration artifacts, and workpieces to an external data directory.
+Mutable settings, users, calibration artifacts, and workpieces are excluded
+from the bundle. Standalone execution uses external storage; installed operation
+uses the independent launcher and versioned releases. See
+[Platform installer and updates](platform/README.md) for installation, migration
+of existing machine storage, the configurable HTTPS release source, signing,
+and rollback. ROS backend software remains outside this update mechanism.

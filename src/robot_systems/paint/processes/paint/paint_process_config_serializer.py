@@ -1,4 +1,5 @@
 from dataclasses import asdict, replace
+from copy import deepcopy
 from typing import Any, Dict, Type, TypeVar
 
 from src.engine.repositories.interfaces import ISettingsSerializer
@@ -38,12 +39,15 @@ def _build_dataclass(cls: Type[T], raw: Dict[str, Any], default: T) -> T:
 
 
 class PaintProcessConfigSerializer(ISettingsSerializer[PaintProcessConfig]):
+    def __init__(self, default_config: PaintProcessConfig = PAINT_PROCESS_CONFIG):
+        self._default_config = deepcopy(default_config)
+
     @property
     def settings_type(self) -> str:
         return "paint_process_config"
 
     def get_default(self) -> PaintProcessConfig:
-        return PAINT_PROCESS_CONFIG
+        return deepcopy(self._default_config)
 
     def to_dict(self, settings: PaintProcessConfig) -> Dict[str, Any]:
         return asdict(settings)

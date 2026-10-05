@@ -1,0 +1,8 @@
+{
+  "enabled": false,
+  "repository_url": "https://release-server.example/paint/",
+  "public_key": null,
+  "product": "paint-robot",
+  "channel": "stable",
+  "timeout_seconds": 30
+}

@@ -1,0 +1,6 @@
+{
+  "robot_system": "glue",
+  "supported_robot_systems": [
+    "glue"
+  ]
+}

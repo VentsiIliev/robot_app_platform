@@ -1,0 +1,10 @@
+{
+  "robot_system": "twin_robot",
+  "supported_robot_systems": [
+    "twin_robot"
+  ],
+  "ros_backend": {
+    "auto_launch": false,
+    "auto_stop": false
+  }
+}

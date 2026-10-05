@@ -99,5 +99,9 @@
     "Step": "Step",
     "Servo": "Servo",
     "Recovery": "Recovery"
+  },
+  "StartupError": {
+    "Platform could not start": "Platform could not start",
+    "The platform stopped because an error occurred.": "The platform stopped because an error occurred."
   }
 }

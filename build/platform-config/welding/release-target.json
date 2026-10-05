@@ -1,0 +1,11 @@
+{
+  "product": "welding-robot",
+  "robot_system": "welding",
+  "profile": "default",
+  "storage_system": "welding",
+  "packages": [
+    "welding"
+  ],
+  "target": "welding",
+  "executable": "welding-robot"
+}

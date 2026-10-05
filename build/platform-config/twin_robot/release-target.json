@@ -1,0 +1,11 @@
+{
+  "product": "twin-robot",
+  "robot_system": "twin_robot",
+  "profile": "default",
+  "storage_system": "twin_robot",
+  "packages": [
+    "twin_robot"
+  ],
+  "target": "twin_robot",
+  "executable": "twin-robot"
+}

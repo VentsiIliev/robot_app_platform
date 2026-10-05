@@ -10,6 +10,15 @@ from src.applications.device_control.controller.device_control_controller import
 )
 from src.applications.device_control.view.device_control_view import DeviceControlView
 from src.applications.device_control.dryer.view import DryerControlPanel
+from src.applications.camera_settings.view.camera_devices_widget import CameraDevicesWidget
+from src.applications.camera_settings.service.i_camera_settings_service import (
+    CameraDeviceOption,
+    CameraDevicesState,
+)
+from src.applications.base.widgets.keyboard_number_field import KeyboardNumberField
+from src.robot_systems.paint.applications.paint_head_settings.paint_head_settings_view import (
+    PaintHeadSettingsView,
+)
 from src.engine.hardware.dryer.models.dryer_config import DryerConfig
 from pl_gui.settings.settings_view.styles import TOUCH_SCROLL_AREA_STYLE
 
@@ -217,6 +226,58 @@ class TestDeviceControlView(unittest.TestCase):
         self.assertEqual(view._tabs.count(), 1)
         self.assertEqual(view._tabs.tabText(0), "Cameras")
         self.assertIs(view._tabs.widget(0), panel)
+
+    def test_sidebar_keeps_selected_device_checked_on_repeated_click(self) -> None:
+        device = MagicMock()
+        device.key = "vacuum_pump"
+        device.label = "Vacuum pump"
+        device.is_enabled.return_value = True
+        device.actions.return_value = {"on": "Pump ON", "off": "Pump OFF"}
+        view = DeviceControlView()
+        view.setup_devices([device])
+        view.add_custom_tab("cameras", "Cameras", QWidget())
+
+        view._nav_buttons["vacuum_pump"].click()
+        view._nav_buttons["vacuum_pump"].click()
+
+        self.assertEqual(view._tabs.currentIndex(), 0)
+        self.assertTrue(view._nav_buttons["vacuum_pump"].isChecked())
+        self.assertFalse(view._nav_buttons["cameras"].isChecked())
+
+    def test_camera_device_mode_switches_assignment_and_preview_role(self) -> None:
+        panel = CameraDevicesWidget(device_control_mode=True)
+        panel.set_camera_devices(CameraDevicesState(
+            assignments={"primary_vision": "/dev/video0", "auxiliary": "/dev/video1"},
+            options=(
+                CameraDeviceOption("/dev/video0", "/dev/video0", True),
+                CameraDeviceOption("/dev/video1", "/dev/video1", False),
+            ),
+        ))
+        panel.show()
+        self._app.processEvents()
+        self.assertTrue(panel._role_panels["primary_vision"].isVisible())
+        self.assertFalse(panel._role_panels["auxiliary"].isVisible())
+        self.assertEqual(panel._connected_badge.text(), "Connected")
+
+        panel._device_role.setCurrentIndex(1)
+
+        self.assertFalse(panel._role_panels["primary_vision"].isVisible())
+        self.assertTrue(panel._role_panels["auxiliary"].isVisible())
+        self.assertEqual(panel._preview_role.currentData(), "auxiliary")
+        self.assertEqual(panel._connected_badge.text(), "Not connected")
+        panel.close()
+
+    def test_paint_head_uses_touch_fields_and_preserves_save_values(self) -> None:
+        panel = PaintHeadSettingsView()
+        saved = []
+        panel.save_requested.connect(lambda sign, spacing, count: saved.append((sign, spacing, count)))
+        panel.set_settings(-1, 5, 7, 45)
+
+        self.assertIsInstance(panel._spacing, KeyboardNumberField)
+        self.assertIsInstance(panel._count, KeyboardNumberField)
+        self.assertIn("45–75", panel._range.text())
+        panel._save_button.click()
+        self.assertEqual(saved, [(-1, 5, 7)])
 
 
 if __name__ == "__main__":

@@ -673,7 +673,8 @@ class BaseRobotSystem(ABC):
 
     @classmethod
     def storage_path(cls, *parts: str) -> str:
-        return os.path.join(cls.package_root(), "storage", *parts)
+        from src.engine.updates.paths import system_path
+        return system_path(cls, os.path.join("storage", *parts))
 
     @classmethod
     def workpieces_storage_path(cls) -> str:

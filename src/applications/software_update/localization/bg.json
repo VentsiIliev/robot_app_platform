@@ -1,0 +1,20 @@
+{
+  "SoftwareUpdateView": {
+    "Software Update": "Актуализация на софтуера",
+    "Check for updates": "Проверка за актуализации",
+    "Download update": "Изтегляне на актуализация",
+    "Install after application closes": "Инсталиране след затваряне на приложението",
+    "Installed: {installed}\nDownloaded: {staged}\nConfiguration: {configuration}": "Инсталирана версия: {installed}\nИзтеглена версия: {staged}\nКонфигурация: {configuration}",
+    "Updates change the platform only. Stop production and close the application normally after scheduling installation. The launcher installs the update and reopens the platform.": "Актуализациите променят само платформата. Спрете производството и затворете приложението нормално след планиране на инсталацията. Стартиращата програма инсталира актуализацията и отваря платформата отново.",
+    "Ready": "Готово",
+    "Checking for updates…": "Проверка за актуализации…",
+    "Downloading and verifying update…": "Изтегляне и проверка на актуализацията…",
+    "Update scheduled. Close the application normally to install it.": "Актуализацията е планирана. Затворете приложението нормално, за да я инсталирате.",
+    "Version {version} is available": "Налична е версия {version}",
+    "The platform is up to date": "Платформата е актуална",
+    "Version {version} is ready to install": "Версия {version} е готова за инсталиране",
+    "An interrupted update was recovered.": "Прекъснатата актуализация беше възстановена.",
+    "Version {version} was restored": "Версия {version} беше възстановена",
+    "Version {version} was installed": "Версия {version} беше инсталирана"
+  }
+}

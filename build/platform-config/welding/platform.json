@@ -1,0 +1,6 @@
+{
+  "robot_system": "welding",
+  "supported_robot_systems": [
+    "welding"
+  ]
+}

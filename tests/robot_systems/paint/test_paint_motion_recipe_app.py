@@ -102,6 +102,7 @@ class TestPaintMotionRecipeWiring(unittest.TestCase):
     def test_build_paint_motion_recipe_application_wires_mock_safe_service(self):
         robot_system = SimpleNamespace(
             _navigation="navigation",
+            storage_path=MagicMock(return_value="/external/paint/storage/settings/paint/dev_motion_recipe.json"),
             get_movement_group_definitions=MagicMock(
                 return_value=[
                     SimpleNamespace(id="Magazine"),
@@ -128,7 +129,8 @@ class TestPaintMotionRecipeWiring(unittest.TestCase):
 
         self.assertEqual(service_cls.call_args.kwargs["group_ids"], ["Magazine", "CALIBRATION"])
         self.assertEqual(service_cls.call_args.kwargs["navigation_service"], "navigation")
-        self.assertTrue(service_cls.call_args.kwargs["recipe_path"].endswith("dev_motion_recipe.json"))
+        robot_system.storage_path.assert_called_once_with("settings", "paint", "dev_motion_recipe.json")
+        self.assertEqual("/external/paint/storage/settings/paint/dev_motion_recipe.json", service_cls.call_args.kwargs["recipe_path"])
         factory.build.assert_called_once_with("recipe-service")
 
 

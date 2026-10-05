@@ -1,0 +1,8 @@
+{
+  "enabled": false,
+  "repository_url": "https://release-server.example/paint_auto_dry/",
+  "public_key": null,
+  "product": "paint-auto-dry-robot",
+  "channel": "stable",
+  "timeout_seconds": 30
+}

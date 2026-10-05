@@ -1,0 +1,12 @@
+{
+  "product": "paint-tray-dry-robot",
+  "robot_system": "paint_tray_dry",
+  "profile": "tray_dryer",
+  "storage_system": "paint",
+  "packages": [
+    "paint",
+    "paint_tray_dry"
+  ],
+  "target": "paint_tray_dry",
+  "executable": "paint-tray-dry-robot"
+}

@@ -42,14 +42,24 @@ class StartupSplashCoordinator:
         self._bridge.state_ready.connect(self._apply_robot_state)
         self._active = False
         self._finished = False
+        self._hide_timer = QTimer(self._bridge)
+        self._hide_timer.setSingleShot(True)
+        self._hide_timer.timeout.connect(self._hide_splash)
 
     def start(self) -> None:
         if self._active:
             return
+        self._hide_timer.stop()
+        self._finished = False
+        self._splash.set_active_step(3)
+        self._splash.set_message("Waiting for robot readiness")
+        self._splash.set_busy(True)
+        self._shell.stacked_widget.setCurrentWidget(self._splash)
         self._messaging.subscribe(RobotTopics.STATE, self._on_robot_state)
         self._active = True
 
     def stop(self) -> None:
+        self._hide_timer.stop()
         if not self._active:
             return
         try:
@@ -61,7 +71,7 @@ class StartupSplashCoordinator:
         self._bridge.state_ready.emit(snapshot)
 
     def _apply_robot_state(self, snapshot) -> None:
-        if self._finished:
+        if not self._active or self._finished:
             return
         extra = getattr(snapshot, "extra", {}) or {}
         readiness_state = str(extra.get("readiness_state") or getattr(snapshot, "state", "") or "").strip().lower()
@@ -71,7 +81,7 @@ class StartupSplashCoordinator:
             self._finished = True
             self._splash.set_active_step(3)
             self._splash.mark_complete()
-            QTimer.singleShot(350, self._hide_splash)
+            self._hide_timer.start(350)
             return
 
         self._splash.set_active_step(3)
@@ -81,5 +91,6 @@ class StartupSplashCoordinator:
         self.stop()
         if self._shell.stacked_widget.currentWidget() is self._splash:
             self._shell.stacked_widget.setCurrentWidget(self._shell.folders_page)
-        self._shell.stacked_widget.removeWidget(self._splash)
-        self._splash.deleteLater()
+        # The shell owns this reusable widget across logout/login cycles.
+        # Removing/deleting it leaves bootstrap and language-change callbacks stale.
+        self._splash.set_busy(False)

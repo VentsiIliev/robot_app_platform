@@ -495,3 +495,17 @@ def _build_hand_eye_calibration_application(robot_system):
         return HandEyeCalibrationFactory().build(service, messaging=ms)
 
     return WidgetApplication(widget_factory=_factory)
+def _build_network_settings_application(robot_system):
+    from src.applications.network_settings.build_application import build_network_settings_application
+    return build_network_settings_application(robot_system)
+
+
+def _build_software_update_application(robot_system):
+    from src.applications.software_update.build_application import build_software_update_application
+    from src.shared_contracts.events.process_events import ProcessState
+
+    def can_schedule():
+        process = getattr(robot_system, "_main_process", None)
+        return process is not None and process.state in (ProcessState.IDLE, ProcessState.STOPPED)
+
+    return build_software_update_application(can_schedule)

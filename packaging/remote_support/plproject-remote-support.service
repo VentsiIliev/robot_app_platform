@@ -1,0 +1,15 @@
+[Unit]
+Description=PL PROJECT local remote support controller
+After=plproject-remote-support.socket
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /usr/local/libexec/plproject-remote-support
+User=root
+Group=root
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/plproject/remote-support
+RestrictAddressFamilies=AF_UNIX

@@ -2,7 +2,7 @@ import logging
 
 from PyQt6.QtCore import QObject, QThread, Qt, pyqtSignal
 from PyQt6.QtWidgets import (
-    QComboBox, QDialog, QHBoxLayout, QLabel, QLineEdit, QPushButton, QSpinBox,
+    QComboBox, QDialog, QHBoxLayout, QLabel, QLineEdit, QPushButton,
     QTabWidget, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
 )
 
@@ -13,8 +13,9 @@ from src.applications.base.i_application_controller import IApplicationControlle
 from src.applications.base.styled_message_box import show_warning, ask_yes_no
 from pl_gui.settings.settings_view.styles import LABEL_STYLE
 from src.applications.base.widgets.custom_virtual_keyboard import (
-    KeyboardDoubleSpinBox, KeyboardLineEdit, KeyboardSpinBox,
+    KeyboardLineEdit,
 )
+from src.applications.base.widgets.keyboard_number_field import KeyboardNumberField
 from ..model.tool_settings_model import ToolSettingsModel
 from ..view.tool_settings_view import ToolSettingsView
 
@@ -73,6 +74,7 @@ class ToolSettingsController(IApplicationController):
         self._view.activate_tool_requested.connect(self._on_activate_tool)
         self._view.capture_reference_requested.connect(self._on_capture_reference)
         self._view.capture_candidate_requested.connect(self._on_capture_candidate)
+        self._view.reset_calibration_requested.connect(self._on_reset_calibration)
         self._view.solve_calibration_requested.connect(self._on_solve_calibration)
         self._view.edit_sequences_requested.connect(self._on_edit_sequences)
 
@@ -196,6 +198,11 @@ class ToolSettingsController(IApplicationController):
             self._model.capture_tool_contact, self._show_candidate_result
         )
 
+    def _on_reset_calibration(self) -> None:
+        self._reference_captured = False
+        self._candidate_samples = 0
+        self._update_calibration_progress()
+
     def _on_solve_calibration(self, tool_id: int) -> None:
         self._run_blocking(
             lambda: self._model.solve_tool_calibration(tool_id),
@@ -301,9 +308,8 @@ class _ToolDialog(AppDialog):
         root.setSpacing(12)
 
         root.addWidget(_lbl("Tool ID"))
-        self._id_spin = KeyboardSpinBox()
+        self._id_spin = KeyboardNumberField()
         self._id_spin.setRange(0, 9999)
-        self._id_spin.setStyleSheet(DIALOG_INPUT_STYLE)
         self._id_spin.setCursor(Qt.CursorShape.PointingHandCursor)
         if tool_id is not None:
             self._id_spin.setValue(tool_id)
@@ -335,9 +341,8 @@ class _SlotDialog(AppDialog):
         root.setSpacing(12)
 
         root.addWidget(_lbl("Slot ID"))
-        self._slot_spin = KeyboardSpinBox()
+        self._slot_spin = KeyboardNumberField()
         self._slot_spin.setRange(0, 9999)
-        self._slot_spin.setStyleSheet(DIALOG_INPUT_STYLE)
         self._slot_spin.setCursor(Qt.CursorShape.PointingHandCursor)
         if slot_id is not None:
             self._slot_spin.setValue(slot_id)
@@ -373,11 +378,10 @@ class _ToolGeometryDialog(AppDialog):
         self._offsets = []
         for index, axis in enumerate(("X offset (mm)", "Y offset (mm)", "Z offset (mm)")):
             root.addWidget(_lbl(axis))
-            field = KeyboardDoubleSpinBox()
+            field = KeyboardNumberField(decimal=True)
             field.setRange(-2000.0, 2000.0)
             field.setDecimals(3)
             field.setValue(float(transform[index]))
-            field.setStyleSheet(DIALOG_INPUT_STYLE)
             self._offsets.append(field)
             root.addWidget(field)
         root.addWidget(_lbl("Collision profile"))

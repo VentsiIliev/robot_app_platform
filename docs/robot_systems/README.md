@@ -294,3 +294,14 @@ app   = (
 - **`describe()`**: Class method that prints a human-readable summary of all specs. Useful for debugging and onboarding.
 
 → Subpackages: [glue/](glue/README.md)
+# Shared host networking
+
+Paint, Glue, Welding, and Twin robot systems expose the shared Network Settings
+application in their Service or Setup folder. It configures the host network
+through the same app and OS service adapter across systems; no robot-specific
+network settings are persisted.
+
+Installed systems resolve writable storage beneath `ROBOT_PLATFORM_DATA_ROOT`;
+paint profile paths remain separate. Paint, Glue, Welding and Twin expose the
+shared Software Update application to administrators. Each release target owns
+a dedicated product identity, update config, repository and installation root. See [platform updates](../../packaging/platform/README.md).

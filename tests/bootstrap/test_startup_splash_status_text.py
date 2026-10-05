@@ -1,7 +1,7 @@
 import unittest
 from types import SimpleNamespace
 
-from src.bootstrap.run_main import _startup_splash_stage_text
+from src.bootstrap.startup_splash_runtime import startup_splash_stage_text as _startup_splash_stage_text
 
 
 class TestStartupSplashStatusText(unittest.TestCase):

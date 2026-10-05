@@ -25,6 +25,21 @@ from src.robot_systems.paint_tray_dry.bootstrap_provider import (
 
 
 class TestPaintProfiles(unittest.TestCase):
+    def test_fresh_tray_defaults_are_valid_without_changing_saved_values(self):
+        from src.robot_systems.paint.component_ids import SettingsID
+        from src.robot_systems.paint.processes.paint.paint_process_config_serializer import PaintProcessConfigSerializer
+
+        serializer = next(spec.serializer for spec in TrayDryerPaintRobotSystem.settings_specs
+                          if spec.name == SettingsID.PAINT_PROCESS_CONFIG)
+        settings_service = MagicMock()
+        settings_service.get.return_value = serializer.get_default()
+        service = PaintProcessConfigService(settings_service, allowed_dropoff_strategies=("plate_layout",))
+        self.assertEqual("plate_layout", service.get_snapshot().dropoff.strategy)
+        saved = serializer.to_dict(serializer.get_default())
+        saved["dropoff"]["strategy"] = "movement_group"
+        self.assertEqual("movement_group", serializer.from_dict(saved).dropoff.strategy)
+        self.assertEqual("movement_group", PaintProcessConfigSerializer().get_default().dropoff.strategy)
+
     def test_selects_automatic_dryer_profile(self):
         provider = create_auto_dry_provider()
 

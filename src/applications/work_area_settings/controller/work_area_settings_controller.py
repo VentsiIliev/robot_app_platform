@@ -69,7 +69,9 @@ class WorkAreaSettingsController(IApplicationController, BrokerSubscriptionMixin
                 self._bridge.camera_frame.emit(frame)
 
     def _on_service_state_raw(self, state) -> None:
-        self._bridge.vision_state.emit(str(state))
+        value = state.get("state", "unknown") if isinstance(state, dict) else state
+        value = getattr(value, "value", value)
+        self._bridge.vision_state.emit(str(value))
 
     def _on_camera_frame(self, frame) -> None:
         if self._active:
@@ -96,6 +98,8 @@ class WorkAreaSettingsController(IApplicationController, BrokerSubscriptionMixin
             return
         ok, msg = self._model.save_work_area(area_key, points)
         self._logger.info("Save work area '%s': %s — %s", area_key, ok, msg)
+        if ok:
+            self._view.mark_area_saved(area_key)
 
     def _load_all_areas(self) -> None:
         for definition in self._view.work_area_definitions:

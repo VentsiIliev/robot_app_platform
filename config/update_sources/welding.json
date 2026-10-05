@@ -1,0 +1,8 @@
+{
+  "enabled": false,
+  "repository_url": "https://release-server.example/welding/",
+  "public_key": null,
+  "product": "welding-robot",
+  "channel": "stable",
+  "timeout_seconds": 30
+}

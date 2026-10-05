@@ -1,0 +1,185 @@
+{
+  "format": 1,
+  "product": "paint-auto-dry-robot",
+  "robot_system": "paint_auto_dry",
+  "profile": "automatic_dryer",
+  "files": {
+    "hardware/peripherals.json": {
+      "vacuum_pump": {
+        "enabled": false,
+        "slave_id": 10,
+        "inputs": {},
+        "outputs": {
+          "pump": "Y0",
+          "blow_off": "Y2"
+        },
+        "commands": {
+          "on": 1,
+          "off": 0
+        },
+        "statuses": {}
+      },
+      "vacuum_sensor": {
+        "enabled": true,
+        "slave_id": 1,
+        "inputs": {
+          "sensor": "X3"
+        },
+        "outputs": {},
+        "commands": {},
+        "statuses": {}
+      },
+      "fan": {
+        "enabled": true,
+        "slave_id": 1,
+        "inputs": {},
+        "outputs": {
+          "fan": "Y3"
+        },
+        "commands": {
+          "on": 1,
+          "off": 0
+        },
+        "statuses": {}
+      },
+      "tray_fan": {
+        "enabled": true,
+        "slave_id": 1,
+        "inputs": {},
+        "outputs": {
+          "fan": "Y6"
+        },
+        "commands": {
+          "on": 1,
+          "off": 0
+        },
+        "statuses": {}
+      },
+      "physical_control_buttons": {
+        "enabled": true,
+        "slave_id": 1,
+        "inputs": {
+          "start": "X1",
+          "pause": "X0"
+        },
+        "outputs": {
+          "start": "Y0",
+          "pause": "Y1"
+        },
+        "commands": {
+          "start_on": 1,
+          "start_off": 0,
+          "pause_on": 1,
+          "pause_off": 0
+        },
+        "statuses": {}
+      },
+      "dryer": {
+        "enabled": false,
+        "slave_id": 10,
+        "inputs": {
+          "status": "0"
+        },
+        "outputs": {
+          "command": "1",
+          "pwm_open_vrytka": "2",
+          "pwm_close_vrytka": "3",
+          "pwm_open_izbutvatel": "4",
+          "pwm_close_izbutvatel": "5",
+          "time_delay_move_servo_up": "6",
+          "time_delay_move_servo_down": "7",
+          "time_delay_move_servo_in": "8",
+          "time_delay_move_servo_out": "9",
+          "time_delay_move_plate_in": "10",
+          "time_delay_move_plate_out": "11",
+          "time_delay_start_servo_move": "12",
+          "rev_minute": "13",
+          "acceleration": "14",
+          "target_position_backword": "15",
+          "target_position_forword": "16"
+        },
+        "commands": {
+          "next_position": 1,
+          "eject": 2,
+          "close_plate": 4
+        },
+        "statuses": {}
+      }
+    },
+    "hardware/modbus.json": {
+      "port": "/dev/ttyUSB0",
+      "baudrate": 57600,
+      "bytesize": 8,
+      "stopbits": 1,
+      "parity": "N",
+      "timeout": 0.5,
+      "slave_address": 10,
+      "max_retries": 30,
+      "profiles": {
+        "xinje_even": {
+          "port": "/dev/ttyUSB0",
+          "baudrate": 57600,
+          "bytesize": 8,
+          "stopbits": 1,
+          "parity": "E",
+          "timeout": 0.5,
+          "slave_address": 1,
+          "max_retries": 30
+        }
+      },
+      "slaves": {
+        "xinje_ma": {
+          "slave_address": 1,
+          "profile_name": "default",
+          "transport_type": "modbus_register",
+          "max_retries": 30
+        },
+        "default": {
+          "slave_address": 10,
+          "profile_name": "default",
+          "transport_type": "xinje_ma_8x8yr",
+          "max_retries": 30
+        }
+      }
+    },
+    "hardware/cameras.json": {
+      "cameras": {
+        "primary_vision": {
+          "device": "/dev/v4l/by-path/pci-0000:00:14.0-usb-0:5:1.0-video-index0",
+          "width": 1280,
+          "height": 720,
+          "required": true,
+          "flip_horizontal": false,
+          "flip_vertical": false,
+          "rotate_degrees": 0
+        },
+        "auxiliary": {
+          "device": "/dev/v4l/by-path/pci-0000:00:14.0-usb-0:9:1.0-video-index0",
+          "width": 1280,
+          "height": 720,
+          "required": false,
+          "flip_horizontal": false,
+          "flip_vertical": false,
+          "rotate_degrees": 0
+        }
+      }
+    },
+    "dryer/settings.json": {
+      "pwm_open_vrytka": 600,
+      "pwm_close_vrytka": 180,
+      "pwm_open_izbutvatel": 600,
+      "pwm_close_izbutvatel": 180,
+      "time_delay_move_servo_up": 80,
+      "time_delay_move_servo_down": 50,
+      "time_delay_move_servo_in": 100,
+      "time_delay_move_servo_out": 100,
+      "time_delay_move_plate_in": 500,
+      "time_delay_move_plate_out": 350,
+      "time_delay_start_servo_move": 50,
+      "rev_minute": 50,
+      "acceleration": 0.1,
+      "target_position_backword": 500,
+      "target_position_forword": 500
+    }
+  }
+}

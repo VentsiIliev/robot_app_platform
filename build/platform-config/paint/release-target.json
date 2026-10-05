@@ -1,0 +1,11 @@
+{
+  "product": "paint-robot",
+  "robot_system": "paint",
+  "profile": "default",
+  "storage_system": "paint",
+  "packages": [
+    "paint"
+  ],
+  "target": "paint",
+  "executable": "paint-robot"
+}

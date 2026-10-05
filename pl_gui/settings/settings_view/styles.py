@@ -53,6 +53,39 @@ QScrollBar::sub-page:vertical {{
     background: transparent;
 }}
 """
+TOUCH_COMBO_STYLE = f"""
+QFrame#touchCombo {{
+    background: white;
+    border: 2px solid {BORDER};
+    border-radius: 10px;
+}}
+QFrame#touchCombo:hover {{ border-color: {PRIMARY}; }}
+QFrame#touchCombo QComboBox {{
+    background: transparent;
+    color: {TEXT_COLOR};
+    border: none;
+    padding: 0 12px;
+    font-size: 12pt;
+    min-height: 48px;
+}}
+QFrame#touchCombo QComboBox::drop-down {{ width: 0; border: none; }}
+QFrame#touchCombo QComboBox::down-arrow {{ image: none; }}
+QFrame#touchCombo QPushButton#comboDrop {{
+    background: transparent;
+    color: {PRIMARY};
+    border: none;
+    font-size: 17pt;
+    font-weight: bold;
+}}
+QFrame#touchCombo QComboBox QAbstractItemView {{
+    background: white;
+    color: {TEXT_COLOR};
+    selection-background-color: {PRIMARY_LIGHT};
+    selection-color: {PRIMARY_DARK};
+    font-size: 11pt;
+    padding: 8px;
+}}
+"""
 # Overlay
 OVERLAY_BG = "rgba(0, 0, 0, 0.5)"
 OVERLAY_LIGHT = "rgba(0, 0, 0, 0.32)"

@@ -132,6 +132,12 @@ def _build_application_specs():
         (paint_system_config.MODBUS_SETTINGS_APP,
          ApplicationSpec(name="ModbusSettings", folder_id=2, icon="fa5s.network-wired",
                          factory=application_wiring._build_modbus_settings_application)),
+        (True,
+         ApplicationSpec(name="SoftwareUpdate", folder_id=3, icon="fa5s.download",
+                         factory=application_wiring._build_software_update_application)),
+        (paint_system_config.NETWORK_SETTINGS_APP,
+         ApplicationSpec(name="NetworkSettings", folder_id=2, icon="fa5s.wifi",
+                         factory=application_wiring._build_network_settings_application)),
         (paint_system_config.DEVICE_CONTROL_APP,
          ApplicationSpec(name="DeviceControl", folder_id=2, icon="fa5s.sliders-h",
                          factory=application_wiring._build_device_control_application)),
@@ -387,6 +393,7 @@ class PaintRobotSystem(BaseRobotSystem):
         default_permission_role_values=["Admin"],
         protected_app_role_values={
             "user_management": ["Admin"],
+            "softwareupdate": ["Admin"],
             "paintmotionrecipe": ["Admin", "Developer"],
             "contourmatchingtester": ["Admin", "Developer"],
         },
@@ -414,7 +421,8 @@ class PaintRobotSystem(BaseRobotSystem):
     def storage_path(cls, *parts: str) -> str:
         """Resolve all persisted paint data beneath the selected profile root."""
         storage_root = os.path.dirname(cls.metadata.settings_root)
-        return os.path.join(cls.package_root(), storage_root, *parts)
+        from src.engine.updates.paths import system_path
+        return system_path(cls, os.path.join(storage_root, *parts))
 
     settings_specs = [
         SettingsSpec(CommonSettingsID.ROBOT_CONFIG, RobotSettingsSerializer(), "robot/config.json"),
@@ -839,6 +847,17 @@ class TrayDryerPaintRobotSystem(PaintRobotSystem):
     )
     allowed_dropoff_strategies = ("plate_layout",)
     height_measuring_enabled = False
+
+    # Fresh installations must use a strategy supported by this profile.
+    settings_specs = [
+        replace(spec, serializer=PaintProcessConfigSerializer(
+            replace(
+                spec.serializer.get_default(),
+                dropoff=replace(spec.serializer.get_default().dropoff, strategy="plate_layout"),
+            )
+        )) if spec.name == SettingsID.PAINT_PROCESS_CONFIG else spec
+        for spec in PaintRobotSystem.settings_specs
+    ]
 
     metadata = replace(
         PaintRobotSystem.metadata,

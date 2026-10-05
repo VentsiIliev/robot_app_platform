@@ -1,0 +1,25 @@
+{
+  "__meta__": {"display_name": "English"},
+  "WorkAreaSettingsView": {
+    "Work area editor": "Work area editor",
+    "Work area": "Work area",
+    "Choose work area": "Choose work area",
+    "ROI": "ROI",
+    "Corner": "Corner",
+    "Step (px)": "Step (px)",
+    "Detection ROI": "Detection ROI",
+    "Brightness ROI": "Brightness ROI",
+    "Drag a corner on the preview, or use the arrows on the right.": "Drag a corner on the preview, or use the arrows on the right.",
+    "Save ROI": "Save ROI",
+    "Reset": "Reset",
+    "Vision service": "Vision service",
+    "No ROI selected": "No ROI selected",
+    "Zoom out": "Zoom out",
+    "Zoom in": "Zoom in",
+    "Reset zoom": "Reset zoom",
+    "Move corner up": "Move corner up",
+    "Move corner down": "Move corner down",
+    "Move corner left": "Move corner left",
+    "Move corner right": "Move corner right"
+  }
+}

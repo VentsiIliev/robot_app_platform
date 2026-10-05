@@ -1,0 +1,8 @@
+{
+  "enabled": false,
+  "repository_url": "https://release-server.example/twin_robot/",
+  "public_key": null,
+  "product": "twin-robot",
+  "channel": "stable",
+  "timeout_seconds": 30
+}

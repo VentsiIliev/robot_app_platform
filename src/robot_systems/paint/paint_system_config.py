@@ -80,6 +80,9 @@ ETHERCAT_DIAGNOSTICS_APP = False
 # Configures Modbus communication and tests connections to Modbus devices.
 MODBUS_SETTINGS_APP = True
 
+# Host Wi-Fi, Ethernet, and IPv4 configuration.
+NETWORK_SETTINGS_APP = True
+
 # Provides manual control and status for configured peripherals, including
 # dryer configuration and test operations in the Dryer tab.
 DEVICE_CONTROL_APP = True

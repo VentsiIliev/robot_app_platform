@@ -37,14 +37,18 @@ class TwinRobotSystem(BaseRobotSystem):
         role_values=["Admin", "Operator", "Viewer", "Developer"],
         admin_role_value="Admin",
         default_permission_role_values=["Admin"],
+        protected_app_role_values={"softwareupdate": ["Admin"]},
     )
 
     shell = ShellSetup(
         folders=[
             FolderSpec(folder_id=1, name="PRODUCTION", display_name="Production"),
             FolderSpec(folder_id=2, name="SETUP", display_name="Setup"),
+            FolderSpec(folder_id=3, name="ADMIN", display_name="Administration"),
         ],
         applications=[
+            ApplicationSpec(name="SoftwareUpdate", folder_id=3, icon="fa5s.download",
+                            factory=application_wiring._build_software_update_application),
             ApplicationSpec(
                 name="TwinDashboard",
                 folder_id=1,
@@ -56,6 +60,12 @@ class TwinRobotSystem(BaseRobotSystem):
                 folder_id=2,
                 icon="fa5s.project-diagram",
                 factory=application_wiring._build_choreography_setup_application,
+            ),
+            ApplicationSpec(
+                name="NetworkSettings",
+                folder_id=2,
+                icon="fa5s.wifi",
+                factory=application_wiring._build_network_settings_application,
             ),
         ],
     )

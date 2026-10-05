@@ -1,0 +1,146 @@
+{
+  "format": 1,
+  "product": "paint-tray-dry-robot",
+  "robot_system": "paint_tray_dry",
+  "profile": "tray_dryer",
+  "files": {
+    "hardware/peripherals.json": {
+      "vacuum_pump": {
+        "enabled": true,
+        "slave_id": 10,
+        "inputs": {},
+        "outputs": {
+          "pump": "1",
+          "blow_off": "1"
+        },
+        "commands": {
+          "on": 1,
+          "off": 0,
+          "blow_off_on": 4
+        },
+        "statuses": {}
+      },
+      "vacuum_sensor": {
+        "enabled": true,
+        "slave_id": 10,
+        "inputs": {
+          "sensor": "0"
+        },
+        "outputs": {},
+        "commands": {},
+        "statuses": {
+          "detected": 2
+        }
+      },
+      "tray_fan": {
+        "enabled": true,
+        "slave_id": 10,
+        "inputs": {},
+        "outputs": {
+          "fan": "1"
+        },
+        "commands": {
+          "on": 1,
+          "off": 0
+        },
+        "statuses": {}
+      },
+      "physical_control_buttons": {
+        "enabled": true,
+        "slave_id": 10,
+        "inputs": {
+          "start": "X1",
+          "pause": "X0"
+        },
+        "outputs": {
+          "start": "Y0",
+          "pause": "Y1"
+        },
+        "commands": {
+          "start_on": 1,
+          "start_off": 0,
+          "pause_on": 1,
+          "pause_off": 0
+        },
+        "statuses": {}
+      },
+      "paint_head": {
+        "enabled": true,
+        "slave_id": 10,
+        "inputs": {
+          "position": "2"
+        },
+        "outputs": {
+          "position": "2"
+        },
+        "commands": {
+          "min_value": 45,
+          "max_value": 235,
+          "preset_spacing": 38,
+          "preset_count": 6,
+          "degree_units_numerator": 94,
+          "degree_units_denominator": 90,
+          "more_paint_sign": -1
+        },
+        "statuses": {}
+      }
+    },
+    "hardware/modbus.json": {
+      "port": "/dev/ttyUSB0",
+      "baudrate": 57600,
+      "bytesize": 8,
+      "stopbits": 1,
+      "parity": "N",
+      "timeout": 0.5,
+      "slave_address": 10,
+      "max_retries": 30,
+      "slaves": {
+        "default": {
+          "slave_address": 10,
+          "profile_name": "default",
+          "transport_type": "modbus_register_fc16",
+          "max_retries": 30
+        }
+      }
+    },
+    "hardware/cameras.json": {
+      "cameras": {
+        "primary_vision": {
+          "device": "/dev/v4l/by-path/pci-0000:00:14.0-usb-0:5:1.0-video-index0",
+          "width": 1280,
+          "height": 720,
+          "required": true,
+          "flip_horizontal": false,
+          "flip_vertical": false,
+          "rotate_degrees": 0
+        },
+        "auxiliary": {
+          "device": "/dev/v4l/by-path/pci-0000:00:14.0-usb-0:9:1.0-video-index0",
+          "width": 1280,
+          "height": 720,
+          "required": false,
+          "flip_horizontal": false,
+          "flip_vertical": false,
+          "rotate_degrees": 0
+        }
+      }
+    },
+    "dryer/settings.json": {
+      "pwm_open_vrytka": 150,
+      "pwm_close_vrytka": 600,
+      "pwm_open_izbutvatel": 600,
+      "pwm_close_izbutvatel": 180,
+      "time_delay_move_servo_up": 80,
+      "time_delay_move_servo_down": 50,
+      "time_delay_move_servo_in": 30,
+      "time_delay_move_servo_out": 50,
+      "time_delay_move_plate_in": 520,
+      "time_delay_move_plate_out": 550,
+      "time_delay_start_servo_move": 50,
+      "rev_minute": 50,
+      "acceleration": 0.1,
+      "target_position_backword": 500,
+      "target_position_forword": 500
+    }
+  }
+}

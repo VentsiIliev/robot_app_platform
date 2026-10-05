@@ -1,0 +1,20 @@
+{
+  "SoftwareUpdateView": {
+    "Software Update": "Software Update",
+    "Check for updates": "Check for updates",
+    "Download update": "Download update",
+    "Install after application closes": "Install after application closes",
+    "Installed: {installed}\nDownloaded: {staged}\nConfiguration: {configuration}": "Installed: {installed}\nDownloaded: {staged}\nConfiguration: {configuration}",
+    "Updates change the platform only. Stop production and close the application normally after scheduling installation. The launcher installs the update and reopens the platform.": "Updates change the platform only. Stop production and close the application normally after scheduling installation. The launcher installs the update and reopens the platform.",
+    "Ready": "Ready",
+    "Checking for updates…": "Checking for updates…",
+    "Downloading and verifying update…": "Downloading and verifying update…",
+    "Update scheduled. Close the application normally to install it.": "Update scheduled. Close the application normally to install it.",
+    "Version {version} is available": "Version {version} is available",
+    "The platform is up to date": "The platform is up to date",
+    "Version {version} is ready to install": "Version {version} is ready to install",
+    "An interrupted update was recovered.": "An interrupted update was recovered.",
+    "Version {version} was restored": "Version {version} was restored",
+    "Version {version} was installed": "Version {version} was installed"
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "__meta__": {"display_name": "Български"},
+  "WorkAreaSettingsView": {
+    "Work area editor": "Редактор на работни области",
+    "Work area": "Работна област",
+    "Choose work area": "Избери работна област",
+    "ROI": "Област на интерес",
+    "Corner": "Ъгъл",
+    "Step (px)": "Стъпка (пиксели)",
+    "Detection ROI": "Област за откриване",
+    "Brightness ROI": "Област за яркост",
+    "Drag a corner on the preview, or use the arrows on the right.": "Преместете ъгъл върху изображението или използвайте стрелките вдясно.",
+    "Save ROI": "Запази областта",
+    "Reset": "Възстанови",
+    "Vision service": "Услуга за зрение",
+    "No ROI selected": "Няма избрана област",
+    "Zoom out": "Намали мащаба",
+    "Zoom in": "Увеличи мащаба",
+    "Reset zoom": "Нулирай мащаба",
+    "Move corner up": "Премести ъгъла нагоре",
+    "Move corner down": "Премести ъгъла надолу",
+    "Move corner left": "Премести ъгъла наляво",
+    "Move corner right": "Премести ъгъла надясно"
+  }
+}

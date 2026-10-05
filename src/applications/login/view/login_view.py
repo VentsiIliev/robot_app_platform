@@ -1,4 +1,4 @@
-import os
+from pathlib import Path
 from typing import Optional
 
 import cv2
@@ -35,9 +35,9 @@ class _FeedOnlyCameraView(CameraView):
 from src.engine.auth.i_authenticated_user import IAuthenticatedUser
 
 # ── Asset paths ───────────────────────────────────────────────────────────────
-_RESOURCES = os.path.join(os.path.dirname(__file__), "..", "..", "base", "resources")
-_LOGO_PATH          = os.path.join(_RESOURCES, "logo.ico")
-_MACHINE_IMAGE_PATH = os.path.join(_RESOURCES, "MACHINE_BUTTONS_1.png")
+_RESOURCES = Path(__file__).resolve().parents[2] / "base" / "resources"
+_LOGO_PATH          = str(_RESOURCES / "logo.ico")
+_MACHINE_IMAGE_PATH = str(_RESOURCES / "MACHINE_BUTTONS_1.png")
 
 # ── Stack page indices ────────────────────────────────────────────────────────
 _PAGE_SETUP     = 0

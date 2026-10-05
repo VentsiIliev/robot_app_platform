@@ -132,6 +132,7 @@ class WeldingRobotSystem(BaseRobotSystem):
         default_permission_role_values=["Admin"],
         protected_app_role_values={
             "user_management": ["Admin"],
+            "softwareupdate": ["Admin"],
         },
     )
 
@@ -149,6 +150,10 @@ class WeldingRobotSystem(BaseRobotSystem):
                             factory=application_wiring._build_welding_contour_editor_application),
             ApplicationSpec(name="RobotSettings", folder_id=2, icon="mdi.robot-industrial",
                             factory=application_wiring._build_robot_settings_application),
+            ApplicationSpec(name="SoftwareUpdate", folder_id=3, icon="fa5s.download",
+                            factory=application_wiring._build_software_update_application),
+            ApplicationSpec(name="NetworkSettings", folder_id=2, icon="fa5s.wifi",
+                            factory=application_wiring._build_network_settings_application),
             ApplicationSpec(name="WorkAreaSettings", folder_id=2, icon="fa5s-vector-square",
                             factory=application_wiring._build_work_area_settings_application),
             ApplicationSpec(name="CameraSettings", folder_id=2, icon="fa5s.camera",
@@ -273,5 +278,4 @@ class WeldingRobotSystem(BaseRobotSystem):
     def on_stop(self) -> None:
         self._robot.stop_motion()
         self._robot.disable_robot()
-
 

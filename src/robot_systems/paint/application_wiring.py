@@ -827,13 +827,7 @@ def _build_paint_motion_recipe_application(robot_system):
     from src.robot_systems.paint.applications.paint_motion_recipe import PaintMotionRecipeFactory
     from src.robot_systems.paint.applications.paint_motion_recipe.service import PaintMotionRecipeService
 
-    recipe_path = os.path.join(
-        os.path.dirname(__file__),
-        "storage",
-        "settings",
-        "paint",
-        "dev_motion_recipe.json",
-    )
+    recipe_path = robot_system.storage_path("settings", "paint", "dev_motion_recipe.json")
     service = PaintMotionRecipeService(
         recipe_path=recipe_path,
         group_ids=[
@@ -1474,7 +1468,7 @@ def _build_device_control_application(robot_system):
         else None
     )
     def _build_widget(_messaging_service):
-        camera_panel = CameraDevicesWidget()
+        camera_panel = CameraDevicesWidget(device_control_mode=True)
         camera_controller = CameraDevicesController(
             CameraSettingsModel(camera_service),
             camera_panel,
@@ -1603,3 +1597,18 @@ def _build_pick_target_application(robot_system):
     return WidgetApplication(
         widget_factory=lambda ms: PickTargetFactory().build(service, messaging=ms, jog_service=jog_service)
     )
+def _build_network_settings_application(robot_system):
+    from src.applications.network_settings.build_application import build_network_settings_application
+    return build_network_settings_application(robot_system)
+
+
+def _build_software_update_application(robot_system):
+    from src.applications.software_update import SoftwareUpdateApplication
+    from src.applications.software_update.service.software_update_service import SoftwareUpdateService
+    from src.shared_contracts.events.process_events import ProcessState
+
+    def can_schedule():
+        process = getattr(robot_system, "_main_process", None)
+        return process is not None and process.state in (ProcessState.IDLE, ProcessState.STOPPED)
+
+    return SoftwareUpdateApplication(SoftwareUpdateService(can_schedule))

@@ -2,6 +2,10 @@ import sys
 import unittest
 
 from src.applications.tool_settings.view.tool_settings_view import ToolSettingsView
+from src.applications.tool_settings.controller.tool_settings_controller import (
+    _SlotDialog, _ToolDialog, _ToolGeometryDialog,
+)
+from src.applications.base.widgets.keyboard_number_field import KeyboardNumberField
 from src.engine.robot.interfaces.tool_definition import ToolDefinition
 from src.engine.robot.tool_changer import SlotConfig
 
@@ -214,6 +218,50 @@ class TestToolSettingsViewSignals(unittest.TestCase):
 
     def test_clean_up_returns_none(self):
         self.assertIsNone(self._view.clean_up())
+
+    def test_tabs_separate_tools_slots_and_calibration(self):
+        self.assertEqual(
+            [self._view._tabs.tabText(index) for index in range(3)],
+            ["Tools", "Slots", "TCP calibration"],
+        )
+
+    def test_discard_restores_loaded_slot_assignment(self):
+        self._view.set_slots(
+            [SlotConfig(id=10, tool_id=1)],
+            [ToolDefinition(1, "A"), ToolDefinition(2, "B")],
+        )
+        combo = self._view._slots_table.cellWidget(0, 1)
+        combo.setCurrentIndex(combo.findData(2))
+        self.assertIn("Unsaved", self._view._save_state.text())
+
+        self._view._btn_discard_slots.click()
+
+        self.assertEqual(combo.currentData(), 1)
+        self.assertIn("saved", self._view._save_state.text())
+
+    def test_calibration_selector_controls_solve_target(self):
+        self._view.set_tools([ToolDefinition(1, "A"), ToolDefinition(2, "B")])
+        self._view._calibration_tool_combo.setCurrentIndex(1)
+        self._view.set_calibration_progress(reference_captured=True, candidate_samples=3)
+        solved = []
+        self._view.solve_calibration_requested.connect(solved.append)
+
+        self._view._btn_solve.click()
+
+        self.assertEqual(solved, [2])
+
+    def test_edit_dialogs_use_shared_touch_number_fields(self):
+        tool = ToolDefinition(1, "A")
+        tool_dialog = _ToolDialog()
+        slot_dialog = _SlotDialog([tool])
+        offsets_dialog = _ToolGeometryDialog(tool)
+
+        self.assertIsInstance(tool_dialog._id_spin, KeyboardNumberField)
+        self.assertIsInstance(slot_dialog._slot_spin, KeyboardNumberField)
+        self.assertTrue(all(
+            isinstance(field, KeyboardNumberField)
+            for field in offsets_dialog._offsets
+        ))
 
 
 if __name__ == "__main__":

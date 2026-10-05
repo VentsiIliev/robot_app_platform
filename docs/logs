@@ -1,146 +1,344 @@
-/home/ilv/Desktop/robot_app_platform/.venv/bin/python /home/ilv/Desktop/robot_app_platform/src/bootstrap/run_main.py
-08:43:38 [INFO    ] src.bootstrap.ros_backend_launcher.start — ROS backend autostart disabled
-08:43:38 [INFO    ] src.engine.robot.drivers.ros2_robot.__init__ — Ros2Robot init — server_url=http://localhost:5000
-08:43:38 [INFO    ] src.engine.robot.drivers.client_adapters.http_websocket.__init__ — Connecting to ROS2 bridge at http://localhost:5000
-08:43:38 [DEBUG   ] src.engine.robot.drivers.client_adapters.http_websocket.health_check — health_check ← status=200 body={'error': None, 'message': 'Robot runtime is ready', 'motion_stack_fault': None, 'motion_stack_ready': True, 'phase': 'ready', 'ready': True, 'ros2_active': True, 'started_at': 1790743698.3051546, 'status': 'ok', 'updated_at': 1790743702.4898593}
-08:43:38 [DEBUG   ] src.engine.robot.drivers.client_adapters.http_websocket.__init__ — health_check response: {'error': None, 'message': 'Robot runtime is ready', 'motion_stack_fault': None, 'motion_stack_ready': True, 'phase': 'ready', 'ready': True, 'ros2_active': True, 'started_at': 1790743698.3051546, 'status': 'ok', 'updated_at': 1790743702.4898593}
-08:43:38 [INFO    ] src.engine.robot.drivers.client_adapters.http_websocket.__init__ — Connected to ROS2 bridge at http://localhost:5000
-08:43:38 [DEBUG   ] asyncio.__init__ — Using selector: EpollSelector
-08:43:38 [DEBUG   ] asyncio.__init__ — Using selector: EpollSelector
-08:43:38 [INFO    ] src.engine.robot.drivers.ros2_robot.__init__ — Ros2Robot ready
-08:43:38 [DEBUG   ] SystemBuilder.build — Building PaintSystemTrayDryer
-08:43:38 [DEBUG   ] SettingsService.reload — Loading settings 'robot_config'
-08:43:38 [DEBUG   ] asyncio.__init__ — Using selector: EpollSelector
-08:43:38 [INFO    ] RobotStateManager.start_monitoring — State monitoring started (poll interval=0.0s)
-08:43:38 [DEBUG   ] SystemBuilder.build — Built 'robot' → RobotService
-08:43:38 [DEBUG   ] SystemBuilder.build — Built 'navigation' → NavigationService
-08:43:38 [DEBUG   ] SystemBuilder.build — Built 'work_areas' → WorkAreaService
-08:43:38 [DEBUG   ] SettingsService.reload — Loading settings 'SettingsID.CAMERAS'
-08:43:38 [INFO    ] BaseJsonSettingsRepository.load — Loaded 'robot_config' settings from '/home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/profiles/tray_dryer/storage/settings/robot/config.json'.
-08:43:38 [INFO    ] BaseJsonSettingsRepository.load — Loaded 'camera_devices' settings from '/home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/profiles/tray_dryer/storage/settings/hardware/cameras.json'.
-08:43:38 [INFO    ] src.engine.robot.drivers.client_adapters.http_websocket.set_active_tool — Active ROS2 tool set to 2 (TOOL_2)
-08:43:38 [INFO    ] RobotStateManager._sync_configured_tool — Configured active robot tool synced: 2
-08:43:38 [INFO    ] src.engine.robot.drivers.client_adapters.http_websocket.set_active_workobject — Active ROS2 workobject set to 1 (WOBJ_1)
-08:43:38 [INFO    ] RobotStateManager._sync_configured_workobject — Configured active robot workobject synced: 1
-08:43:38 [INFO    ] src.engine.robot.drivers.client_adapters.http_websocket._state_websocket_loop — Connected to ROS2 state WebSocket at ws://localhost:5001/ws/state
-08:43:38 [INFO    ] src.engine.robot.drivers.client_adapters.http_websocket._execution_websocket_loop — Connected to ROS2 execution WebSocket at ws://localhost:5002/ws/execution
-08:43:38 [INFO    ] src.engine.robot.drivers.client_adapters.http_websocket._sensor_websocket_loop — Connected to ROS2 sensor WebSocket at ws://localhost:5003/ws/sensors
+(.venv) ilv@IlV:~/Desktop/robot_app_platform$ cd /home/ilv/Desktop/robot_app_platform/src/robot_systems/paint_tray_dry
+(.venv) ilv@IlV:~/Desktop/robot_app_platform/src/robot_systems/paint_tray_dry$ ls
+bootstrap_provider.py  build_release.sh  __init__.py  install_latest.sh  __pycache__  run_latest.sh  VERSION
+(.venv) ilv@IlV:~/Desktop/robot_app_platform/src/robot_systems/paint_tray_dry$ ./build_release.sh 
+37 INFO: PyInstaller: 6.15.0, contrib hooks: 2026.8
+37 INFO: Python: 3.12.3
+38 INFO: Platform: Linux-6.14.0-rt3-x86_64-with-glibc2.39
+38 INFO: Python environment: /home/ilv/Desktop/robot_app_platform/.venv
+39 INFO: Removing temporary files and cleaning cache in /home/ilv/.cache/pyinstaller
+83 INFO: Module search paths (PYTHONPATH):
+['/home/ilv/Desktop/robot_app_platform/packaging/platform',
+ '/home/ilv/Desktop/robot_app_platform',
+ '/home/ilv/ros2_ws/install/erob_moveit_runtime/lib/python3.12/site-packages',
+ '/home/ilv/ros2_ws/install/fairino_msgs/lib/python3.12/site-packages',
+ '/home/ilv/ros2_ws/install/ethercat_msgs/lib/python3.12/site-packages',
+ '/opt/ros/jazzy/lib/python3.12/site-packages',
+ '/usr/lib/python312.zip',
+ '/usr/lib/python3.12',
+ '/usr/lib/python3.12/lib-dynload',
+ '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages',
+ '/home/ilv/Desktop/robot_app_platform/packaging',
+ '/home/ilv/Desktop/robot_app_platform']
+266 INFO: Appending 'datas' from .spec
+267 INFO: checking Analysis
+267 INFO: Building Analysis because Analysis-00.toc is non existent
+267 INFO: Running Analysis Analysis-00.toc
+267 INFO: Target bytecode optimization level: 0
+267 INFO: Initializing module dependency graph...
+268 INFO: Initializing module graph hook caches...
+272 INFO: Analyzing modules for base_library.zip ...
+775 INFO: Processing standard module hook 'hook-encodings.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+1669 INFO: Processing standard module hook 'hook-pickle.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+2258 INFO: Processing standard module hook 'hook-heapq.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+2512 INFO: Caching module dependency graph...
+2568 INFO: Looking for Python shared library...
+2578 INFO: Using Python shared library: /lib/x86_64-linux-gnu/libpython3.12.so
+2578 INFO: Analyzing /home/ilv/Desktop/robot_app_platform/packaging/platform_entrypoint.py
+2631 INFO: Processing standard module hook 'hook-platform.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+2918 INFO: Processing standard module hook 'hook-PyQt6.QtCore.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+3012 INFO: Processing standard module hook 'hook-PyQt6.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+3298 INFO: Processing standard module hook 'hook-PyQt6.QtGui.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+4066 INFO: Processing standard module hook 'hook-PyQt6.QtWidgets.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+4252 INFO: Processing standard module hook 'hook-cv2.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+4466 INFO: Processing standard module hook 'hook-numpy.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+4707 INFO: Processing standard module hook 'hook-difflib.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+4829 INFO: Processing standard module hook 'hook-multiprocessing.util.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+4931 INFO: Processing standard module hook 'hook-xml.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+5088 INFO: Processing standard module hook 'hook-_ctypes.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+5540 INFO: Processing standard module hook 'hook-sysconfig.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+6275 INFO: Processing pre-safe-import-module hook 'hook-typing_extensions.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/PyInstaller/hooks/pre_safe_import_module'
+6275 INFO: SetuptoolsInfo: initializing cached setuptools info...
+6774 INFO: Processing standard module hook 'hook-charset_normalizer.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+7158 INFO: Processing standard module hook 'hook-matplotlib.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+7350 INFO: Processing pre-safe-import-module hook 'hook-packaging.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/PyInstaller/hooks/pre_safe_import_module'
+7413 INFO: Processing pre-safe-import-module hook 'hook-gi.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/PyInstaller/hooks/pre_safe_import_module'
+7575 INFO: Processing standard module hook 'hook-matplotlib.backend_bases.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+7692 INFO: Processing standard module hook 'hook-PIL.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+7753 INFO: Processing standard module hook 'hook-PIL.Image.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+7905 INFO: Processing standard module hook 'hook-xml.etree.cElementTree.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+8014 INFO: Processing standard module hook 'hook-PIL.ImageFilter.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+8437 INFO: Processing standard module hook 'hook-jinja2.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+8739 INFO: Processing standard module hook 'hook-matplotlib.backends.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+8796 INFO: Processing standard module hook 'hook-matplotlib.pyplot.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+9347 INFO: Processing standard module hook 'hook-dateutil.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+9387 INFO: Processing pre-safe-import-module hook 'hook-six.moves.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/PyInstaller/hooks/pre_safe_import_module'
+10267 INFO: Processing standard module hook 'hook-certifi.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+10739 INFO: Processing standard module hook 'hook-pandas.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+11379 INFO: Processing standard module hook 'hook-zoneinfo.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+11487 INFO: Processing standard module hook 'hook-scipy.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+13492 INFO: Processing pre-safe-import-module hook 'hook-distutils.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/PyInstaller/hooks/pre_safe_import_module'
+13495 INFO: Processing standard module hook 'hook-setuptools.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+13522 INFO: Processing pre-safe-import-module hook 'hook-jaraco.functools.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/PyInstaller/hooks/pre_safe_import_module'
+13522 INFO: Setuptools: 'jaraco.functools' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.jaraco.functools'!
+13528 INFO: Processing pre-safe-import-module hook 'hook-more_itertools.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/PyInstaller/hooks/pre_safe_import_module'
+13528 INFO: Setuptools: 'more_itertools' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.more_itertools'!
+13605 INFO: Processing standard module hook 'hook-_osx_support.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+13750 INFO: Processing pre-safe-import-module hook 'hook-jaraco.text.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/PyInstaller/hooks/pre_safe_import_module'
+13750 INFO: Setuptools: 'jaraco.text' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.jaraco.text'!
+13757 INFO: Processing standard module hook 'hook-setuptools._vendor.jaraco.text.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+13758 INFO: Processing pre-safe-import-module hook 'hook-importlib_resources.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/PyInstaller/hooks/pre_safe_import_module'
+13758 INFO: Processing pre-safe-import-module hook 'hook-jaraco.context.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/PyInstaller/hooks/pre_safe_import_module'
+13758 INFO: Setuptools: 'jaraco.context' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.jaraco.context'!
+14048 INFO: Processing pre-safe-import-module hook 'hook-tomli.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/PyInstaller/hooks/pre_safe_import_module'
+14048 INFO: Setuptools: 'tomli' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.tomli'!
+14386 INFO: Processing pre-safe-import-module hook 'hook-wheel.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/PyInstaller/hooks/pre_safe_import_module'
+14386 INFO: Setuptools: 'wheel' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.wheel'!
+14880 INFO: Processing standard module hook 'hook-scipy.linalg.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+14989 INFO: Processing standard module hook 'hook-scipy.special._ufuncs.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+15789 INFO: Processing standard module hook 'hook-scipy.spatial._ckdtree.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+16187 INFO: Processing standard module hook 'hook-scipy.spatial.transform.rotation.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+16761 INFO: Processing standard module hook 'hook-scipy.stats._stats.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+17063 INFO: Processing standard module hook 'hook-scipy.sparse.csgraph.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+17616 INFO: Processing standard module hook 'hook-scipy.special._ellip_harm_2.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+18574 INFO: Processing standard module hook 'hook-pandas.io.formats.style.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+19953 INFO: Processing standard module hook 'hook-pandas.plotting.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+20986 INFO: Processing standard module hook 'hook-sqlite3.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+21094 INFO: Processing standard module hook 'hook-pandas.io.clipboard.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+21099 INFO: Processing standard module hook 'hook-qtpy.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+21099 INFO: hook-qtpy: selected 'PyQt6' as Qt bindings because hook for 'PyQt6' has been run before.
+21260 INFO: Processing standard module hook 'hook-PyQt6.QtOpenGL.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+21313 INFO: Processing standard module hook 'hook-PyQt6.QtOpenGLWidgets.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+21435 INFO: Processing standard module hook 'hook-xml.dom.domreg.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+21668 INFO: Processing pre-safe-import-module hook 'hook-win32com.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/_pyinstaller_hooks_contrib/pre_safe_import_module'
+22098 INFO: Processing standard module hook 'hook-sklearn.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+22184 INFO: Processing standard module hook 'hook-sklearn.utils.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+22268 INFO: Processing standard module hook 'hook-sklearn.externals.array_api_compat.numpy.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+22297 INFO: Processing standard module hook 'hook-sklearn.externals.array_api_compat.cupy.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+22305 INFO: Processing standard module hook 'hook-sklearn.externals.array_api_compat.torch.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+22325 INFO: Processing standard module hook 'hook-sklearn.externals.array_api_compat.dask.array.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+22448 INFO: Processing standard module hook 'hook-sklearn.metrics.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+24245 INFO: Processing standard module hook 'hook-sklearn.metrics.cluster.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+24292 INFO: Processing standard module hook 'hook-sklearn.metrics.pairwise.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+24443 INFO: Processing standard module hook 'hook-sklearn.cluster.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+24509 INFO: Processing standard module hook 'hook-sklearn.neighbors.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+24571 INFO: Processing standard module hook 'hook-sklearn.linear_model.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+25936 INFO: Processing standard module hook 'hook-urllib3.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+26859 INFO: Processing standard module hook 'hook-qtawesome.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+27046 INFO: Analyzing hidden import 'src.robot_systems.paint_tray_dry.bootstrap_provider'
+27161 INFO: Processing standard module hook 'hook-shapely.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+29197 INFO: Processing standard module hook 'hook-matplotlib.backends.backend_qtagg.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+29200 INFO: Processing standard module hook 'hook-matplotlib.backends.qt_compat.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+29200 INFO: hook-matplotlib.backends.qt_compat: selected 'PyQt6' as Qt bindings because hook for 'PyQt6' has been run before.
+30016 INFO: Processing standard module hook 'hook-websockets.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+30567 INFO: Processing module hooks (post-graph stage)...
+30701 INFO: Processing standard module hook 'hook-sklearn.tree.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+30769 INFO: Processing standard module hook 'hook-PyQt6.QtDBus.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+30815 INFO: Processing standard module hook 'hook-matplotlib.backends.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+30816 INFO: Matplotlib backend selection method: automatic discovery of used backends
+30871 INFO: Discovered Matplotlib backend(s) via `matplotlib.use()` call in module 'src.engine.robot.path_preparation.default_workpiece_path_preparation_service': ['Agg']
+30875 INFO: Discovered Matplotlib backend(s) via `matplotlib.use()` call in module 'src.engine.robot.path_interpolation.new_interpolation.debug_plotting': ['Agg']
+30877 INFO: Discovered Matplotlib backend(s) via `matplotlib.use()` call in module 'src.robot_systems.paint.processes.paint.execute.diagnostics': ['Agg', 'Agg', 'Agg']
+30879 INFO: Discovered Matplotlib backend(s) via `matplotlib.use()` call in module 'src.robot_systems.paint.processes.paint.execute.paint_debug_artifacts': ['Agg']
+30880 INFO: The following Matplotlib backends were discovered by scanning for `matplotlib.use()` calls: ['Agg']. If your backend of choice is not in this list, either add a `matplotlib.use()` call to your code, or configure the backend collection via hook options (see: https://pyinstaller.org/en/stable/hooks-config.html#matplotlib-hooks).
+30880 INFO: Selected matplotlib backends: ['Agg']
+30999 WARNING: Hidden import "scipy.special._cdflib" not found!
+31217 INFO: Processing standard module hook 'hook-PIL.SpiderImagePlugin.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+31289 INFO: Performing binary vs. data reclassification (737 entries)
+31364 INFO: Looking for ctypes DLLs
+31414 WARNING: Library Advapi32 required via ctypes not found
+31425 WARNING: Library Cfgmgr32 required via ctypes not found
+31434 WARNING: Library setupapi required via ctypes not found
+31435 WARNING: Ignoring /System/Library/Frameworks/CoreFoundation.framework/CoreFoundation imported from /home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/serial/tools/list_ports_osx.py - only basenames are supported with ctypes imports!
+31435 WARNING: Ignoring /System/Library/Frameworks/IOKit.framework/IOKit imported from /home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/serial/tools/list_ports_osx.py - only basenames are supported with ctypes imports!
+31447 WARNING: Library user32 required via ctypes not found
+31517 WARNING: Library msvcrt required via ctypes not found
+31555 INFO: Analyzing run-time hooks ...
+31564 INFO: Including run-time hook 'pyi_rth_inspect.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/PyInstaller/hooks/rthooks'
+31566 INFO: Including run-time hook 'pyi_rth_pkgutil.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/PyInstaller/hooks/rthooks'
+31567 INFO: Including run-time hook 'pyi_rth_multiprocessing.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/PyInstaller/hooks/rthooks'
+31568 INFO: Including run-time hook 'pyi_rth_setuptools.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/PyInstaller/hooks/rthooks'
+31568 INFO: Including run-time hook 'pyi_rth_mplconfig.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/PyInstaller/hooks/rthooks'
+31569 INFO: Processing pre-find-module-path hook 'hook-_pyi_rth_utils.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/PyInstaller/hooks/pre_find_module_path'
+31569 INFO: Processing standard module hook 'hook-_pyi_rth_utils.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/PyInstaller/hooks'
+31570 INFO: Including run-time hook 'pyi_rth_pyqt6.py' from '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/PyInstaller/hooks/rthooks'
+31624 INFO: Creating base_library.zip...
+31656 INFO: Looking for dynamic libraries
+34591 WARNING: Library not found: could not resolve 'libtiff.so.5', dependency of '/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/PyQt6/Qt6/plugins/imageformats/libqtiff.so'.
+34638 INFO: Warnings written to /home/ilv/Desktop/robot_app_platform/build/pyinstaller/paint_tray_dry/platform/warn-platform.txt
+34749 INFO: Graph cross-reference written to /home/ilv/Desktop/robot_app_platform/build/pyinstaller/paint_tray_dry/platform/xref-platform.html
+34806 INFO: checking PYZ
+34806 INFO: Building PYZ because PYZ-00.toc is non existent
+34806 INFO: Building PYZ (ZlibArchive) /home/ilv/Desktop/robot_app_platform/build/pyinstaller/paint_tray_dry/platform/PYZ-00.pyz
+37077 INFO: Building PYZ (ZlibArchive) /home/ilv/Desktop/robot_app_platform/build/pyinstaller/paint_tray_dry/platform/PYZ-00.pyz completed successfully.
+37115 INFO: checking PKG
+37116 INFO: Building PKG because PKG-00.toc is non existent
+37116 INFO: Building PKG (CArchive) paint-tray-dry-robot.pkg
+37133 INFO: Building PKG (CArchive) paint-tray-dry-robot.pkg completed successfully.
+37133 INFO: Bootloader /home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/PyInstaller/bootloader/Linux-64bit-intel/run
+37133 INFO: checking EXE
+37133 INFO: Building EXE because EXE-00.toc is non existent
+37133 INFO: Building EXE from EXE-00.toc
+37133 INFO: Copying bootloader EXE to /home/ilv/Desktop/robot_app_platform/build/pyinstaller/paint_tray_dry/platform/paint-tray-dry-robot
+37133 INFO: Appending PKG archive to custom ELF section in EXE
+37174 INFO: Building EXE from EXE-00.toc completed successfully.
+37181 INFO: checking COLLECT
+37181 INFO: Building COLLECT because COLLECT-00.toc is non existent
+37181 INFO: Building COLLECT COLLECT-00.toc
+37484 INFO: Building COLLECT COLLECT-00.toc completed successfully.
+37496 INFO: Build complete! The results are available in: /home/ilv/Desktop/robot_app_platform/dist
+paint_tray_dry bundle created at: /home/ilv/Desktop/robot_app_platform/dist/paint-tray-dry-robot
+Platform self-test passed (no hardware/backend started)
+Unsigned local release: remote updates require --signing-key
+dist/platform-releases/paint_tray_dry/stable/paint-tray-dry-robot-1.0.6-x86_64.tar.gz
+dist/platform-releases/paint_tray_dry/paint-tray-dry-robot-installer-1.0.6-x86_64.tar.gz
+(.venv) ilv@IlV:~/Desktop/robot_app_platform/src/robot_systems/paint_tray_dry$ ./install_latest.sh 
+Installing latest local release: /home/ilv/Desktop/robot_app_platform/dist/platform-releases/paint_tray_dry/paint-tray-dry-robot-installer-1.0.6-x86_64.tar.gz
+Installed platform at /home/ilv/.local/share/robot-platform/products/paint-tray-dry-robot
+Update configuration: /home/ilv/.config/robot-platform/paint-tray-dry-robot/updates.json
+Launch: /usr/bin/python3 '/home/ilv/.local/share/robot-platform/products/paint-tray-dry-robot/tools/manage.py' --config '/home/ilv/.config/robot-platform/paint-tray-dry-robot/updates.json' launch
+(.venv) ilv@IlV:~/Desktop/robot_app_platform/src/robot_systems/paint_tray_dry$ ls
+bootstrap_provider.py  build_release.sh  __init__.py  install_latest.sh  __pycache__  run_latest.sh  VERSION
+(.venv) ilv@IlV:~/Desktop/robot_app_platform/src/robot_systems/paint_tray_dry$ ./run_latest.sh 
+Launching installed paint_tray_dry from /home/ilv/.local/share/robot-platform/products/paint-tray-dry-robot
+14:36:37 [INFO    ] src.bootstrap.ros_backend_launcher.start — ROS backend is already reachable; skipping autostart
+14:36:37 [INFO    ] src.engine.robot.drivers.ros2_robot.__init__ — Ros2Robot init — server_url=http://localhost:5000
+14:36:37 [INFO    ] src.engine.robot.drivers.client_adapters.http_websocket.__init__ — Connecting to ROS2 bridge at http://localhost:5000
+14:36:37 [DEBUG   ] src.engine.robot.drivers.client_adapters.http_websocket.health_check — health_check ← status=200 body={'error': None, 'message': 'Robot runtime is ready', 'motion_stack_fault': None, 'motion_stack_ready': True, 'phase': 'ready', 'ready': True, 'ros2_active': True, 'started_at': 1791183154.9920235, 'status': 'ok', 'updated_at': 1791183155.344503}                                                                                         
+14:36:37 [DEBUG   ] src.engine.robot.drivers.client_adapters.http_websocket.__init__ — health_check response: {'error': None, 'message': 'Robot runtime is ready', 'motion_stack_fault': None, 'motion_stack_ready': True, 'phase': 'ready', 'ready': True, 'ros2_active': True, 'started_at': 1791183154.9920235, 'status': 'ok', 'updated_at': 1791183155.344503}                                                                                                     
+14:36:37 [INFO    ] src.engine.robot.drivers.client_adapters.http_websocket.__init__ — Connected to ROS2 bridge at http://localhost:5000
+14:36:37 [DEBUG   ] asyncio.__init__ — Using selector: EpollSelector
+14:36:37 [DEBUG   ] asyncio.__init__ — Using selector: EpollSelector
+14:36:37 [INFO    ] src.engine.robot.drivers.ros2_robot.__init__ — Ros2Robot ready
+14:36:37 [DEBUG   ] asyncio.__init__ — Using selector: EpollSelector
+14:36:37 [DEBUG   ] SystemBuilder.build — Building PaintSystemTrayDryer
+14:36:37 [DEBUG   ] SettingsService.reload — Loading settings 'robot_config'
+14:36:37 [INFO    ] RobotStateManager.start_monitoring — State monitoring started (poll interval=0.0s)
+14:36:37 [DEBUG   ] SystemBuilder.build — Built 'robot' → RobotService
+14:36:37 [DEBUG   ] SystemBuilder.build — Built 'navigation' → NavigationService
+14:36:37 [DEBUG   ] SystemBuilder.build — Built 'work_areas' → WorkAreaService
+14:36:37 [INFO    ] BaseJsonSettingsRepository.load — Loaded 'robot_config' settings from '/home/ilv/.local/share/robot-platform/products/paint-tray-dry-robot/data/paint/profiles/tray_dryer/storage/settings/robot/config.json'.
+14:36:37 [DEBUG   ] SettingsService.reload — Loading settings 'SettingsID.CAMERAS'
+14:36:37 [INFO    ] BaseJsonSettingsRepository.load — Loaded 'camera_devices' settings from '/home/ilv/.local/share/robot-platform/products/paint-tray-dry-robot/data/paint/profiles/tray_dryer/storage/settings/hardware/cameras.json'.                                                                                                                                                                                                                                
+14:36:37 [INFO    ] src.engine.robot.drivers.client_adapters.http_websocket.set_active_tool — Active ROS2 tool set to 0 (TOOL_0)
+14:36:37 [INFO    ] RobotStateManager._sync_configured_tool — Configured active robot tool synced: 0
+14:36:37 [INFO    ] src.engine.robot.drivers.client_adapters.http_websocket.set_active_workobject — Active ROS2 workobject set to 0 (WOBJ_0)
+14:36:37 [INFO    ] RobotStateManager._sync_configured_workobject — Configured active robot workobject synced: 0
+14:36:37 [INFO    ] src.engine.robot.drivers.client_adapters.http_websocket._state_websocket_loop — Connected to ROS2 state WebSocket at ws://localhost:5001/ws/state
+14:36:37 [INFO    ] src.engine.robot.drivers.client_adapters.http_websocket._execution_websocket_loop — Connected to ROS2 execution WebSocket at ws://localhost:5002/ws/execution
+14:36:37 [INFO    ] src.engine.robot.drivers.client_adapters.http_websocket._sensor_websocket_loop — Connected to ROS2 sensor WebSocket at ws://localhost:5003/ws/sensors
 4.13.0
-08:43:38 [INFO    ] DataManager.build_storage_paths — Building storage paths: /home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/profiles/tray_dryer/storage/settings/vision/data
-08:43:38 [INFO    ] SettingsManager.loadSettings — [SettingsManager] Loading settings from /home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/profiles/tray_dryer/storage/settings/vision/camera_settings.json
-08:43:38 [INFO    ] Service.loadSettings — [SettingsManager] settings type in loadSettings
-08:43:38 [INFO    ] Service.loadSettings — <class 'dict'>
-08:43:38 [INFO    ] Service.loadSettings — [SettingsManager] after from dict <class 'src.engine.vision.implementation.VisionSystem.core.settings.CameraSettings.CameraSettings'> CameraSettings:
-  Index: 0
-  Resolution: 1280x720
-  Skip Frames: 30
-  Threshold: 128
-  Threshold Pickup Area: 150
-  Epsilon: 0.0
-  Min Contour Area: 1000.0
-  Max Contour Area: 10010000.0
-  Contour Detection: False
-  Draw Contours: False
-  Gaussian Blur: True
-  Blur Kernel Size: 5
-  Threshold Type: binary_inv
-  Dilate: True (kernel: 3, iter: 3)
-  Erode: True (kernel: 3, iter: 3)
-  Chessboard: 15x15
-  Square Size: 15.0mm
-  Calibration Skip Frames: 30
-  Auto Brightness: False
-  PID - Kp: 0.7, Ki: 0.2, Kd: 0.05
-  Target Brightness: 200.0
-  ArUco Enabled: False
-  ArUco Dictionary: DICT_4X4_250
-  ArUco Flip Image: False
-08:43:38 [INFO    ] DataManager.loadPerspectiveMatrix — No perspective matrix found at: /home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/profiles/tray_dryer/storage/settings/vision/data/perspectiveTransform.npy
-08:43:38 [INFO    ] DataManager.loadCameraToRobotMatrix — Camera-to-robot matrix loaded from: /home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/profiles/tray_dryer/storage/settings/vision/data/cameraToRobotMatrix_camera_center.npy
-08:43:38 [INFO    ] CameraInitializer.initializeCameraWithRetry — Attempting camera /dev/v4l/by-path/pci-0000:00:14.0-usb-0:5:1.0-video-index0 (attempt 1/10)
-08:43:38 [DEBUG   ] SystemBuilder.build — Built 'vision' → VisionService
-08:43:38 [DEBUG   ] SettingsService.reload — Loading settings 'tool_changer_config'
-08:43:38 [INFO    ] BaseJsonSettingsRepository.load — Loaded 'tool_changer' settings from '/home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/profiles/tray_dryer/storage/settings/tools/tool_changer.json'.
-08:43:38 [DEBUG   ] SettingsService.reload — Loading settings 'movement_groups'
-08:43:38 [INFO    ] BaseJsonSettingsRepository.load — Loaded 'movement_group_settings' settings from '/home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/profiles/tray_dryer/storage/settings/robot/movement_groups.json'.
-08:43:38 [DEBUG   ] SystemBuilder.build — Built 'tools' → ToolManager
-08:43:38 [DEBUG   ] SettingsService.reload — Loading settings 'modbus_config'
-08:43:38 [INFO    ] BaseJsonSettingsRepository.load — Loaded 'modbus_config' settings from '/home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/profiles/tray_dryer/storage/settings/hardware/modbus.json'.
-08:43:38 [DEBUG   ] SettingsService.reload — Loading settings 'SettingsID.PERIPHERALS'
-08:43:38 [INFO    ] BaseJsonSettingsRepository.load — Loaded 'peripheral_config' settings from '/home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/profiles/tray_dryer/storage/settings/hardware/peripherals.json'.
-08:43:38 [DEBUG   ] SystemBuilder.build — Built 'ServiceID.VACUUM_PUMP' → VacuumPumpController
-08:43:38 [DEBUG   ] SystemBuilder.build — Builder for optional 'ServiceID.FAN' returned None — skipping
-08:43:38 [DEBUG   ] SystemBuilder.build — Built 'ServiceID.TRAY_FAN' → ModbusFanControl
-08:43:38 [DEBUG   ] SystemBuilder.build — Built 'ServiceID.PHYSICAL_CONTROL_BUTTONS' → ModbusPhysicalControlButtons
-08:43:38 [DEBUG   ] ModbusFc16RegisterTransport.connect — Connecting to /dev/ttyUSB0 (slave=10) ...
-08:43:38 [INFO    ] ModbusFc16RegisterTransport.connect — Connected to /dev/ttyUSB0 (slave=10)
-08:43:38 [INFO    ] src.engine.hardware.vacuum_sensor.vacuum_sensor_service._connect_transport — Vacuum sensor persistent transport connection opened
-08:43:38 [DEBUG   ] SystemBuilder.build — Built 'ServiceID.VACUUM_SENSOR' → VacuumSensorService
-08:43:38 [DEBUG   ] SettingsService.reload — Loading settings 'SettingsID.DRYER_CONFIG'
-08:43:38 [INFO    ] BaseJsonSettingsRepository.load — Loaded 'dryer_config' settings from '/home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/profiles/tray_dryer/storage/settings/dryer/settings.json'.
-08:43:38 [DEBUG   ] SystemBuilder.build — Builder for optional 'ServiceID.DRYER' returned None — skipping
-08:43:38 [INFO    ] TrayDryerPaintRobotSystem.start — Starting PaintSystemTrayDryer v1.0.0
-08:43:38 [DEBUG   ] TrayDryerPaintRobotSystem._validate_and_inject — Injected 'robot' (RobotService)
-08:43:38 [DEBUG   ] TrayDryerPaintRobotSystem._validate_and_inject — Injected 'navigation' (NavigationService)
-08:43:38 [DEBUG   ] TrayDryerPaintRobotSystem._validate_and_inject — Injected 'work_areas' (WorkAreaService)
-08:43:38 [DEBUG   ] TrayDryerPaintRobotSystem._validate_and_inject — Injected 'vision' (VisionService)
-08:43:38 [DEBUG   ] TrayDryerPaintRobotSystem._validate_and_inject — Injected 'tools' (ToolManager)
-08:43:38 [DEBUG   ] TrayDryerPaintRobotSystem._validate_and_inject — Injected 'ServiceID.VACUUM_PUMP' (VacuumPumpController)
-08:43:38 [DEBUG   ] TrayDryerPaintRobotSystem._validate_and_inject — Optional service 'ServiceID.FAN' not provided — skipping
-08:43:38 [DEBUG   ] TrayDryerPaintRobotSystem._validate_and_inject — Injected 'ServiceID.TRAY_FAN' (ModbusFanControl)
-08:43:38 [DEBUG   ] TrayDryerPaintRobotSystem._validate_and_inject — Injected 'ServiceID.PHYSICAL_CONTROL_BUTTONS' (ModbusPhysicalControlButtons)
-08:43:38 [DEBUG   ] TrayDryerPaintRobotSystem._validate_and_inject — Injected 'ServiceID.VACUUM_SENSOR' (VacuumSensorService)
-08:43:38 [DEBUG   ] TrayDryerPaintRobotSystem._validate_and_inject — Optional service 'ServiceID.DRYER' not provided — skipping
-08:43:38 [DEBUG   ] SettingsService.reload — Loading settings 'SettingsID.PAINT_PROCESS_CONFIG'
-08:43:38 [INFO    ] BaseJsonSettingsRepository.load — Loaded 'paint_process_config' settings from '/home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/profiles/tray_dryer/storage/settings/paint/process.json'.
-08:43:38 [DEBUG   ] SettingsService.reload — Loading settings 'robot_calibration'
-08:43:38 [INFO    ] BaseJsonSettingsRepository.load — Loaded 'robot_calibration' settings from '/home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/profiles/tray_dryer/storage/settings/robot/calibration.json'.
-08:43:38 [DEBUG   ] SettingsService.reload — Loading settings 'targeting'
-08:43:38 [INFO    ] BaseJsonSettingsRepository.load — Loaded 'targeting' settings from '/home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/profiles/tray_dryer/storage/settings/targeting/definitions.json'.
-08:43:38 [INFO    ] VisionService.start — VisionService started
-08:43:38 [DEBUG   ] SettingsService.reload — Loading settings 'calibration_vision_settings'
-08:43:38 [WARNING ] CameraStreamPublisher.auxiliary._run — Camera /dev/v4l/by-path/pci-0000:00:14.0-usb-0:9:1.0-video-index0 is unavailable; retrying
-08:43:38 [INFO    ] BaseJsonSettingsRepository.load — Loaded 'calibration_vision_settings' settings from '/home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/profiles/tray_dryer/storage/settings/vision/calibration_settings.json'.
-08:43:38 [INFO    ] src.robot_systems.paint.domain.workpieces.repository.json_paint_workpiece_repository.__init__ — JsonPaintWorkpieceRepository: root -> /home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/profiles/tray_dryer/storage/workpieces
-08:43:38 [INFO    ] src.robot_systems.paint.domain.workpieces.repository.json_paint_workpiece_repository.__init__ — JsonPaintWorkpieceRepository: root -> /home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/profiles/tray_dryer/storage/workpieces
-08:43:38 [INFO    ] src.robot_systems.paint.domain.workpieces.repository.json_paint_workpiece_repository.__init__ — JsonPaintWorkpieceRepository: root -> /home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/profiles/tray_dryer/storage/workpieces
-08:43:38 [INFO    ] src.robot_systems.paint.domain.workpieces.repository.json_paint_workpiece_repository.__init__ — JsonPaintWorkpieceRepository: root -> /home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/profiles/tray_dryer/storage/workpieces
-08:43:38 [INFO    ] src.robot_systems.paint.domain.workpieces.repository.json_paint_workpiece_repository.__init__ — JsonPaintWorkpieceRepository: root -> /home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/profiles/tray_dryer/storage/workpieces
-08:43:38 [INFO    ] src.robot_systems.paint.domain.workpieces.repository.json_paint_workpiece_repository.__init__ — JsonPaintWorkpieceRepository: root -> /home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/profiles/tray_dryer/storage/workpieces
-08:43:38 [INFO    ] src.engine.robot.drivers.ros2_robot.enable — enable →
-08:43:38 [INFO    ] src.engine.robot.drivers.client_adapters.http_websocket.enable — enable → POST /drive/enable
-08:43:38 [INFO    ] src.engine.robot.drivers.client_adapters.http_websocket._log_execution_ws_transition — [EXECUTION_TIMING] execution first_active_status after_request_s=-1.000 task_id=None status={'source': 'websocket', 'is_executing': True}
-08:43:39 [INFO    ] src.engine.robot.drivers.client_adapters.http_websocket._log_execution_ws_transition — [EXECUTION_TIMING] execution inactive_status after_request_s=-1.000 task_id=None status={'source': 'websocket', 'is_executing': False}
-08:43:39 [INFO    ] src.engine.robot.drivers.client_adapters.http_websocket.enable — enable ← http=200 raw={'actual_enabled': True, 'command_accepted': True, 'desired_enabled': True, 'hardware_fault': None, 'hardware_ready': True, 'motion_allowed_by_drive_enable': True, 'request': {'controller_deactivate_ok': True, 'controller_switch_ok': True, 'mode': 'csp', 'requested_enabled': True, 'state': 'ENABLE_REQUESTED', 'success': True}, 'requested_enabled': True, 'state': 'OPERATION_ENABLED', 'status_state': ['operation_enabled', 'operation_enabled', 'operation_enabled', 'operation_enabled', 'operation_enabled', 'operation_enabled'], 'statusword': [5687, 5687, 5687, 5687, 5687, 5815], 'success': True}
-08:43:39 [INFO    ] src.engine.robot.drivers.ros2_robot.enable — enable ← done
-08:43:39 [INFO    ] TrayDryerPaintRobotSystem.start — PaintSystemTrayDryer started
-08:43:39 [INFO    ] ShellConfigurator.configure — Registered shell folder: Production (id=1)
-08:43:39 [INFO    ] ShellConfigurator.configure — Registered shell folder: Service (id=2)
-08:43:39 [INFO    ] ShellConfigurator.configure — Registered shell folder: Administration (id=3)
-08:43:39 [INFO    ] ShellConfigurator.configure — Registered shell folder: Tests (id=4)
-08:43:39 [INFO    ] ShellConfigurator.configure — PaintSystemTrayDryer: configured 4 folders
+14:36:37 [INFO    ] DataManager.build_storage_paths — Building storage paths: /home/ilv/.local/share/robot-platform/products/paint-tray-dry-robot/data/paint/profiles/tray_dryer/storage/settings/vision/data
+14:36:37 [INFO    ] SettingsManager.loadSettings — Settings file not found at /home/ilv/.local/share/robot-platform/products/paint-tray-dry-robot/data/paint/profiles/tray_dryer/storage/settings/vision/camera_settings.json returning empty dict                                                                                                                                                                                                                      
+14:36:37 [INFO    ] Service.loadSettings — [SettingsManager] settings type in loadSettings
+14:36:37 [INFO    ] Service.loadSettings — <class 'dict'>
+14:36:37 [INFO    ] Service.loadSettings — [SettingsManager] after from dict <class 'src.engine.vision.implementation.VisionSystem.core.settings.CameraSettings.CameraSettings'> CameraSettings:
+  Index: 0                                                                                                                                                                                                                          
+  Resolution: 1280x720                                                                                                                                                                                                              
+  Skip Frames: 30                                                                                                                                                                                                                   
+  Threshold: 100                                                                                                                                                                                                                    
+  Threshold Pickup Area: 150                                                                                                                                                                                                        
+  Epsilon: 0.004                                                                                                                                                                                                                    
+  Min Contour Area: 1000                                                                                                                                                                                                            
+  Max Contour Area: 10000000                                                                                                                                                                                                        
+  Contour Detection: True                                                                                                                                                                                                           
+  Draw Contours: False                                                                                                                                                                                                              
+  Gaussian Blur: True                                                                                                                                                                                                               
+  Blur Kernel Size: 5                                                                                                                                                                                                               
+  Threshold Type: binary_inv                                                                                                                                                                                                        
+  Dilate: True (kernel: 3, iter: 2)                                                                                                                                                                                                 
+  Erode: True (kernel: 3, iter: 4)                                                                                                                                                                                                  
+  Chessboard: 32x20                                                                                                                                                                                                                 
+  Square Size: 25mm                                                                                                                                                                                                                 
+  Calibration Skip Frames: 30                                                                                                                                                                                                       
+  Auto Brightness: False                                                                                                                                                                                                            
+  PID - Kp: 0.7, Ki: 0.2, Kd: 0.05                                                                                                                                                                                                  
+  Target Brightness: 200                                                                                                                                                                                                            
+  ArUco Enabled: False                                                                                                                                                                                                              
+  ArUco Dictionary: DICT_4X4_1000                                                                                                                                                                                                   
+  ArUco Flip Image: False                                                                                                                                                                                                           
+14:36:37 [INFO    ] DataManager.loadPerspectiveMatrix — No perspective matrix found at: /home/ilv/.local/share/robot-platform/products/paint-tray-dry-robot/data/paint/profiles/tray_dryer/storage/settings/vision/data/perspectiveTransform.npy                                                                                                                                                                                                                        
+14:36:37 [ERROR   ] DataManager.loadCameraCalibrationData — Camera calibration data not found at /home/ilv/.local/share/robot-platform/products/paint-tray-dry-robot/data/paint/profiles/tray_dryer/storage/settings/vision/data/camera_calibration.npz                                                                                                                                                                                                                 
+14:36:37 [ERROR   ] DataManager.loadCameraToRobotMatrix — Camera-to-robot matrix not found at /home/ilv/.local/share/robot-platform/products/paint-tray-dry-robot/data/paint/profiles/tray_dryer/storage/settings/vision/data/cameraToRobotMatrix_camera_center.npy                                                                                                                                                                                                     
+14:36:37 [INFO    ] CameraInitializer.initializeCameraWithRetry — Attempting camera 0 (attempt 1/10)
+14:36:37 [DEBUG   ] SystemBuilder.build — Built 'vision' → VisionService
+14:36:37 [DEBUG   ] SettingsService.reload — Loading settings 'tool_changer_config'
+14:36:37 [INFO    ] BaseJsonSettingsRepository.load — Loaded 'tool_changer' settings from '/home/ilv/.local/share/robot-platform/products/paint-tray-dry-robot/data/paint/profiles/tray_dryer/storage/settings/tools/tool_changer.json'.                                                                                                                                                                                                                                
+14:36:37 [DEBUG   ] SettingsService.reload — Loading settings 'movement_groups'
+14:36:37 [INFO    ] BaseJsonSettingsRepository.load — Loaded 'movement_group_settings' settings from '/home/ilv/.local/share/robot-platform/products/paint-tray-dry-robot/data/paint/profiles/tray_dryer/storage/settings/robot/movement_groups.json'.                                                                                                                                                                                                                  
+14:36:37 [DEBUG   ] SystemBuilder.build — Built 'tools' → ToolManager
+14:36:37 [DEBUG   ] SettingsService.reload — Loading settings 'modbus_config'
+14:36:37 [INFO    ] BaseJsonSettingsRepository.load — Loaded 'modbus_config' settings from '/home/ilv/.local/share/robot-platform/products/paint-tray-dry-robot/data/paint/profiles/tray_dryer/storage/settings/hardware/modbus.json'.                                                                                                                                                                                                                                  
+14:36:37 [DEBUG   ] SettingsService.reload — Loading settings 'SettingsID.PERIPHERALS'
+14:36:37 [INFO    ] BaseJsonSettingsRepository.load — Loaded 'peripheral_config' settings from '/home/ilv/.local/share/robot-platform/products/paint-tray-dry-robot/data/paint/profiles/tray_dryer/storage/settings/hardware/peripherals.json'.                                                                                                                                                                                                                         
+14:36:37 [DEBUG   ] SystemBuilder.build — Built 'ServiceID.VACUUM_PUMP' → VacuumPumpController
+14:36:37 [DEBUG   ] SystemBuilder.build — Builder for optional 'ServiceID.FAN' returned None — skipping
+14:36:37 [DEBUG   ] SystemBuilder.build — Built 'ServiceID.TRAY_FAN' → ModbusFanControl
+14:36:37 [DEBUG   ] SystemBuilder.build — Built 'ServiceID.PHYSICAL_CONTROL_BUTTONS' → ModbusPhysicalControlButtons
+14:36:37 [DEBUG   ] ModbusFc16RegisterTransport.connect — Connecting to /dev/ttyUSB0 (slave=10) ...
+14:36:37 [INFO    ] ModbusFc16RegisterTransport.connect — Connected to /dev/ttyUSB0 (slave=10)
+14:36:37 [INFO    ] src.engine.hardware.vacuum_sensor.vacuum_sensor_service._connect_transport — Vacuum sensor persistent transport connection opened
+14:36:37 [DEBUG   ] SystemBuilder.build — Built 'ServiceID.VACUUM_SENSOR' → VacuumSensorService
+14:36:37 [DEBUG   ] SettingsService.reload — Loading settings 'SettingsID.DRYER_CONFIG'
+14:36:37 [INFO    ] BaseJsonSettingsRepository.load — Loaded 'dryer_config' settings from '/home/ilv/.local/share/robot-platform/products/paint-tray-dry-robot/data/paint/profiles/tray_dryer/storage/settings/dryer/settings.json'.
+14:36:37 [DEBUG   ] SystemBuilder.build — Builder for optional 'ServiceID.DRYER' returned None — skipping
+14:36:37 [INFO    ] TrayDryerPaintRobotSystem.start — Starting PaintSystemTrayDryer v1.0.0
+14:36:37 [DEBUG   ] TrayDryerPaintRobotSystem._validate_and_inject — Injected 'robot' (RobotService)
+14:36:37 [DEBUG   ] TrayDryerPaintRobotSystem._validate_and_inject — Injected 'navigation' (NavigationService)
+14:36:37 [DEBUG   ] TrayDryerPaintRobotSystem._validate_and_inject — Injected 'work_areas' (WorkAreaService)
+14:36:37 [DEBUG   ] TrayDryerPaintRobotSystem._validate_and_inject — Injected 'vision' (VisionService)
+14:36:37 [DEBUG   ] TrayDryerPaintRobotSystem._validate_and_inject — Injected 'tools' (ToolManager)
+14:36:37 [DEBUG   ] TrayDryerPaintRobotSystem._validate_and_inject — Injected 'ServiceID.VACUUM_PUMP' (VacuumPumpController)
+14:36:37 [DEBUG   ] TrayDryerPaintRobotSystem._validate_and_inject — Optional service 'ServiceID.FAN' not provided — skipping
+14:36:37 [DEBUG   ] TrayDryerPaintRobotSystem._validate_and_inject — Injected 'ServiceID.TRAY_FAN' (ModbusFanControl)
+14:36:37 [DEBUG   ] TrayDryerPaintRobotSystem._validate_and_inject — Injected 'ServiceID.PHYSICAL_CONTROL_BUTTONS' (ModbusPhysicalControlButtons)
+14:36:37 [DEBUG   ] TrayDryerPaintRobotSystem._validate_and_inject — Injected 'ServiceID.VACUUM_SENSOR' (VacuumSensorService)
+14:36:37 [DEBUG   ] TrayDryerPaintRobotSystem._validate_and_inject — Optional service 'ServiceID.DRYER' not provided — skipping
+14:36:37 [DEBUG   ] SettingsService.reload — Loading settings 'SettingsID.PAINT_PROCESS_CONFIG'
+14:36:37 [INFO    ] BaseJsonSettingsRepository.load — Loaded 'paint_process_config' settings from '/home/ilv/.local/share/robot-platform/products/paint-tray-dry-robot/data/paint/profiles/tray_dryer/storage/settings/paint/process.json'.                                                                                                                                                                                                                             
+14:36:37 [WARNING ] src.robot_systems.paint.paint_robot_system._refresh_dropoff_motion_corridor — Dropoff corridor was not registered because movement group 'Dropoff' has no pose
+14:36:37 [DEBUG   ] SettingsService.reload — Loading settings 'robot_calibration'
+14:36:37 [INFO    ] BaseJsonSettingsRepository.load — Loaded 'robot_calibration' settings from '/home/ilv/.local/share/robot-platform/products/paint-tray-dry-robot/data/paint/profiles/tray_dryer/storage/settings/robot/calibration.json'.                                                                                                                                                                                                                            
+14:36:37 [DEBUG   ] SettingsService.reload — Loading settings 'targeting'
+14:36:37 [INFO    ] BaseJsonSettingsRepository.load — Loaded 'targeting' settings from '/home/ilv/.local/share/robot-platform/products/paint-tray-dry-robot/data/paint/profiles/tray_dryer/storage/settings/targeting/definitions.json'.                                                                                                                                                                                                                                
+14:36:37 [INFO    ] VisionService.start — VisionService started
+14:36:37 [DEBUG   ] SettingsService.reload — Loading settings 'calibration_vision_settings'
+14:36:37 [INFO    ] BaseJsonSettingsRepository.load — Loaded 'calibration_vision_settings' settings from '/home/ilv/.local/share/robot-platform/products/paint-tray-dry-robot/data/paint/profiles/tray_dryer/storage/settings/vision/calibration_settings.json'.                                                                                                                                                                                                        
+14:36:37 [INFO    ] src.robot_systems.paint.domain.workpieces.repository.json_paint_workpiece_repository.__init__ — JsonPaintWorkpieceRepository: root -> /home/ilv/.local/share/robot-platform/products/paint-tray-dry-robot/data/paint/profiles/tray_dryer/storage/workpieces                                                                                                                                                                                         
+14:36:37 [INFO    ] src.robot_systems.paint.domain.workpieces.repository.json_paint_workpiece_repository.__init__ — JsonPaintWorkpieceRepository: root -> /home/ilv/.local/share/robot-platform/products/paint-tray-dry-robot/data/paint/profiles/tray_dryer/storage/workpieces                                                                                                                                                                                         
+14:36:37 [INFO    ] src.robot_systems.paint.domain.workpieces.repository.json_paint_workpiece_repository.__init__ — JsonPaintWorkpieceRepository: root -> /home/ilv/.local/share/robot-platform/products/paint-tray-dry-robot/data/paint/profiles/tray_dryer/storage/workpieces                                                                                                                                                                                         
+14:36:37 [INFO    ] src.robot_systems.paint.domain.workpieces.repository.json_paint_workpiece_repository.__init__ — JsonPaintWorkpieceRepository: root -> /home/ilv/.local/share/robot-platform/products/paint-tray-dry-robot/data/paint/profiles/tray_dryer/storage/workpieces                                                                                                                                                                                         
+14:36:37 [INFO    ] src.robot_systems.paint.domain.workpieces.repository.json_paint_workpiece_repository.__init__ — JsonPaintWorkpieceRepository: root -> /home/ilv/.local/share/robot-platform/products/paint-tray-dry-robot/data/paint/profiles/tray_dryer/storage/workpieces                                                                                                                                                                                         
+14:36:37 [INFO    ] src.robot_systems.paint.domain.workpieces.repository.json_paint_workpiece_repository.__init__ — JsonPaintWorkpieceRepository: root -> /home/ilv/.local/share/robot-platform/products/paint-tray-dry-robot/data/paint/profiles/tray_dryer/storage/workpieces                                                                                                                                                                                         
+14:36:37 [INFO    ] src.engine.robot.drivers.ros2_robot.enable — enable →
+14:36:37 [INFO    ] src.engine.robot.drivers.client_adapters.http_websocket.enable — enable → POST /drive/enable
+14:36:37 [INFO    ] src.engine.robot.drivers.client_adapters.http_websocket._log_execution_ws_transition — [EXECUTION_TIMING] execution first_active_status after_request_s=-1.000 task_id=None status={'source': 'websocket', 'is_executing': True}                                                                                                                                                                                                                    
+14:36:37 [INFO    ] src.engine.robot.drivers.client_adapters.http_websocket._log_execution_ws_transition — [EXECUTION_TIMING] execution inactive_status after_request_s=-1.000 task_id=None status={'source': 'websocket', 'is_executing': False}                                                                                                                                                                                                                       
+14:36:37 [INFO    ] src.engine.robot.drivers.client_adapters.http_websocket.enable — enable ← http=200 raw={'actual_enabled': True, 'command_accepted': True, 'desired_enabled': True, 'hardware_fault': None, 'hardware_ready': True, 'motion_allowed_by_drive_enable': True, 'request': {'controller_deactivate_ok': True, 'controller_switch_ok': True, 'mode': 'csp', 'requested_enabled': True, 'state': 'ENABLE_REQUESTED', 'success': True}, 'requested_enabled': True, 'state': 'OPERATION_ENABLED', 'status_state': ['operation_enabled', 'operation_enabled', 'operation_enabled', 'operation_enabled', 'operation_enabled', 'operation_enabled'], 'statusword': [5687, 5687, 5687, 5687, 5687, 5687], 'success': True}                                                                                                                                                                                                               
+14:36:37 [INFO    ] src.engine.robot.drivers.ros2_robot.enable — enable ← done
+14:36:37 [INFO    ] TrayDryerPaintRobotSystem.start — PaintSystemTrayDryer started
 [ShellConfig] Cleared all folder definitions
 [ShellConfig] Added folder: PRODUCTION (ID: 1)
+14:36:37 [INFO    ] ShellConfigurator.configure — Registered shell folder: Production (id=1)
 [ShellConfig] Added folder: SERVICE (ID: 2)
+14:36:37 [INFO    ] ShellConfigurator.configure — Registered shell folder: Service (id=2)
 [ShellConfig] Added folder: ADMIN (ID: 3)
+14:36:37 [INFO    ] ShellConfigurator.configure — Registered shell folder: Administration (id=3)
 [ShellConfig] Added folder: Tests (ID: 4)
-08:43:39 [WARNING ] main.main — ui.dev_skip_login is enabled — bypassing authentication
-08:43:39 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'PaintDashboard' → folder 1
-08:43:39 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'PaintAdjustment' → folder 1
-08:43:39 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'WorkpieceLibrary' → folder 1
-08:43:39 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'WorkpieceEditor' → folder 1
-08:43:39 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'RobotSettings' → folder 2
-08:43:39 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'ToolSettings' → folder 2
-08:43:39 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'ModbusSettings' → folder 2
-08:43:39 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'DeviceControl' → folder 2
-08:43:39 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'WorkAreaSettings' → folder 2
-08:43:39 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'CameraSettings' → folder 2
-08:43:39 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'CalibrationSettings' → folder 2
-08:43:39 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'PaintProcessSettings' → folder 2
-08:43:39 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'Calibration' → folder 2
-08:43:39 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'ContourMatchingTester' → folder 4
-08:43:39 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'UserManagement' → folder 3
-08:43:39 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'PickTarget' → folder 4
+14:36:37 [INFO    ] ShellConfigurator.configure — Registered shell folder: Tests (id=4)
+14:36:37 [INFO    ] ShellConfigurator.configure — PaintSystemTrayDryer: configured 4 folders
+14:36:42 [ERROR   ] CameraInitializer.initializeCameraWithRetry — Error on attempt 1: 'NoneType' object has no attribute 'isOpened'
+14:36:42 [INFO    ] CameraInitializer.initializeCameraWithRetry — Attempting camera 0 (attempt 2/10)
+14:36:48 [ERROR   ] CameraInitializer.initializeCameraWithRetry — Error on attempt 2: 'NoneType' object has no attribute 'isOpened'
+14:36:48 [INFO    ] CameraInitializer.initializeCameraWithRetry — Attempting camera 0 (attempt 3/10)
+14:36:50 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'PaintDashboard' → folder 1
+14:36:50 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'PaintAdjustment' → folder 1
+14:36:50 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'WorkpieceLibrary' → folder 1
+14:36:50 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'WorkpieceEditor' → folder 1
+14:36:50 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'RobotSettings' → folder 2
+14:36:50 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'ToolSettings' → folder 2
+14:36:50 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'ModbusSettings' → folder 2
+14:36:50 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'SoftwareUpdate' → folder 3
+14:36:50 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'NetworkSettings' → folder 2
+14:36:50 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'DeviceControl' → folder 2
+14:36:50 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'WorkAreaSettings' → folder 2
+14:36:50 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'CameraSettings' → folder 2
+14:36:50 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'CalibrationSettings' → folder 2
+14:36:50 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'PaintProcessSettings' → folder 2
+14:36:50 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'Calibration' → folder 2
+14:36:50 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'ContourMatchingTester' → folder 4
+14:36:50 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'UserManagement' → folder 3
+14:36:50 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'PickTarget' → folder 4
 [AppShell] Added PaintDashboard to folder 1
 [AppShell] Added PaintAdjustment to folder 1
 [AppShell] Added WorkpieceLibrary to folder 1
@@ -148,6 +346,8 @@
 [AppShell] Added RobotSettings to folder 2
 [AppShell] Added ToolSettings to folder 2
 [AppShell] Added ModbusSettings to folder 2
+[AppShell] Added SoftwareUpdate to folder 3
+[AppShell] Added NetworkSettings to folder 2
 [AppShell] Added DeviceControl to folder 2
 [AppShell] Added WorkAreaSettings to folder 2
 [AppShell] Added CameraSettings to folder 2
@@ -157,61 +357,11 @@
 [AppShell] Added ContourMatchingTester to folder 4
 [AppShell] Added UserManagement to folder 3
 [AppShell] Added PickTarget to folder 4
-08:43:39 [INFO    ] CameraInitializer.initializeCameraWithRetry — Camera /dev/v4l/by-path/pci-0000:00:14.0-usb-0:5:1.0-video-index0 initialised on attempt 1
-08:43:40 [INFO    ] src.engine.vision.implementation.VisionSystem.VisionSystem._configure_hardware_auto_exposure — Camera hardware auto-exposure configured enabled=True; driver reported value=3.0
 Currently running app: None
-MainWindow: App selected - RobotSettings
-MainWindow: Creating app widget for 'RobotSettings'
-08:43:42 [DEBUG   ] WidgetApplication.register — WidgetApplication registered
-MAIN_WINDOW LEN RUNNING WIDGETS: 1
-08:43:42 [DEBUG   ] ApplicationFactory.finalize_application_build — RobotSettingsFactory built: RobotSettingsModel / RobotSettingsView / RobotSettingsController
-08:43:45 [DEBUG   ] SettingsService.save — Saving settings 'robot_config'
-08:43:45 [INFO    ] BaseJsonSettingsRepository.save — Saved 'robot_config' settings to '/home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/profiles/tray_dryer/storage/settings/robot/config.json'.
-08:43:45 [DEBUG   ] RobotSettingsModel.save — Robot config saved
-08:43:45 [DEBUG   ] SettingsService.save — Saving settings 'movement_groups'
-08:43:45 [INFO    ] BaseJsonSettingsRepository.save — Saved 'movement_group_settings' settings to '/home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/profiles/tray_dryer/storage/settings/robot/movement_groups.json'.
-08:43:45 [DEBUG   ] RobotSettingsModel.save — Movement groups saved
-08:43:45 [DEBUG   ] SettingsService.save — Saving settings 'robot_calibration'
-08:43:45 [INFO    ] BaseJsonSettingsRepository.save — Saved 'robot_calibration' settings to '/home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/profiles/tray_dryer/storage/settings/robot/calibration.json'.
-08:43:45 [DEBUG   ] RobotSettingsModel.save — Robot calibration saved
-08:43:45 [DEBUG   ] SettingsService.save — Saving settings 'targeting'
-08:43:45 [INFO    ] BaseJsonSettingsRepository.save — Saved 'targeting' settings to '/home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/profiles/tray_dryer/storage/settings/targeting/definitions.json'.
-08:43:45 [DEBUG   ] SettingsService.save — Saving settings 'calibration_vision_settings'
-08:43:45 [INFO    ] BaseJsonSettingsRepository.save — Saved 'calibration_vision_settings' settings to '/home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/profiles/tray_dryer/storage/settings/vision/calibration_settings.json'.
-08:43:45 [DEBUG   ] RobotSettingsModel.save — Targeting definitions saved
-08:43:45 [DEBUG   ] RobotSettingsController._auto_save — Auto-saved before motion
-08:43:45 [INFO    ] src.engine.robot.drivers.client_adapters.http_websocket.set_active_tool — Active ROS2 tool set to 1 (TOOL_1)
-08:43:45 [INFO    ] MotionService.move_ptp — [TIMING] move_ptp_safety_check elapsed_s=0.001 violations=0
-08:43:45 [DEBUG   ] MotionService.move_ptp — move_ptp → pos=[241.668, -51.625, 200.0, -179.99, 0.0, 0.0] tool=1 user=1 vel=100 acc=100
-08:43:45 [DEBUG   ] src.engine.robot.drivers.ros2_robot.move_linear — move_linear → pos=[241.668, -51.625, 200.0, -179.99, 0.0, 0.0] tool=1 user=1 vel=100 acc=100 blend=0.0
-08:43:45 [INFO    ] src.engine.robot.drivers.client_adapters.http_websocket.set_active_tool — Active ROS2 tool set to 1 (TOOL_1)
-08:43:45 [DEBUG   ] src.engine.robot.drivers.client_adapters.http_websocket.move_liner — move_liner → POST /move/linear payload={'position': [241.668, -51.625, 200.0, -179.99, 0.0, 0.0], 'tool': 1, 'user': 1, 'vel': 100, 'acc': 100, 'blocking': True, 'trajectory_optimizer': 'TOTG'}
-08:43:45 [INFO    ] src.engine.robot.drivers.client_adapters.http_websocket._mark_execution_request_sent — [EXECUTION_TIMING] move_liner request_sent
-08:43:45 [INFO    ] src.engine.robot.drivers.client_adapters.http_websocket._log_execution_ws_transition — [EXECUTION_TIMING] move_liner first_active_status after_request_s=0.003 task_id=None status={'source': 'websocket', 'is_executing': True, 'task_id': 11}
-08:43:46 [INFO    ] src.engine.robot.drivers.client_adapters.http_websocket._log_execution_ws_transition — [EXECUTION_TIMING] move_liner inactive_status after_request_s=0.574 task_id=None status={'source': 'websocket', 'is_executing': False}
-08:43:46 [DEBUG   ] src.engine.robot.drivers.client_adapters.http_websocket.move_liner — move_liner ← http=200 response_text='{"queued":false,"result":0,"success":true,"task_id":11}\n'
-08:43:46 [INFO    ] src.engine.robot.drivers.client_adapters.http_websocket._mark_execution_request_response — [EXECUTION_TIMING] move_liner response_received elapsed_s=0.607 task_id=11 queued=False final=None
-08:43:46 [DEBUG   ] src.engine.robot.drivers.client_adapters.http_websocket.move_liner — move_liner ← http=200 raw={'queued': False, 'result': 0, 'success': True, 'task_id': 11} result_code=0
-08:43:46 [DEBUG   ] src.engine.robot.drivers.ros2_robot.move_linear — move_linear ← raw_ret=0 accepted=True
-08:43:46 [INFO    ] MotionService.move_ptp — [TIMING] move_ptp_total success=True driver_elapsed_s=0.610 wait_elapsed_s=0.207 total_elapsed_s=0.818 pos=[241.668, -51.625, 200.0, -179.99, 0.0, 0.0] vel=100 acc=100
-08:43:46 [DEBUG   ] MotionService.move_ptp — move_ptp ← success=True
-08:43:46 [INFO    ] src.engine.robot.drivers.client_adapters.http_websocket.set_active_tool — Active ROS2 tool set to 2 (TOOL_2)
-08:43:46 [INFO    ] RobotSettingsController._on_motion_done — Move To — CALIBRATION completed successfully
-MainWindow: Closing all running apps...
-Closing app widget: RobotSettings
-MainWindow: All apps closed, back to folder view.
-MainWindow: Folder closed - restoring all folders
-MainWindow: Folder closed - restoring all folders
-Currently running app: None
-MainWindow: App selected - WorkpieceLibrary
-MainWindow: Creating app widget for 'WorkpieceLibrary'
-08:43:54 [INFO    ] src.robot_systems.paint.domain.workpieces.repository.json_paint_workpiece_repository.__init__ — JsonPaintWorkpieceRepository: root -> /home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/profiles/tray_dryer/storage/workpieces
-08:43:54 [DEBUG   ] WidgetApplication.register — WidgetApplication registered
-MAIN_WINDOW LEN RUNNING WIDGETS: 1
-08:43:54 [DEBUG   ] ApplicationFactory.finalize_application_build — WorkpieceLibraryFactory built: WorkpieceLibraryModel / WorkpieceLibraryView / WorkpieceLibraryController
-Currently running app: WorkpieceLibrary
 MainWindow: App selected - WorkpieceEditor
 MainWindow: Creating app widget for 'WorkpieceEditor'
+14:36:53 [INFO    ] src.robot_systems.paint.domain.workpieces.repository.json_paint_workpiece_repository.__init__ — JsonPaintWorkpieceRepository: root -> /home/ilv/.local/share/robot-platform/products/paint-tray-dry-robot/data/paint/profiles/tray_dryer/storage/workpieces                                                                                                                                                                                         
+14:36:53 [DEBUG   ] WidgetApplication.register — WidgetApplication registered
 [SegmentManagerProvider] Using custom manager: Adapter
 ✅ Segment manager configured
 [SettingsProviderRegistry] Using custom provider: SegmentSettingsProviderAdapter
@@ -222,11 +372,9 @@ MainWindow: Creating app widget for 'WorkpieceEditor'
 ✅ Custom widgets configured
 [AdditionalFormProvider] Using factory: WorkpieceFormFactory
 ✅ Additional data form configured
-Loaded 62 settings from /home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/contour_editor/persistence/config/contour_editor_settings.json
+Loaded 62 settings from /home/ilv/.local/share/robot-platform/products/paint-tray-dry-robot/releases/1.0.6/platform/_internal/contour_editor/persistence/config/contour_editor_settings.json
 Applied 62 settings to constants module
-Segment click overlay set up for editor <contour_editor.core.editor.ContourEditor object at 0x7f7365560eb0>
-08:44:00 [INFO    ] src.robot_systems.paint.domain.workpieces.repository.json_paint_workpiece_repository.__init__ — JsonPaintWorkpieceRepository: root -> /home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/profiles/tray_dryer/storage/workpieces
-08:44:00 [DEBUG   ] WidgetApplication.register — WidgetApplication registered
+Segment click overlay set up for editor <contour_editor.core.editor.ContourEditor object at 0x75caf0824a50>
 ✅ Save callback connected
 ✅ Capture callback connected
 ✅ Execute callback connected
@@ -235,399 +383,97 @@ Segment click overlay set up for editor <contour_editor.core.editor.ContourEdito
 ✅ Contour Editor built successfully
 Set workpiece manager OK
 ✅ Workpiece Editor built successfully with WorkpieceManager, StartHandler, and CaptureHandler
-MAIN_WINDOW LEN RUNNING WIDGETS: 2
-08:44:00 [DEBUG   ] ApplicationFactory.finalize_application_build — WorkpieceEditorFactory built: WorkpieceEditorModel / WorkpieceEditorView / WorkpieceEditorController
-08:44:02 [INFO    ] src.engine.robot.drivers.client_adapters.http_websocket.set_active_tool — Active ROS2 tool set to 1 (TOOL_1)
-08:44:02 [INFO    ] src.engine.robot.drivers.client_adapters.http_websocket.set_active_tool — Active ROS2 tool set to 2 (TOOL_2)
-08:44:02 [DEBUG   ] SettingsService.reload — Loading settings 'work_area_settings'
-08:44:02 [INFO    ] BaseJsonSettingsRepository.load — Loaded 'work_area_settings' settings from '/home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/profiles/tray_dryer/storage/settings/vision/work_areas.json'.
-08:44:02 [INFO    ] src.engine.vision.capture_snapshot_service.capture_snapshot — [CAPTURE_TIMING] source=workpiece_editor robot_pose_s=0.000 active_area_validate_s=0.005 vision_contours_s=0.007 total_s=0.012 contours=1 frame_available=True
-08:44:02 [DEBUG   ] WorkpieceEditorController._on_capture — Capture: got 1 contours from vision
-08:44:02 [DEBUG   ] WorkpieceEditorController._on_capture — Capture: largest contour has 182 points
-08:44:02 [INFO    ] src.robot_systems.paint.processes.paint.match.workpiece_matching_service._save_match_diagnostics — [MATCH_DEBUG] Saved workpiece matching diagnostics: /home/ilv/Desktop/robot_app_platform/src/bootstrap/debug_plots/workpiece_matching/match_20260930_084402_417599_no_match.json
-08:44:02 [WARNING ] WorkpieceEditorController._try_prepare_known_workpiece_capture — Capture: saved-workpiece match failed: No match found. Saved workpieces checked: 2
-Passing contour with 182 points to layer Workpiece, settings: {}
-Passing contour with 182 points to layer Paint, settings: {'paint_selection_source': True}
-✅ Form submit callback connected
-[ContourEditor] Additional data form successfully created via provider
-No data to prefill the form.
-replace_content_widget called: new=CreateWorkpieceForm
-Using existing panel layout: <PyQt6.QtWidgets.QVBoxLayout object at 0x7f73810e42d0>
-Removing old content widget: PointManagerWidget
-Added new content widget: CreateWorkpieceForm
-Updating geometry and repainting panel_container
-replace_content_widget completed
-Switched to additional data form
-[CreateWorkpieceForm] data: {'workpieceId': '3', 'name': 'dasdas', 'description': 'dasda', 'height_mm': '4'}
-[MainApplicationFrame] Save requested with form data: ['workpieceId', 'name', 'description', 'height_mm']
-[MainApplicationFrame] Editor data exported: 2 segments, 366 points
+14:36:53 [DEBUG   ] ApplicationFactory.finalize_application_build — WorkpieceEditorFactory built: WorkpieceEditorModel / WorkpieceEditorView / WorkpieceEditorController
+MAIN_WINDOW LEN RUNNING WIDGETS: 1
+14:36:54 [ERROR   ] CameraInitializer.initializeCameraWithRetry — Error on attempt 3: 'NoneType' object has no attribute 'isOpened'
+14:36:54 [INFO    ] CameraInitializer.initializeCameraWithRetry — Attempting camera 0 (attempt 4/10)
+Mouse pressed at image coords: PyQt6.QtCore.QPointF(401.0, 267.0)
 Cleared all selections
-replace_content_widget called: new=PointManagerWidget
-Using existing panel layout: <PyQt6.QtWidgets.QVBoxLayout object at 0x7f73810e42d0>
-Removing old content widget: CreateWorkpieceForm
-Added new content widget: PointManagerWidget
-Updating geometry and repainting panel_container
-replace_content_widget completed
-✅ Switched back to point manager after emitting save signal
-08:44:18 [DEBUG   ] src.robot_systems.paint.domain.paint_workpiece_editor_adapter.to_workpiece_data — paint to_workpiece_data — Workpiece/Main segs=1 Contour segs=1 Fill segs=0
-08:44:18 [INFO    ] WorkpieceEditorController._on_save — Save workpiece (fallback): True — /home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/profiles/tray_dryer/storage/workpieces/2026-09-30/2026-09-30_08-44-18-180285/2026-09-30_08-44-18-180285_workpiece.json
-MainWindow: Closing all running apps...
-Closing app widget: WorkpieceLibrary
-Closing app widget: WorkpieceEditor
-MainWindow: All apps closed, back to folder view.
-MainWindow: Folder closed - restoring all folders
-MainWindow: Folder closed - restoring all folders
-Currently running app: None
-MainWindow: App selected - WorkpieceEditor
-MainWindow: Creating app widget for 'WorkpieceEditor'
-[SegmentManagerProvider] Using custom manager: Adapter
-✅ Segment manager configured
-[SettingsProviderRegistry] Using custom provider: SegmentSettingsProviderAdapter
-✅ Settings provider registered
-✅ Settings UI configured
-✅ Layer config registered
-[WidgetProvider] Using custom factory: VirtualKeyboardWidgetFactory
-✅ Custom widgets configured
-[AdditionalFormProvider] Using factory: WorkpieceFormFactory
-✅ Additional data form configured
-Loaded 62 settings from /home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/contour_editor/persistence/config/contour_editor_settings.json
-Applied 62 settings to constants module
-Segment click overlay set up for editor <contour_editor.core.editor.ContourEditor object at 0x7f736557b070>
-✅ Save callback connected
-✅ Capture callback connected
-✅ Execute callback connected
-✅ Camera feed update callback connected
-✅ Custom action callback connected
-✅ Contour Editor built successfully
-Set workpiece manager OK
-✅ Workpiece Editor built successfully with WorkpieceManager, StartHandler, and CaptureHandler
-MAIN_WINDOW LEN RUNNING WIDGETS: 1
-08:44:23 [DEBUG   ] ApplicationFactory.finalize_application_build — WorkpieceEditorFactory built: WorkpieceEditorModel / WorkpieceEditorView / WorkpieceEditorController
-08:44:24 [INFO    ] src.engine.robot.drivers.client_adapters.http_websocket.set_active_tool — Active ROS2 tool set to 1 (TOOL_1)
-08:44:24 [INFO    ] src.engine.robot.drivers.client_adapters.http_websocket.set_active_tool — Active ROS2 tool set to 2 (TOOL_2)
-08:44:24 [INFO    ] src.engine.vision.capture_snapshot_service.capture_snapshot — [CAPTURE_TIMING] source=workpiece_editor robot_pose_s=0.000 active_area_validate_s=0.008 vision_contours_s=0.010 total_s=0.018 contours=1 frame_available=True
-08:44:24 [DEBUG   ] WorkpieceEditorController._on_capture — Capture: got 1 contours from vision
-08:44:24 [DEBUG   ] WorkpieceEditorController._on_capture — Capture: largest contour has 182 points
-08:44:25 [DEBUG   ] src.engine.vision.implementation.VisionSystem.features.contour_matching.alignment.difference_calculator._calculateDifferences — centroidDiff: [ 0.09431345 -0.09071406]
-08:44:25 [DEBUG   ] src.engine.vision.implementation.VisionSystem.features.contour_matching.alignment.difference_calculator._calculateDifferences — rotationDiff: 0.06323079297391132
-08:44:25 [DEBUG   ] src.engine.vision.implementation.VisionSystem.features.contour_matching.alignment.contour_aligner.align_single_contour — Applied initial rotation of 0.06 degrees around centroid (640.2, 334.9)
-08:44:25 [DEBUG   ] src.engine.vision.implementation.VisionSystem.features.contour_matching.alignment.contour_aligner.align_single_contour — Applied initial translation of (dx=0.1, dy=-0.1)
-      Initial overlap (0°): 0.9897
-      Stage 1: Coarse search...
-      Stage 1 complete: best at 0° with overlap 0.9897
-      Stage 2: Adaptive local refinement...
-      Stage 2 complete after 5 iterations
-      Stage 3: Final fine-tuning...
-      Final best rotation: 0.00° with overlap: 0.9897
-08:44:25 [INFO    ] src.robot_systems.paint.processes.paint.match.workpiece_matching_service._save_match_diagnostics — [MATCH_DEBUG] Saved workpiece matching diagnostics: /home/ilv/Desktop/robot_app_platform/src/bootstrap/debug_plots/workpiece_matching/match_20260930_084425_021138_matched.json
-✓ Saved workpiece alignment debug plot to: debug_plots/workpiece_alignment_debug_20260930_084425.png
-Passing contour with 183 points to layer Workpiece, settings: {'velocity': '10', 'acceleration': '10', 'offset': '0', 'edge_cleanup_z_offset_mm': '0'}
-Passing contour with 183 points to layer Paint, settings: {'velocity': '10', 'acceleration': '10', 'offset': '0', 'edge_cleanup_z_offset_mm': '0', 'paint_selection_source': True}
-08:44:25 [INFO    ] WorkpieceEditorController._save_workpiece_alignment_debug_plot — Saved workpiece alignment debug plot to: debug_plots/workpiece_alignment_debug_20260930_084425.png
-08:44:25 [INFO    ] WorkpieceEditorController._try_prepare_known_workpiece_capture — Capture: recognized known workpiece 3 and loaded aligned saved contour
-08:44:25 [DEBUG   ] WorkpieceEditorController._load_raw_into_editor — Editor data keys: {'total_layers': 3, 'total_segments': 2, 'total_points': 366, 'layers': {'Workpiece': {'segments': 1, 'points': 183, 'locked': False, 'visible': True}, 'Paint': {'segments': 1, 'points': 183, 'locked': False, 'visible': True}, 'Fill': {'segments': 0, 'points': 0, 'locked': False, 'visible': True}}}
-08:44:25 [DEBUG   ] src.applications.workpiece_editor.service.workpiece_editor_service.set_editing — WorkpieceEditorService: editing_storage_id=None
-08:44:25 [INFO    ] WorkpieceEditorController._load_raw_into_editor — Loaded workpiece into editor (storage_id=None)
-MainWindow: Closing all running apps...
-Closing app widget: WorkpieceEditor
-MainWindow: All apps closed, back to folder view.
-MainWindow: Folder closed - restoring all folders
-MainWindow: Folder closed - restoring all folders
-Currently running app: None
-MainWindow: App selected - WorkpieceEditor
-MainWindow: Creating app widget for 'WorkpieceEditor'
-[SegmentManagerProvider] Using custom manager: Adapter
-✅ Segment manager configured
-[SettingsProviderRegistry] Using custom provider: SegmentSettingsProviderAdapter
-✅ Settings provider registered
-✅ Settings UI configured
-✅ Layer config registered
-[WidgetProvider] Using custom factory: VirtualKeyboardWidgetFactory
-✅ Custom widgets configured
-[AdditionalFormProvider] Using factory: WorkpieceFormFactory
-✅ Additional data form configured
-Loaded 62 settings from /home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/contour_editor/persistence/config/contour_editor_settings.json
-Applied 62 settings to constants module
-Segment click overlay set up for editor <contour_editor.core.editor.ContourEditor object at 0x7f7365565b30>
-✅ Save callback connected
-✅ Capture callback connected
-✅ Execute callback connected
-✅ Camera feed update callback connected
-✅ Custom action callback connected
-✅ Contour Editor built successfully
-Set workpiece manager OK
-✅ Workpiece Editor built successfully with WorkpieceManager, StartHandler, and CaptureHandler
-MAIN_WINDOW LEN RUNNING WIDGETS: 1
-08:44:31 [DEBUG   ] ApplicationFactory.finalize_application_build — WorkpieceEditorFactory built: WorkpieceEditorModel / WorkpieceEditorView / WorkpieceEditorController
-08:44:37 [INFO    ] src.engine.robot.drivers.client_adapters.http_websocket.set_active_tool — Active ROS2 tool set to 1 (TOOL_1)
-08:44:37 [INFO    ] src.engine.robot.drivers.client_adapters.http_websocket.set_active_tool — Active ROS2 tool set to 2 (TOOL_2)
-08:44:37 [INFO    ] src.engine.vision.capture_snapshot_service.capture_snapshot — [CAPTURE_TIMING] source=workpiece_editor robot_pose_s=0.000 active_area_validate_s=0.005 vision_contours_s=0.007 total_s=0.013 contours=1 frame_available=True
-08:44:37 [DEBUG   ] WorkpieceEditorController._on_capture — Capture: got 1 contours from vision
-08:44:37 [DEBUG   ] WorkpieceEditorController._on_capture — Capture: largest contour has 128 points
-08:44:37 [INFO    ] src.robot_systems.paint.processes.paint.match.workpiece_matching_service._save_match_diagnostics — [MATCH_DEBUG] Saved workpiece matching diagnostics: /home/ilv/Desktop/robot_app_platform/src/bootstrap/debug_plots/workpiece_matching/match_20260930_084437_563691_no_match.json
-08:44:37 [WARNING ] WorkpieceEditorController._try_prepare_known_workpiece_capture — Capture: saved-workpiece match failed: No match found. Saved workpieces checked: 3
-Passing contour with 128 points to layer Workpiece, settings: {}
-Passing contour with 128 points to layer Paint, settings: {'paint_selection_source': True}
-✅ Form submit callback connected
-[ContourEditor] Additional data form successfully created via provider
-No data to prefill the form.
-replace_content_widget called: new=CreateWorkpieceForm
-Using existing panel layout: <PyQt6.QtWidgets.QVBoxLayout object at 0x7f7311be8d70>
-Removing old content widget: PointManagerWidget
-Added new content widget: CreateWorkpieceForm
-Updating geometry and repainting panel_container
-replace_content_widget completed
-Switched to additional data form
-08:44:53 [DEBUG   ] src.robot_systems.paint.domain.paint_workpiece_editor_adapter.to_workpiece_data — paint to_workpiece_data — Workpiece/Main segs=1 Contour segs=1 Fill segs=0
-08:44:53 [INFO    ] WorkpieceEditorController._on_save — Save workpiece (fallback): True — /home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/profiles/tray_dryer/storage/workpieces/2026-09-30/2026-09-30_08-44-53-963533/2026-09-30_08-44-53-963533_workpiece.json
-[CreateWorkpieceForm] data: {'workpieceId': '4', 'name': 'fdfd', 'description': 'fdfd', 'height_mm': '4'}
-[MainApplicationFrame] Save requested with form data: ['workpieceId', 'name', 'description', 'height_mm']
-[MainApplicationFrame] Editor data exported: 2 segments, 258 points
+Mouse pressed at image coords: PyQt6.QtCore.QPointF(501.0, 492.0)
 Cleared all selections
-replace_content_widget called: new=PointManagerWidget
-Using existing panel layout: <PyQt6.QtWidgets.QVBoxLayout object at 0x7f7311be8d70>
-Removing old content widget: CreateWorkpieceForm
-Added new content widget: PointManagerWidget
-Updating geometry and repainting panel_container
-replace_content_widget completed
-✅ Switched back to point manager after emitting save signal
+Mouse pressed at image coords: PyQt6.QtCore.QPointF(793.0, 547.0)
+Cleared all selections
+Mouse pressed at image coords: PyQt6.QtCore.QPointF(934.0, 347.0)
+Cleared all selections
+Mouse pressed at image coords: PyQt6.QtCore.QPointF(590.0, 165.0)
+Cleared all selections
+Mouse pressed at image coords: PyQt6.QtCore.QPointF(861.0, 466.0)
+Cleared all selections
+Added control point at PyQt6.QtCore.QPointF(861.0, 466.0)
+Mouse pressed at image coords: PyQt6.QtCore.QPointF(873.0, 449.0)
+Cleared all selections
+Single selection set: ('control', 0, 2)
+Point selected: ('control', 0, 2)
+Initial point pos: PyQt6.QtCore.QPointF(863.5, 447.0), Initial crosshair pos: PyQt6.QtCore.QPointF(873.0, 399.0)
+Dragging existing point (PointDragMode): ('control', 0, 2)
+Mouse pressed at image coords: PyQt6.QtCore.QPointF(646.0, 521.0)
+Cleared all selections
+Added control point at PyQt6.QtCore.QPointF(646.0, 521.0)
+14:37:00 [ERROR   ] CameraInitializer.initializeCameraWithRetry — Error on attempt 4: 'NoneType' object has no attribute 'isOpened'
+14:37:00 [INFO    ] CameraInitializer.initializeCameraWithRetry — Attempting camera 0 (attempt 5/10)
+Mouse pressed at image coords: PyQt6.QtCore.QPointF(646.0, 535.0)
+Cleared all selections
+Single selection set: ('control', 0, 1)
+Point selected: ('control', 0, 1)
+Initial point pos: PyQt6.QtCore.QPointF(647.0, 519.5), Initial crosshair pos: PyQt6.QtCore.QPointF(643.0, 493.0)
+Mouse pressed at image coords: PyQt6.QtCore.QPointF(440.0, 370.0)
+Cleared all selections
+Added control point at PyQt6.QtCore.QPointF(440.0, 370.0)
+Mouse pressed at image coords: PyQt6.QtCore.QPointF(458.0, 387.0)
+Cleared all selections
+Single selection set: ('control', 0, 0)
+Point selected: ('control', 0, 0)
+Initial point pos: PyQt6.QtCore.QPointF(451.0, 379.5), Initial crosshair pos: PyQt6.QtCore.QPointF(447.0, 340.0)
+Mouse pressed at image coords: PyQt6.QtCore.QPointF(773.0, 267.0)
+Cleared all selections
+Added control point at PyQt6.QtCore.QPointF(773.0, 267.0)
+14:37:06 [ERROR   ] CameraInitializer.initializeCameraWithRetry — Error on attempt 5: 'NoneType' object has no attribute 'isOpened'
+14:37:06 [INFO    ] CameraInitializer.initializeCameraWithRetry — Attempting camera 0 (attempt 6/10)
 MainWindow: Closing all running apps...
 Closing app widget: WorkpieceEditor
 MainWindow: All apps closed, back to folder view.
-MainWindow: Folder closed - restoring all folders
-MainWindow: Folder closed - restoring all folders
-Currently running app: None
-MainWindow: App selected - WorkpieceEditor
-MainWindow: Creating app widget for 'WorkpieceEditor'
-[SegmentManagerProvider] Using custom manager: Adapter
-✅ Segment manager configured
-[SettingsProviderRegistry] Using custom provider: SegmentSettingsProviderAdapter
-✅ Settings provider registered
-✅ Settings UI configured
-✅ Layer config registered
-[WidgetProvider] Using custom factory: VirtualKeyboardWidgetFactory
-✅ Custom widgets configured
-[AdditionalFormProvider] Using factory: WorkpieceFormFactory
-✅ Additional data form configured
-Loaded 62 settings from /home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/contour_editor/persistence/config/contour_editor_settings.json
-Applied 62 settings to constants module
-Segment click overlay set up for editor <contour_editor.core.editor.ContourEditor object at 0x7f7311c1def0>
-✅ Save callback connected
-✅ Capture callback connected
-✅ Execute callback connected
-✅ Camera feed update callback connected
-✅ Custom action callback connected
-✅ Contour Editor built successfully
-Set workpiece manager OK
-✅ Workpiece Editor built successfully with WorkpieceManager, StartHandler, and CaptureHandler
-MAIN_WINDOW LEN RUNNING WIDGETS: 1
-08:45:00 [DEBUG   ] ApplicationFactory.finalize_application_build — WorkpieceEditorFactory built: WorkpieceEditorModel / WorkpieceEditorView / WorkpieceEditorController
-08:45:01 [INFO    ] src.engine.robot.drivers.client_adapters.http_websocket.set_active_tool — Active ROS2 tool set to 1 (TOOL_1)
-08:45:01 [INFO    ] src.engine.robot.drivers.client_adapters.http_websocket.set_active_tool — Active ROS2 tool set to 2 (TOOL_2)
-08:45:01 [INFO    ] src.engine.vision.capture_snapshot_service.capture_snapshot — [CAPTURE_TIMING] source=workpiece_editor robot_pose_s=0.000 active_area_validate_s=0.005 vision_contours_s=0.008 total_s=0.013 contours=1 frame_available=True
-08:45:01 [DEBUG   ] WorkpieceEditorController._on_capture — Capture: got 1 contours from vision
-08:45:01 [DEBUG   ] WorkpieceEditorController._on_capture — Capture: largest contour has 128 points
-08:45:01 [DEBUG   ] src.engine.vision.implementation.VisionSystem.features.contour_matching.alignment.difference_calculator._calculateDifferences — centroidDiff: [ 0.06133984 -0.03963083]
-08:45:01 [DEBUG   ] src.engine.vision.implementation.VisionSystem.features.contour_matching.alignment.difference_calculator._calculateDifferences — rotationDiff: 0.019729307461346934
-08:45:01 [DEBUG   ] src.engine.vision.implementation.VisionSystem.features.contour_matching.alignment.contour_aligner.align_single_contour — Applied initial rotation of 0.02 degrees around centroid (592.7, 360.9)
-08:45:01 [DEBUG   ] src.engine.vision.implementation.VisionSystem.features.contour_matching.alignment.contour_aligner.align_single_contour — Applied initial translation of (dx=0.1, dy=-0.0)
-      Initial overlap (0°): 0.9946
-      Stage 1: Coarse search...
-      Stage 1 complete: best at 0° with overlap 0.9946
-      Stage 2: Adaptive local refinement...
-      Stage 2 complete after 5 iterations
-      Stage 3: Final fine-tuning...
-      Final best rotation: 0.00° with overlap: 0.9946
-08:45:01 [INFO    ] src.robot_systems.paint.processes.paint.match.workpiece_matching_service._save_match_diagnostics — [MATCH_DEBUG] Saved workpiece matching diagnostics: /home/ilv/Desktop/robot_app_platform/src/bootstrap/debug_plots/workpiece_matching/match_20260930_084501_680245_matched.json
-✓ Saved workpiece alignment debug plot to: debug_plots/workpiece_alignment_debug_20260930_084501.png
-Passing contour with 129 points to layer Workpiece, settings: {'velocity': '10', 'acceleration': '10', 'offset': '0', 'edge_cleanup_z_offset_mm': '0'}
-Passing contour with 129 points to layer Paint, settings: {'velocity': '10', 'acceleration': '10', 'offset': '0', 'edge_cleanup_z_offset_mm': '0', 'paint_selection_source': True}
-08:45:01 [INFO    ] WorkpieceEditorController._save_workpiece_alignment_debug_plot — Saved workpiece alignment debug plot to: debug_plots/workpiece_alignment_debug_20260930_084501.png
-08:45:01 [INFO    ] WorkpieceEditorController._try_prepare_known_workpiece_capture — Capture: recognized known workpiece 4 and loaded aligned saved contour
-08:45:01 [DEBUG   ] WorkpieceEditorController._load_raw_into_editor — Editor data keys: {'total_layers': 3, 'total_segments': 2, 'total_points': 258, 'layers': {'Workpiece': {'segments': 1, 'points': 129, 'locked': False, 'visible': True}, 'Paint': {'segments': 1, 'points': 129, 'locked': False, 'visible': True}, 'Fill': {'segments': 0, 'points': 0, 'locked': False, 'visible': True}}}
-08:45:01 [DEBUG   ] src.applications.workpiece_editor.service.workpiece_editor_service.set_editing — WorkpieceEditorService: editing_storage_id=None
-08:45:01 [INFO    ] WorkpieceEditorController._load_raw_into_editor — Loaded workpiece into editor (storage_id=None)
-MainWindow: Closing all running apps...
-Closing app widget: WorkpieceEditor
-MainWindow: All apps closed, back to folder view.
-MainWindow: Folder closed - restoring all folders
-MainWindow: Folder closed - restoring all folders
-Currently running app: None
-MainWindow: App selected - WorkpieceEditor
-MainWindow: Creating app widget for 'WorkpieceEditor'
-[SegmentManagerProvider] Using custom manager: Adapter
-✅ Segment manager configured
-[SettingsProviderRegistry] Using custom provider: SegmentSettingsProviderAdapter
-✅ Settings provider registered
-✅ Settings UI configured
-✅ Layer config registered
-[WidgetProvider] Using custom factory: VirtualKeyboardWidgetFactory
-✅ Custom widgets configured
-[AdditionalFormProvider] Using factory: WorkpieceFormFactory
-✅ Additional data form configured
-Loaded 62 settings from /home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/contour_editor/persistence/config/contour_editor_settings.json
-Applied 62 settings to constants module
-Segment click overlay set up for editor <contour_editor.core.editor.ContourEditor object at 0x7f7311c4a530>
-✅ Save callback connected
-✅ Capture callback connected
-✅ Execute callback connected
-✅ Camera feed update callback connected
-✅ Custom action callback connected
-✅ Contour Editor built successfully
-Set workpiece manager OK
-✅ Workpiece Editor built successfully with WorkpieceManager, StartHandler, and CaptureHandler
-08:45:12 [DEBUG   ] ApplicationFactory.finalize_application_build — WorkpieceEditorFactory built: WorkpieceEditorModel / WorkpieceEditorView / WorkpieceEditorController
-MAIN_WINDOW LEN RUNNING WIDGETS: 1
-08:45:14 [INFO    ] src.engine.robot.drivers.client_adapters.http_websocket.set_active_tool — Active ROS2 tool set to 1 (TOOL_1)
-08:45:14 [INFO    ] src.engine.robot.drivers.client_adapters.http_websocket.set_active_tool — Active ROS2 tool set to 2 (TOOL_2)
-08:45:14 [INFO    ] src.engine.vision.capture_snapshot_service.capture_snapshot — [CAPTURE_TIMING] source=workpiece_editor robot_pose_s=0.000 active_area_validate_s=0.004 vision_contours_s=0.012 total_s=0.016 contours=1 frame_available=True
-08:45:14 [DEBUG   ] WorkpieceEditorController._on_capture — Capture: got 1 contours from vision
-08:45:14 [DEBUG   ] WorkpieceEditorController._on_capture — Capture: largest contour has 266 points
-08:45:14 [DEBUG   ] src.engine.vision.implementation.VisionSystem.features.contour_matching.alignment.difference_calculator._calculateDifferences — centroidDiff: [-38.04617873  51.11224657]
-08:45:14 [DEBUG   ] src.engine.vision.implementation.VisionSystem.features.contour_matching.alignment.difference_calculator._calculateDifferences — rotationDiff: 125.02739609826244
-08:45:14 [DEBUG   ] src.engine.vision.implementation.VisionSystem.features.contour_matching.alignment.contour_aligner.align_single_contour — Applied initial rotation of 125.03 degrees around centroid (622.2, 334.9)
-08:45:14 [DEBUG   ] src.engine.vision.implementation.VisionSystem.features.contour_matching.alignment.contour_aligner.align_single_contour — Applied initial translation of (dx=-38.0, dy=51.1)
-08:45:14 [DEBUG   ] src.engine.vision.implementation.VisionSystem.features.contour_matching.alignment.contour_aligner.align_single_contour — Applied mask-based refinement rotation of 56.50 degrees around centroid (584.1, 386.0)
-      Initial overlap (0°): 0.8283
-      Stage 1: Coarse search...
-      Improvement at 26°: overlap = 0.8371 (+0.0088)
-      Improvement at 36°: overlap = 0.8763 (+0.0392)
-      Improvement at 43°: overlap = 0.9140 (+0.0377)
-      Improvement at 48°: overlap = 0.9444 (+0.0304)
-      Improvement at 53°: overlap = 0.9749 (+0.0305)
-      Improvement at 58°: overlap = 0.9871 (+0.0122)
-      Stage 1 complete: best at 58° with overlap 0.9871
-      Stage 2: Adaptive local refinement...
-      Stage 2 complete after 5 iterations
-      Stage 3: Final fine-tuning...
-      Fine-tuned at 57.50°: overlap = 0.9882 (+0.0011)
-      Fine-tuned at 56.50°: overlap = 0.9900 (+0.0017)
-      Final best rotation: 56.50° with overlap: 0.9900
-08:45:14 [INFO    ] src.robot_systems.paint.processes.paint.match.workpiece_matching_service._save_match_diagnostics — [MATCH_DEBUG] Saved workpiece matching diagnostics: /home/ilv/Desktop/robot_app_platform/src/bootstrap/debug_plots/workpiece_matching/match_20260930_084514_344662_matched.json
-✓ Saved workpiece alignment debug plot to: debug_plots/workpiece_alignment_debug_20260930_084514.png
-Passing contour with 261 points to layer Workpiece, settings: {'velocity': '10', 'acceleration': '10', 'offset': '0', 'edge_cleanup_z_offset_mm': '0'}
-Passing contour with 261 points to layer Paint, settings: {'velocity': '10', 'acceleration': '10', 'offset': '0', 'edge_cleanup_z_offset_mm': '0', 'paint_selection_source': True}
-08:45:14 [INFO    ] WorkpieceEditorController._save_workpiece_alignment_debug_plot — Saved workpiece alignment debug plot to: debug_plots/workpiece_alignment_debug_20260930_084514.png
-08:45:14 [INFO    ] WorkpieceEditorController._try_prepare_known_workpiece_capture — Capture: recognized known workpiece 1 and loaded aligned saved contour
-08:45:14 [DEBUG   ] WorkpieceEditorController._load_raw_into_editor — Editor data keys: {'total_layers': 3, 'total_segments': 2, 'total_points': 522, 'layers': {'Workpiece': {'segments': 1, 'points': 261, 'locked': False, 'visible': True}, 'Paint': {'segments': 1, 'points': 261, 'locked': False, 'visible': True}, 'Fill': {'segments': 0, 'points': 0, 'locked': False, 'visible': True}}}
-08:45:14 [DEBUG   ] src.applications.workpiece_editor.service.workpiece_editor_service.set_editing — WorkpieceEditorService: editing_storage_id=None
-08:45:14 [INFO    ] WorkpieceEditorController._load_raw_into_editor — Loaded workpiece into editor (storage_id=None)
-MainWindow: Closing all running apps...
-Closing app widget: WorkpieceEditor
-MainWindow: All apps closed, back to folder view.
-MainWindow: Folder closed - restoring all folders
-MainWindow: Folder closed - restoring all folders
-Currently running app: None
-MainWindow: App selected - WorkpieceLibrary
-MainWindow: Creating app widget for 'WorkpieceLibrary'
-08:45:21 [DEBUG   ] ApplicationFactory.finalize_application_build — WorkpieceLibraryFactory built: WorkpieceLibraryModel / WorkpieceLibraryView / WorkpieceLibraryController
-MAIN_WINDOW LEN RUNNING WIDGETS: 1
-Currently running app: WorkpieceLibrary
-MainWindow: App selected - WorkpieceLibrary
-MAIN_WINDOW LEN RUNNING WIDGETS: 1
-MainWindow: Closing all running apps...
-Closing app widget: WorkpieceLibrary
-MainWindow: All apps closed, back to folder view.
-MainWindow: Folder closed - restoring all folders
-MainWindow: Folder closed - restoring all folders
-MainWindow: Folder closed - restoring all folders
-Currently running app: None
-MainWindow: App selected - ContourMatchingTester
-MainWindow: Creating app widget for 'ContourMatchingTester'
-08:45:36 [INFO    ] src.robot_systems.paint.domain.workpieces.repository.json_paint_workpiece_repository.__init__ — JsonPaintWorkpieceRepository: root -> /home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/profiles/tray_dryer/storage/workpieces
-08:45:36 [DEBUG   ] WidgetApplication.register — WidgetApplication registered
-08:45:36 [DEBUG   ] ContourMatchingTesterFactory.finalize_application_build — ContourMatchingTesterFactory built: ContourMatchingTesterModel / ContourMatchingTesterView / ContourMatchingTesterController
-MAIN_WINDOW LEN RUNNING WIDGETS: 1
-08:45:46 [INFO    ] src.applications.contour_matching_tester.service.contour_matching_tester_service.get_workpieces — Found 4 workpieces
-08:45:46 [INFO    ] ContourMatchingTesterModel.load_workpieces — Loaded 4 workpieces
-08:45:56 [INFO    ] src.engine.robot.drivers.client_adapters.http_websocket.set_active_tool — Active ROS2 tool set to 1 (TOOL_1)
-08:45:56 [INFO    ] src.engine.robot.drivers.client_adapters.http_websocket.set_active_tool — Active ROS2 tool set to 2 (TOOL_2)
-08:45:56 [INFO    ] src.engine.vision.capture_snapshot_service.capture_snapshot — [CAPTURE_TIMING] source=contour_matching_tester robot_pose_s=0.000 active_area_validate_s=0.006 vision_contours_s=0.016 total_s=0.021 contours=3 frame_available=True
-08:45:56 [DEBUG   ] src.applications.contour_matching_tester.service.contour_matching_tester_service.get_latest_contours — get_latest_contours: 3 contours (ensured closed)
-08:45:56 [DEBUG   ] src.engine.vision.implementation.VisionSystem.features.contour_matching.alignment.difference_calculator._calculateDifferences — centroidDiff: [-68.18838458 169.4364274 ]
-08:45:56 [DEBUG   ] src.engine.vision.implementation.VisionSystem.features.contour_matching.alignment.difference_calculator._calculateDifferences — rotationDiff: 122.63180816376223
-08:45:56 [DEBUG   ] src.engine.vision.implementation.VisionSystem.features.contour_matching.alignment.difference_calculator._calculateDifferences — centroidDiff: [-113.13409159 -108.27697618]
-08:45:56 [DEBUG   ] src.engine.vision.implementation.VisionSystem.features.contour_matching.alignment.difference_calculator._calculateDifferences — rotationDiff: -61.39254920408938
-08:45:56 [DEBUG   ] src.engine.vision.implementation.VisionSystem.features.contour_matching.alignment.difference_calculator._calculateDifferences — centroidDiff: [ 175.20468413 -213.73266664]
-08:45:56 [DEBUG   ] src.engine.vision.implementation.VisionSystem.features.contour_matching.alignment.difference_calculator._calculateDifferences — rotationDiff: -106.15360279649536
-08:45:56 [DEBUG   ] src.engine.vision.implementation.VisionSystem.features.contour_matching.alignment.contour_aligner.align_single_contour — Applied initial rotation of 122.63 degrees around centroid (622.2, 334.9)
-08:45:56 [DEBUG   ] src.engine.vision.implementation.VisionSystem.features.contour_matching.alignment.contour_aligner.align_single_contour — Applied initial translation of (dx=-68.2, dy=169.4)
-08:45:56 [DEBUG   ] src.engine.vision.implementation.VisionSystem.features.contour_matching.alignment.contour_aligner.align_single_contour — Applied mask-based refinement rotation of 150.50 degrees around centroid (554.0, 504.4)
-      Initial overlap (0°): 0.8381
-      Stage 1: Coarse search...
-      Improvement at 41°: overlap = 0.8840 (+0.0459)
-      Improvement at 51°: overlap = 0.9409 (+0.0569)
-      Improvement at 58°: overlap = 0.9813 (+0.0404)
-      Improvement at 151°: overlap = 0.9864 (+0.0051)
-      Stage 1 complete: best at 151° with overlap 0.9864
-      Stage 2: Adaptive local refinement...
-      Stage 2 complete after 5 iterations
-      Stage 3: Final fine-tuning...
-      Fine-tuned at 150.50°: overlap = 0.9869 (+0.0005)
-      Final best rotation: 150.50° with overlap: 0.9869
-      Initial overlap (0°): 0.9723
-      Stage 1: Coarse search...
-      Stage 1 complete: best at 0° with overlap 0.9723
-      Stage 2: Adaptive local refinement...
-      Stage 2 complete after 5 iterations
-      Stage 3: Final fine-tuning...
-      Final best rotation: 0.00° with overlap: 0.9723
-      Initial overlap (0°): 0.9740
-      Stage 1: Coarse search...
-08:45:56 [DEBUG   ] src.engine.vision.implementation.VisionSystem.features.contour_matching.alignment.contour_aligner.align_single_contour — Applied initial rotation of -61.39 degrees around centroid (640.2, 334.9)
-08:45:56 [DEBUG   ] src.engine.vision.implementation.VisionSystem.features.contour_matching.alignment.contour_aligner.align_single_contour — Applied initial translation of (dx=-113.1, dy=-108.3)
-08:45:56 [DEBUG   ] src.engine.vision.implementation.VisionSystem.features.contour_matching.alignment.contour_aligner.align_single_contour — Applied initial rotation of -106.15 degrees around centroid (624.0, 388.4)
-08:45:56 [DEBUG   ] src.engine.vision.implementation.VisionSystem.features.contour_matching.alignment.contour_aligner.align_single_contour — Applied initial translation of (dx=175.2, dy=-213.7)
-08:45:56 [DEBUG   ] src.engine.vision.implementation.VisionSystem.features.contour_matching.alignment.contour_aligner.align_single_contour — Applied mask-based refinement rotation of 0.50 degrees around centroid (799.2, 174.7)
-      Stage 1 complete: best at 0° with overlap 0.9740
-      Stage 2: Adaptive local refinement...
-      Stage 2 complete after 5 iterations
-      Stage 3: Final fine-tuning...
-      Fine-tuned at 0.50°: overlap = 0.9752 (+0.0012)
-      Final best rotation: 0.50° with overlap: 0.9752
-08:45:56 [INFO    ] ContourMatchingTesterModel.run_matching — Matching done: 3 matched, 0 unmatched
-08:46:14 [INFO    ] src.applications.contour_matching_tester.service.contour_matching_tester_service.get_workpieces — Found 4 workpieces
-08:46:14 [INFO    ] ContourMatchingTesterModel.load_workpieces — Loaded 4 workpieces
-08:46:47 [INFO    ] src.engine.robot.drivers.client_adapters.http_websocket.set_active_tool — Active ROS2 tool set to 1 (TOOL_1)
-08:46:47 [INFO    ] src.engine.robot.drivers.client_adapters.http_websocket.set_active_tool — Active ROS2 tool set to 2 (TOOL_2)
-08:46:47 [INFO    ] src.engine.vision.capture_snapshot_service.capture_snapshot — [CAPTURE_TIMING] source=contour_matching_tester robot_pose_s=0.000 active_area_validate_s=0.006 vision_contours_s=0.013 total_s=0.020 contours=3 frame_available=True
-08:46:47 [DEBUG   ] src.applications.contour_matching_tester.service.contour_matching_tester_service.get_latest_contours — get_latest_contours: 3 contours (ensured closed)
-08:46:47 [DEBUG   ] src.engine.vision.implementation.VisionSystem.features.contour_matching.alignment.difference_calculator._calculateDifferences — centroidDiff: [-68.28529232 169.36788913]
-08:46:47 [DEBUG   ] src.engine.vision.implementation.VisionSystem.features.contour_matching.alignment.difference_calculator._calculateDifferences — rotationDiff: 123.33596289868922
-08:46:47 [DEBUG   ] src.engine.vision.implementation.VisionSystem.features.contour_matching.alignment.difference_calculator._calculateDifferences — centroidDiff: [-113.24705232 -108.18764193]
-08:46:47 [DEBUG   ] src.engine.vision.implementation.VisionSystem.features.contour_matching.alignment.difference_calculator._calculateDifferences — rotationDiff: -61.388496499139535
-08:46:47 [DEBUG   ] src.engine.vision.implementation.VisionSystem.features.contour_matching.alignment.difference_calculator._calculateDifferences — centroidDiff: [ 175.10914847 -213.80213595]
-08:46:47 [DEBUG   ] src.engine.vision.implementation.VisionSystem.features.contour_matching.alignment.difference_calculator._calculateDifferences — rotationDiff: -106.32666537027362
-08:46:47 [DEBUG   ] src.engine.vision.implementation.VisionSystem.features.contour_matching.alignment.contour_aligner.align_single_contour — Applied initial rotation of 123.34 degrees around centroid (622.2, 334.9)
-08:46:47 [DEBUG   ] src.engine.vision.implementation.VisionSystem.features.contour_matching.alignment.contour_aligner.align_single_contour — Applied initial translation of (dx=-68.3, dy=169.4)
-08:46:47 [DEBUG   ] src.engine.vision.implementation.VisionSystem.features.contour_matching.alignment.contour_aligner.align_single_contour — Applied mask-based refinement rotation of 58.50 degrees around centroid (553.9, 504.3)
-      Initial overlap (0°): 0.8339
-      Stage 1: Coarse search...
-      Improvement at 41°: overlap = 0.8880 (+0.0541)
-      Improvement at 51°: overlap = 0.9441 (+0.0560)
-      Improvement at 58°: overlap = 0.9833 (+0.0392)
-      Stage 1 complete: best at 58° with overlap 0.9833
-      Stage 2: Adaptive local refinement...
-      Stage 2 complete after 5 iterations
-      Stage 3: Final fine-tuning...
-      Fine-tuned at 58.50°: overlap = 0.9845 (+0.0013)
-      Final best rotation: 58.50° with overlap: 0.9845
-      Initial overlap (0°): 0.9735
-      Stage 1: Coarse search...
-      Stage 1 complete: best at 0° with overlap 0.9735
-      Stage 2: Adaptive local refinement...
-      Stage 2 complete after 5 iterations
-      Stage 3: Final fine-tuning...
-08:46:47 [DEBUG   ] src.engine.vision.implementation.VisionSystem.features.contour_matching.alignment.contour_aligner.align_single_contour — Applied initial rotation of -61.39 degrees around centroid (640.2, 334.9)
-08:46:47 [DEBUG   ] src.engine.vision.implementation.VisionSystem.features.contour_matching.alignment.contour_aligner.align_single_contour — Applied initial translation of (dx=-113.2, dy=-108.2)
-08:46:47 [DEBUG   ] src.engine.vision.implementation.VisionSystem.features.contour_matching.alignment.contour_aligner.align_single_contour — Applied initial rotation of -106.33 degrees around centroid (624.0, 388.4)
-08:46:47 [DEBUG   ] src.engine.vision.implementation.VisionSystem.features.contour_matching.alignment.contour_aligner.align_single_contour — Applied initial translation of (dx=175.1, dy=-213.8)
-      Final best rotation: 0.00° with overlap: 0.9735
-      Initial overlap (0°): 0.9762
-      Stage 1: Coarse search...
-      Stage 1 complete: best at 0° with overlap 0.9762
-      Stage 2: Adaptive local refinement...
-      Stage 2 complete after 5 iterations
-      Stage 3: Final fine-tuning...
-      Final best rotation: 0.00° with overlap: 0.9762
-08:46:47 [INFO    ] ContourMatchingTesterModel.run_matching — Matching done: 3 matched, 0 unmatched
+14:37:12 [ERROR   ] CameraInitializer.initializeCameraWithRetry — Error on attempt 6: 'NoneType' object has no attribute 'isOpened'
+14:37:12 [INFO    ] CameraInitializer.initializeCameraWithRetry — Attempting camera 0 (attempt 7/10)
+14:37:14 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'PaintDashboard' → folder 1
+14:37:14 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'PaintAdjustment' → folder 1
+14:37:14 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'WorkpieceLibrary' → folder 1
+14:37:14 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'WorkpieceEditor' → folder 1
+14:37:14 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'RobotSettings' → folder 2
+14:37:14 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'ToolSettings' → folder 2
+14:37:14 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'ModbusSettings' → folder 2
+14:37:14 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'SoftwareUpdate' → folder 3
+14:37:14 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'NetworkSettings' → folder 2
+14:37:14 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'DeviceControl' → folder 2
+14:37:14 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'WorkAreaSettings' → folder 2
+14:37:14 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'CameraSettings' → folder 2
+14:37:14 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'CalibrationSettings' → folder 2
+14:37:14 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'PaintProcessSettings' → folder 2
+14:37:14 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'Calibration' → folder 2
+14:37:14 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'ContourMatchingTester' → folder 4
+14:37:14 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'UserManagement' → folder 3
+14:37:14 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'PickTarget' → folder 4
+[AppShell] Added PaintDashboard to folder 1
+[AppShell] Added PaintAdjustment to folder 1
+[AppShell] Added WorkpieceLibrary to folder 1
+[AppShell] Added WorkpieceEditor to folder 1
+[AppShell] Added RobotSettings to folder 2
+[AppShell] Added ToolSettings to folder 2
+[AppShell] Added ModbusSettings to folder 2
+[AppShell] Added SoftwareUpdate to folder 3
+[AppShell] Added NetworkSettings to folder 2
+[AppShell] Added DeviceControl to folder 2
+[AppShell] Added WorkAreaSettings to folder 2
+[AppShell] Added CameraSettings to folder 2
+[AppShell] Added CalibrationSettings to folder 2
+[AppShell] Added PaintProcessSettings to folder 2
+[AppShell] Added Calibration to folder 2
+[AppShell] Added ContourMatchingTester to folder 4
+[AppShell] Added UserManagement to folder 3
+[AppShell] Added PickTarget to folder 4
+Traceback (most recent call last):
+  File "src/bootstrap/run_main.py", line 283, in _on_login_accepted
+  File "pl_gui/shell/startup_splash_view.py", line 52, in set_message
+RuntimeError: wrapped C/C++ object of type QLabel has been deleted
+Platform exited with an error; pending update remains unapplied
+(.venv) ilv@IlV:~/Desktop/robot_app_platform/src/robot_systems/paint_tray_dry$ ^C
+(.venv) ilv@IlV:~/Desktop/robot_app_platform/src/robot_systems/paint_tray_dry$ 

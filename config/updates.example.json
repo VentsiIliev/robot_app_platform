@@ -1,0 +1,11 @@
+{
+  "enabled": false,
+  "repository_url": "https://your-server.example/releases/platform/",
+  "public_key": "/home/operator/.config/robot-platform/release-public.pem",
+  "product": "paint-robot",
+  "channel": "stable",
+  "install_root": "/home/operator/.local/share/robot-platform/products/paint-robot",
+  "timeout_seconds": 30,
+  "max_download_bytes": 4294967296,
+  "max_extracted_bytes": 8589934592
+}

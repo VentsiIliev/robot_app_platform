@@ -18,7 +18,14 @@ Public API for workpiece-specific applications:
 from .builder import WorkpieceEditorBuilder
 
 # Adapters
-from .adapters import IWorkpieceDataAdapter, WorkpieceAdapter
+from .adapters import IWorkpieceDataAdapter
+
+
+def __getattr__(name):
+    if name == 'WorkpieceAdapter':
+        from .adapters import WorkpieceAdapter
+        return WorkpieceAdapter
+    raise AttributeError(name)
 
 # Managers
 from .managers import WorkpieceManager

@@ -1,0 +1,18 @@
+{
+  "format": 1,
+  "product": "glue-robot",
+  "robot_system": "glue",
+  "profile": "default",
+  "files": {
+    "hardware/modbus.json": {
+      "port": "/dev/ttyUSB0",
+      "baudrate": 115200,
+      "bytesize": 8,
+      "stopbits": 2,
+      "parity": "N",
+      "timeout": 0.03,
+      "slave_address": 1,
+      "max_retries": 30
+    }
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "product": "glue-robot",
+  "robot_system": "glue",
+  "profile": "default",
+  "storage_system": "glue",
+  "packages": [
+    "glue"
+  ],
+  "target": "glue",
+  "executable": "glue-robot"
+}

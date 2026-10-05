@@ -1,0 +1,8 @@
+{
+  "paint": {"product": "paint-robot", "robot_system": "paint", "profile": "default", "storage_system": "paint", "packages": ["paint"]},
+  "paint_tray_dry": {"product": "paint-tray-dry-robot", "robot_system": "paint_tray_dry", "profile": "tray_dryer", "storage_system": "paint", "packages": ["paint", "paint_tray_dry"]},
+  "paint_auto_dry": {"product": "paint-auto-dry-robot", "robot_system": "paint_auto_dry", "profile": "automatic_dryer", "storage_system": "paint", "packages": ["paint", "paint_auto_dry"]},
+  "glue": {"product": "glue-robot", "robot_system": "glue", "profile": "default", "storage_system": "glue", "packages": ["glue"]},
+  "twin_robot": {"product": "twin-robot", "robot_system": "twin_robot", "profile": "default", "storage_system": "twin_robot", "packages": ["twin_robot"]},
+  "welding": {"product": "welding-robot", "robot_system": "welding", "profile": "default", "storage_system": "welding", "packages": ["welding"]}
+}

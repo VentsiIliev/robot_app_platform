@@ -2,6 +2,7 @@ import unittest
 from unittest.mock import MagicMock
 
 from PyQt6.QtWidgets import QApplication, QTabWidget, QWidget
+from pl_gui.utils.utils_widgets.SwitchButton import QToggle
 
 from src.applications.camera_settings.controller.camera_devices_controller import (
     CameraDevicesController,
@@ -137,6 +138,38 @@ class CameraDevicesControllerTests(unittest.TestCase):
         rotation.setCurrentIndex(rotation.findData(90))
 
         self.assertFalse(view._recalibration_hint.isHidden())
+
+    def test_device_controls_rotate_each_camera_in_ninety_degree_steps(self) -> None:
+        view = CameraDevicesWidget(device_control_mode=True)
+        view.set_camera_devices(CameraDevicesState(
+            assignments={"primary_vision": "/dev/video0", "auxiliary": "/dev/video2"},
+            options=(
+                CameraDeviceOption("/dev/video0", "/dev/video0", True),
+                CameraDeviceOption("/dev/video2", "/dev/video2", True),
+            ),
+            orientation={
+                "primary_vision": CameraOrientation(flip_horizontal=True),
+                "auxiliary": CameraOrientation(flip_vertical=True, rotate_degrees=270),
+            },
+        ))
+        horizontal, vertical, _ = view._orientation_controls["primary_vision"]
+        self.assertIsInstance(horizontal, QToggle)
+        self.assertIsInstance(vertical, QToggle)
+        self.assertTrue(horizontal.isChecked())
+        self.assertFalse(vertical.isChecked())
+
+        counterclockwise, clockwise = view._rotation_buttons["primary_vision"]
+        counterclockwise.click()
+        self.assertEqual(view.orientation_settings()["primary_vision"].rotate_degrees, 270)
+        self.assertFalse(view._recalibration_hint.isHidden())
+        clockwise.click()
+        clockwise.click()
+        self.assertEqual(view.orientation_settings()["primary_vision"].rotate_degrees, 90)
+        self.assertEqual(view._rotation_values["primary_vision"].text(), "90°")
+        self.assertEqual(view.orientation_settings()["auxiliary"].rotate_degrees, 270)
+
+        vertical.click()
+        self.assertTrue(view.orientation_settings()["primary_vision"].flip_vertical)
 
 
 if __name__ == "__main__":

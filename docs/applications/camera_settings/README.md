@@ -5,6 +5,17 @@ Configures the vision system camera: resolution, brightness, contour thresholds,
 Work-area ROI editing has been moved into the shared [Work Area Settings](/home/ilv/Desktop/robot_app_platform/docs/applications/work_area_settings/README.md) application.
 Calibration-related settings have been moved into the shared [Calibration Settings](/home/ilv/Desktop/robot_app_platform/docs/applications/calibration_settings/README.md) application.
 
+`CameraDevicesWidget(device_control_mode=True)` is the compact camera panel in
+the paint system's Devices screen. It shows one role's assignment and orientation
+controls beside its live preview, with a role selector, connection badge, and
+zoom buttons. The normal Camera Settings presentation continues to use the
+same widget without this mode. Camera assignment, orientation, preview, and
+save signals still follow the shared camera controller and service.
+The Devices presentation uses the shared `QToggle` switches for horizontal and
+vertical flips and 90° counterclockwise/clockwise buttons for rotation. Rotation
+wraps through 0°, 90°, 180°, and 270° and retains the same saved orientation
+contract and recalibration warning.
+
 This is intended to be the shared camera-settings application for any robot system that adopts the common vision contract:
 - `CommonServiceID.VISION`
 - `CommonSettingsID.VISION_CAMERA_SETTINGS`

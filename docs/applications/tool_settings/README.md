@@ -2,6 +2,15 @@
 
 Manages the tool changer configuration: the set of available tools (`ToolDefinition`) and the physical slots (`SlotConfig`) that map slot positions to installed tools. Persists via `ISettingsService`.
 
+The screen separates Tools, Slots, and guided TCP calibration into three tabs.
+Tool and slot lists use touch-sized rows and action buttons. Slot assignment
+changes are staged in the table until Save all changes; Discard restores the
+last loaded assignments. The calibration tab has a tool selector and four
+steps for reference capture, tool contacts, solving, and activation. Start over
+resets the local progress display; capturing a new reference starts a fresh
+calibration sample set in the service. Tool and slot dialogs use the shared
+`KeyboardNumberField` for numeric inputs.
+
 This is intended to be the shared tool-settings application for any robot system that adopts the common tool contract:
 - `CommonSettingsID.TOOL_CHANGER_CONFIG`
 

@@ -100,6 +100,7 @@ class CameraView(QWidget):
 
     corner_updated = pyqtSignal(str, int, float, float)  # area, idx, x_norm, y_norm
     empty_clicked  = pyqtSignal(str, float, float)        # area, x_norm, y_norm
+    zoom_changed = pyqtSignal(int)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -157,6 +158,12 @@ class CameraView(QWidget):
 
         # position toolbar at top
         self._toolbar.setGeometry(0, 0, self.width(), _TOOLBAR_HEIGHT)
+
+    def set_toolbar_visible(self, visible: bool) -> None:
+        """Show or hide the built-in zoom toolbar for custom host layouts."""
+        self._toolbar.setVisible(visible)
+        self._clamp_pan()
+        self.update()
 
     # ── resize / geometry ──────────────────────────────────────────────────────
 
@@ -371,7 +378,7 @@ class CameraView(QWidget):
     # ── internal helpers ──────────────────────────────────────────────────────
 
     def _available_rect(self) -> QRectF:
-        th = self._toolbar.height()
+        th = 0 if self._toolbar.isHidden() else self._toolbar.height()
         return QRectF(0, th, self.width(), self.height() - th)
 
     def _image_rect(self) -> QRectF:
@@ -458,7 +465,9 @@ class CameraView(QWidget):
         self.setCursor(Qt.CursorShape.ClosedHandCursor)
 
     def _update_pct_label(self) -> None:
-        self._pct_label.setText(f"{self._zoom * 100:.0f}%")
+        percent = round(self._zoom * 100)
+        self._pct_label.setText(f"{percent}%")
+        self.zoom_changed.emit(percent)
 
     def _update_coord_text(self, xn: float, yn: float) -> None:
         if self._frame and not self._frame.isNull():

@@ -75,6 +75,17 @@ class TestToolSettingsControllerLoad(unittest.TestCase):
             reference_captured=True, candidate_samples=1
         )
 
+    def test_start_over_resets_guided_progress(self):
+        ctrl, model, view = _make_ctrl()
+        ctrl._reference_captured = True
+        ctrl._candidate_samples = 3
+
+        ctrl._on_reset_calibration()
+
+        view.set_calibration_progress.assert_called_once_with(
+            reference_captured=False, candidate_samples=0
+        )
+
 
 class TestToolSettingsControllerRefresh(unittest.TestCase):
 

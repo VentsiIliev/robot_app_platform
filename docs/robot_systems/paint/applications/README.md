@@ -117,6 +117,11 @@ the paint process runs, provided the paint head is configured; paint-settings
 editability does not gate these commands. Hardware writes run in a background
 worker so the dashboard remains responsive.
 
+In Devices, the paint-head configuration panel sits on the Paint head page.
+Its spacing and setting-count inputs use the shared touch number field; the
+direction selector, calculated register range, and save command retain the
+existing paint-head settings service and controller.
+
 `PaintDashboardUiConfig.show_resolved_paint_speed_values`, configured by
 `paint_system_config.SHOW_RESOLVED_PAINT_SPEED_VALUES`, displays the live
 Velocity and Acceleration values derived from each combined Speed input. It is

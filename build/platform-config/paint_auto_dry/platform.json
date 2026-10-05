@@ -1,0 +1,6 @@
+{
+  "robot_system": "paint_auto_dry",
+  "supported_robot_systems": [
+    "paint_auto_dry"
+  ]
+}

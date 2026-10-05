@@ -1,0 +1,12 @@
+{
+  "product": "paint-auto-dry-robot",
+  "robot_system": "paint_auto_dry",
+  "profile": "automatic_dryer",
+  "storage_system": "paint",
+  "packages": [
+    "paint",
+    "paint_auto_dry"
+  ],
+  "target": "paint_auto_dry",
+  "executable": "paint-auto-dry-robot"
+}

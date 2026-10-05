@@ -23,3 +23,17 @@ def _build_choreography_setup_application(robot_system):
             messaging=messaging,
         )
     )
+def _build_network_settings_application(robot_system):
+    from src.applications.network_settings.build_application import build_network_settings_application
+    return build_network_settings_application(robot_system)
+
+
+def _build_software_update_application(robot_system):
+    from src.applications.software_update.build_application import build_software_update_application
+
+    def can_schedule():
+        # No running-state contract exists for attached twin runtimes yet.
+        # Until one is supplied, require an offline CLI update when attached.
+        return robot_system._twin_runtime is None
+
+    return build_software_update_application(can_schedule)

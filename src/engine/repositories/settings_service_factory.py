@@ -15,7 +15,10 @@ def build_from_specs(
 ) -> ISettingsService:
     app_name = system_class.__name__.lower()
 
-    if os.path.isabs(settings_root):
+    if os.environ.get("ROBOT_PLATFORM_DATA_ROOT") and not os.path.isabs(settings_root):
+        from src.engine.updates.paths import system_path
+        base_dir = system_path(system_class, settings_root)
+    elif os.path.isabs(settings_root):
         base_dir = os.path.join(settings_root, app_name)
     else:
         app_dir = os.path.dirname(inspect.getfile(system_class))

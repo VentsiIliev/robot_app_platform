@@ -890,3 +890,19 @@ def _build_height_measuring_application(robot_app):
     return WidgetApplication(
         widget_factory=lambda ms: HeightMeasuringFactory().build(service, messaging=ms, jog_service=jog_service)
     )
+def _build_network_settings_application(robot_system):
+    from src.applications.network_settings.build_application import build_network_settings_application
+    return build_network_settings_application(robot_system)
+
+
+def _build_software_update_application(robot_system):
+    from src.applications.software_update.build_application import build_software_update_application
+
+    def can_schedule():
+        coordinator = getattr(robot_system, "_coordinator", None)
+        if coordinator is None:
+            return False
+        with coordinator._lock:
+            return not coordinator._any_running() and not coordinator._preparing_glue
+
+    return build_software_update_application(can_schedule)

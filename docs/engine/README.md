@@ -2,6 +2,10 @@
 
 The `engine` package is the core of the robot system platform. It provides the foundational infrastructure that all robot applications and applications build on: messaging, robot control, hardware I/O, and settings persistence. Nothing in `engine` depends on `pl_gui` (the Qt layer) or on any specific robot application.
 
+The [remote support controller](remote_support/README.md) is a standalone
+engine component installed as a restricted systemd socket service on Ubuntu
+robots. It is used by the shared Network Settings application.
+
 ---
 
 ## Package Structure
@@ -173,3 +177,12 @@ Robot-system-specific startup composition does not belong in `engine/` and shoul
 - **Daemon threads** — background polling loops (`RobotStateManager`, `WeightCellService`) use daemon threads so they don't block process exit.
 
 Note: `engine/localization/` is the one engine subsystem that intentionally touches Qt core translation APIs (`QCoreApplication`, `QTranslator`). It still remains GUI-agnostic: it does not import views, widgets, or application-specific code. It also persists the selected language in a small JSON state file so the shell selector and installed translator stay in sync across restarts, and it now supports layered shared-plus-robot-system catalog loading.
+
+Platform release configuration, signed updates, external data paths and explicit
+JSON schema migrations and product/profile compatibility checks live in `src/engine/updates/`. See
+[installer and updater instructions](../../packaging/platform/README.md).
+
+Factory configuration seeding in `src/engine/updates/factory_defaults.py` creates
+missing files atomically from product/profile templates and preserves existing
+files, including empty ones. Activation seeds its staged data copy; standalone
+startup seeds before runtime settings are loaded.

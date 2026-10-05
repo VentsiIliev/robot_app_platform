@@ -1,0 +1,6 @@
+{
+  "robot_system": "paint_tray_dry",
+  "supported_robot_systems": [
+    "paint_tray_dry"
+  ]
+}

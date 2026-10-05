@@ -33,6 +33,15 @@ work_area_settings/
 - keeps the selected work area active through `IWorkAreaService`
 - forwards that active area into `IVisionService` when available
 - shows live camera frames through `VisionTopics`
+- places the live preview beside a compact ROI editor with work-area and ROI selection
+- uses the shared touch combo style for work-area selection
+- selects any of the four corners and nudges it by 1, 5, or 10 camera pixels
+- resets unsaved corner edits to the last loaded or saved ROI
+- offers zoom controls below the preview while retaining drag editing and wheel zoom
 
 The preview uses the shared `CameraView` widget and the shared application style helpers from
 [app_styles.py](/home/ilv/Desktop/robot_app_platform/src/applications/base/app_styles.py).
+The view hides `CameraView`'s built-in toolbar through its public API and places
+zoom controls in the preview card footer. Saving still goes through the existing
+controller and `IWorkAreaService` path.
+Vision state events display their `state` value rather than the raw broker payload.

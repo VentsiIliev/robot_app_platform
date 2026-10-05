@@ -1,5 +1,17 @@
 # `src/applications/device_control/` — Device Control
 
+The current Devices screen presents the configured devices in a left sidebar. Each
+device opens a focused control page with its enable switch, health badges, grouped
+commands, and action status. The sensor page displays its live reading. Optional
+panels supplied through `set_device_panel()` appear on the matching page, while
+`add_custom_tab()` adds another sidebar entry. The paint system uses these seams
+for paint-head settings and camera assignments/live preview. Numeric paint-head
+settings use the shared `KeyboardNumberField` touch control.
+
+The older glue service still uses the legacy on/off rows when it has no dynamic
+`IDeviceControlDevice` entries; the controller and hardware command paths are
+unchanged by this presentation layer.
+
 Manual on/off control panel for all hardware devices connected to the glue robot: laser, vacuum pump, glue pump motors, and generator. Devices are shown as enabled/disabled based on availability reported by the service; each button press runs the underlying operation on a background thread via `BackgroundWorker`.
 
 ---

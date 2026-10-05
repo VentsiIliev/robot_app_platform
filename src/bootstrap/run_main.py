@@ -279,9 +279,6 @@ def main() -> None:
             _load_apps_into_shell(shell, session, robot_app, ctx, bootstrap_provider)
 
             if not skip_splash:
-                startup_splash.set_active_step(3)
-                startup_splash.set_message("Waiting for robot readiness")
-                shell.stacked_widget.setCurrentWidget(startup_splash)
                 startup_splash_coordinator.start()
 
         login_view.accepted.connect(_on_login_accepted)
@@ -309,9 +306,6 @@ def main() -> None:
         _LOGGER.warning("ui.dev_skip_login is enabled — bypassing authentication")
         _load_apps_into_shell(shell, session, robot_app, ctx, bootstrap_provider)
         if not skip_splash:
-            startup_splash.set_active_step(3)
-            startup_splash.set_message("Waiting for robot readiness")
-            shell.stacked_widget.setCurrentWidget(startup_splash)
             startup_splash_coordinator.start()
 
     else:
@@ -381,7 +375,8 @@ def _build_localization_service(robot_app, messaging_service) -> LocalizationSer
         for path in applications_dir.glob("*/localization")
         if path.is_dir()
     )
-    state_file = module_path / robot_app.metadata.settings_root / "localization.json"
+    from src.engine.updates.paths import system_path
+    state_file = Path(system_path(type(robot_app), robot_app.metadata.settings_root)) / "localization.json"
     translation_dirs = [
         shared_translations_dir,
         *application_translation_dirs,

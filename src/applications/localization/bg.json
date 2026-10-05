@@ -99,5 +99,9 @@
     "Step": "Стъпка",
     "Servo": "Серво",
     "Recovery": "Възстановяване"
+  },
+  "StartupError": {
+    "Platform could not start": "Платформата не може да стартира",
+    "The platform stopped because an error occurred.": "Платформата спря поради възникнала грешка."
   }
 }

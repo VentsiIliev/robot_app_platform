@@ -66,10 +66,12 @@ class _Worker(QObject):
 class _UiRelay(QObject):
     """Ensures result/error callbacks run on the GUI thread."""
 
-    def __init__(self, on_done: Callable, on_error: Optional[Callable] = None) -> None:
+    def __init__(self, on_done: Callable, on_error: Optional[Callable] = None,
+                 on_thread_finished: Optional[Callable] = None) -> None:
         super().__init__()
         self._on_done = on_done
         self._on_error = on_error
+        self._on_thread_finished = on_thread_finished
 
     @pyqtSlot(object)
     def handle_finished(self, result) -> None:
@@ -79,6 +81,11 @@ class _UiRelay(QObject):
     def handle_failed(self, message: str) -> None:
         if self._on_error is not None:
             self._on_error(message)
+
+    @pyqtSlot()
+    def handle_thread_finished(self) -> None:
+        if self._on_thread_finished is not None:
+            self._on_thread_finished()
 
 
 class BackgroundWorker:
@@ -118,7 +125,8 @@ class BackgroundWorker:
         """
         thread = QThread()
         worker = _Worker(fn)
-        relay = _UiRelay(on_done=on_done, on_error=on_error)
+        relay = _UiRelay(on_done=on_done, on_error=on_error,
+                         on_thread_finished=self._on_thread_finished)
         worker.moveToThread(thread)
 
         thread.started.connect(worker.run)
@@ -127,7 +135,9 @@ class BackgroundWorker:
         if on_error is not None:
             worker.failed.connect(relay.handle_failed)
             worker.failed.connect(thread.quit)
-        thread.finished.connect(self._on_thread_finished)
+        # Plain Python callbacks can execute on the emitting worker thread.
+        # Pruning its last references there can deadlock Qt/Python teardown.
+        thread.finished.connect(relay.handle_thread_finished)
         thread.finished.connect(worker.deleteLater)
         thread.finished.connect(relay.deleteLater)
         thread.finished.connect(thread.deleteLater)
@@ -154,4 +164,12 @@ class BackgroundWorker:
         self._active_workers = [(t, w, r) for t, w, r in still_running if t.isRunning()]
 
     def _on_thread_finished(self) -> None:
-        self._active_workers = [(t, w, r) for t, w, r in self._active_workers if t.isRunning()]
+        running = []
+        for thread, worker, relay in self._active_workers:
+            if thread.isRunning():
+                running.append((thread, worker, relay))
+            else:
+                # finished is emitted before native thread teardown completes.
+                # wait releases the GIL before Python drops the worker wrappers.
+                thread.wait()
+        self._active_workers = running
